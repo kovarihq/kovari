@@ -19,7 +19,7 @@ const MAX_INTENTIONS = 5;
 interface TravelIntention {
   destination: string;
   timeframe: string;
-  is_confirmed?: boolean;
+  is_confirmed: boolean;
 }
 
 interface TravelSectionProps {
