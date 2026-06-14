@@ -94,6 +94,7 @@ interface SoloMatchCardProps {
       locationDisplay?: string;
       foodPreference?: string;
       bio?: string;
+      travel_intentions?: any[];
     };
     is_solo_match: boolean;
   };
@@ -121,6 +122,13 @@ export function SoloMatchCard({
     ...((match as any) || {}),
     ...(match.user || {})
   };
+
+  const hasTripDetails = !!(
+    match?.destination &&
+    match.destination.trim() !== "" &&
+    match.destination !== "Global" &&
+    match.destination !== "Any"
+  );
 
   const isPreferNotToSay = (val?: string) => {
     if (!val) return false;
@@ -488,17 +496,40 @@ export function SoloMatchCard({
             </div>
           ) : (
             <div className="flex flex-col gap-4 pt-4">
+              {/* Travel Intentions */}
+              {user.travel_intentions && user.travel_intentions.length > 0 && (
+                <div className="bg-secondary rounded-2xl p-3 flex flex-col gap-y-2">
+                  <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Planning to visit</h3>
+                  <div className="flex flex-wrap gap-2">
+                    {user.travel_intentions.map((intent: any, idx: number) => (
+                      <span
+                        key={idx}
+                        className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold border ${
+                          intent.is_confirmed
+                            ? "bg-green-50 text-green-700 border-green-200"
+                            : "bg-blue-50 text-blue-700 border-blue-100"
+                        }`}
+                      >
+                        {intent.is_confirmed ? "✓" : "~"} {intent.destination}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               {/* Trip Details Section */}
-              <div className="space-y-1.5 bg-secondary rounded-2xl p-3 flex flex-col">
-                <p className="text-sm font-semibold text-foreground capitalize">
-                  {match.destination?.split(",")[0]?.trim() ?? match.destination}
-                  <span className="mx-2 text-muted-foreground">•</span>
-                  ₹{Number(match.budget).toLocaleString("en-IN")}
-                </p>
-                <p className="text-sm font-semibold text-foreground capitalize">
-                  {formatDateRange()}
-                </p>
-              </div>
+              {hasTripDetails && (
+                <div className="space-y-1.5 bg-secondary rounded-2xl p-3 flex flex-col">
+                  <p className="text-sm font-semibold text-foreground capitalize">
+                    {match.destination?.split(",")[0]?.trim() ?? match.destination}
+                    <span className="mx-2 text-muted-foreground">•</span>
+                    ₹{Number(match.budget).toLocaleString("en-IN")}
+                  </p>
+                  <p className="text-sm font-semibold text-foreground capitalize">
+                    {formatDateRange()}
+                  </p>
+                </div>
+              )}
 
               {/* About Section */}
               <div className="space-y-1.5 bg-secondary rounded-2xl p-3 flex flex-col">
@@ -722,19 +753,44 @@ export function SoloMatchCard({
                 const cards = [];
 
                 // 1. Trip Details Container
-                cards.push(
-                  <div key="trip" className="space-y-1.5 bg-secondary rounded-2xl p-6 flex flex-col w-full">
-                    <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-1">Trip Details</h3>
-                    <p className="text-sm font-semibold text-foreground capitalize">
-                      {match.destination?.split(",")[0]?.trim() ?? match.destination}
-                      <span className="mx-2 text-muted-foreground">•</span>
-                      ₹{Number(match.budget).toLocaleString("en-IN")}
-                    </p>
-                    <p className="text-sm font-semibold text-foreground capitalize">
-                      {formatDateRange()}
-                    </p>
-                  </div>
-                );
+                if (hasTripDetails) {
+                  cards.push(
+                    <div key="trip" className="space-y-1.5 bg-secondary rounded-2xl p-6 flex flex-col w-full">
+                      <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-1">Trip Details</h3>
+                      <p className="text-sm font-semibold text-foreground capitalize">
+                        {match.destination?.split(",")[0]?.trim() ?? match.destination}
+                        <span className="mx-2 text-muted-foreground">•</span>
+                        ₹{Number(match.budget).toLocaleString("en-IN")}
+                      </p>
+                      <p className="text-sm font-semibold text-foreground capitalize">
+                        {formatDateRange()}
+                      </p>
+                    </div>
+                  );
+                }
+
+                // 1.5. Travel Intentions Container
+                if (user.travel_intentions && user.travel_intentions.length > 0) {
+                  cards.push(
+                    <div key="intentions" className="bg-secondary rounded-2xl p-6 flex flex-col gap-y-2 w-full">
+                      <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-1">Planning to visit</h3>
+                      <div className="flex flex-wrap gap-2.5">
+                        {user.travel_intentions.map((intent: any, idx: number) => (
+                          <span
+                            key={idx}
+                            className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold border ${
+                              intent.is_confirmed
+                                ? "bg-green-50 text-green-700 border-green-200"
+                                : "bg-blue-50 text-blue-700 border-blue-100"
+                            }`}
+                          >
+                            {intent.is_confirmed ? "✓" : "~"} {intent.destination}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                }
 
                 // 2. About Section
                 const hasAbout = (gender && !isPreferNotToSay(gender)) ||

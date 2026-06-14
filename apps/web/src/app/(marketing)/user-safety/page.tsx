@@ -3,13 +3,13 @@ import SafetyContent from "./SafetyContent";
 import Footer from "@/shared/components/landing/Footer";
 
 export const metadata: Metadata = {
-  title: "Safety & Trust | KOVARI",
-  description: "Learn about KOVARI's safety protocols, moderation processes, and community guidelines for safe solo and group travel.",
+  title: "Safety & Trust | Kovari",
+  description: "Learn about Kovari's safety protocols, moderation processes, and community guidelines for safe solo and group travel.",
   openGraph: {
-    title: "Safety & Trust | KOVARI",
+    title: "Safety & Trust | Kovari",
     description: "Your safety is our priority. Explore our guidelines for secure travel and community interactions.",
     url: "https://kovari.app/user-safety",
-    siteName: "KOVARI",
+    siteName: "Kovari",
     images: [
       {
         url: "/og-safety.png",

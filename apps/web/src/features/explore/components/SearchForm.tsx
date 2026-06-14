@@ -60,6 +60,9 @@ export const SearchForm = ({
         >
           {/* <MapPin className="w-4 h-4" /> */}
           Destination
+          <span className="text-xs text-muted-foreground font-normal">
+            (optional)
+          </span>
         </Label>
         <LocationAutocomplete
           value={searchData.destination}
@@ -80,7 +83,7 @@ export const SearchForm = ({
               },
             });
           }}
-          placeholder="Where do you want to go?"
+          placeholder="Enter your destination"
           className="w-full text-sm"
         />
       </div>
@@ -177,10 +180,10 @@ export const SearchForm = ({
       {/* Search Button */}
       <Button
         onClick={onSearch}
-        disabled={isLoading || !searchData.destination}
+        disabled={isLoading}
         className="w-full bg-primary text-primary-foreground py-3 rounded-full"
       >
-        {isLoading ? "Searching..." : "Search"}
+        {isLoading ? "Searching..." : searchData.destination ? "Search" : "Browse all travelers"}
       </Button>
     </div>
   );

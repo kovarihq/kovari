@@ -15,7 +15,7 @@ export function AppearanceSection() {
           Appearance
         </h1>
         <p className="md:text-sm text-xs text-muted-foreground">
-          Customize how KOVARI looks on your device.
+          Customize how Kovari looks on your device.
         </p>
       </div>
 

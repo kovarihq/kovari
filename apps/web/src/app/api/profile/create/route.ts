@@ -39,6 +39,14 @@ const schema = z.object({
   personality: z.string().min(1),
   food_preference: z.string().min(1),
   interests: z.array(z.string()).optional().default([]),
+  travel_intentions: z.array(z.object({
+    destination: z.string(),
+    destination_details: z.any().optional(),
+    rough_dates: z.string().optional(),
+    budget_range: z.string().optional(),
+    travel_style: z.string().optional(),
+    is_confirmed: z.boolean().optional(),
+  })).optional().default([]),
 });
 
 /**
@@ -83,6 +91,7 @@ export async function POST(req: NextRequest) {
       user_id: authUser.id,
       email: authUser.email,
       ...dbFields,
+      travel_intentions: dbFields.travel_intentions ?? [],
       created_at: new Date().toISOString(),
     };
 

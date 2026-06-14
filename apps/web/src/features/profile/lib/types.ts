@@ -52,7 +52,12 @@ export const profileEditSchema = z.object({
     .optional(),
   bio: z
     .string()
-    .max(300, { message: "Bio must be less than 300 characters" })
+    .max(300, { message: "Bio must be less than 300 characters" }),
+  travel_intentions: z.array(z.object({
+    destination: z.string().min(1, { message: "Destination is required" }),
+    timeframe: z.string().min(1, { message: "Timeframe is required" }),
+    is_confirmed: z.boolean().optional().default(false),
+  })).optional().default([]),
 });
 
 export type ProfileEditForm = z.infer<typeof profileEditSchema>;

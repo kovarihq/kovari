@@ -18,9 +18,9 @@ const STEPS = [
   {
     key: "explored_match" as const,
     icon: Compass,
-    title: "Find your first travel match",
-    description: "Explore solo travelers heading to the same places",
-    cta: "Explore",
+    title: "Explore travel companions",
+    description: "Browse travelers with similar destinations and travel style",
+    cta: "Browse travelers",
     href: "/explore",
   },
   {

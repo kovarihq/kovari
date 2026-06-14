@@ -194,6 +194,30 @@ func CalculateLifestyleScore(smoke1, drink1, smoke2, drink2 string) float64 {
 	return (smoke + drink) / 2
 }
 
+func CalculateIntentionOverlapScore(userDest models.Destination, matchIntentions []models.TravelIntention) float64 {
+	if len(matchIntentions) == 0 || userDest.Name == "" {
+		return 0.5 // Neutral
+	}
+	destLower := strings.ToLower(userDest.Name)
+	bestScore := 0.0
+	for _, intent := range matchIntentions {
+		intentDest := strings.ToLower(intent.Destination)
+		if strings.Contains(intentDest, destLower) || strings.Contains(destLower, intentDest) {
+			score := 0.8
+			if intent.IsConfirmed {
+				score = 1.0
+			}
+			if score > bestScore {
+				bestScore = score
+			}
+		}
+	}
+	if bestScore == 0 {
+		return 0.3 // No overlap penalty
+	}
+	return bestScore
+}
+
 type Breakdown struct {
 	DestinationScore    float64 `json:"destinationScore"`
 	DateOverlapScore    float64 `json:"dateOverlapScore"`
@@ -204,6 +228,7 @@ type Breakdown struct {
 	AgeScore            float64 `json:"ageScore"`
 	LifestyleScore      float64 `json:"lifestyleScore"`
 	LocationOriginScore float64 `json:"locationOriginScore"`
+	IntentionScore      float64 `json:"intentionScore"`
 }
 
 func (b *Breakdown) Round() {
@@ -216,6 +241,7 @@ func (b *Breakdown) Round() {
 	b.AgeScore = math.Round(b.AgeScore*1000) / 1000
 	b.LifestyleScore = math.Round(b.LifestyleScore*1000) / 1000
 	b.LocationOriginScore = math.Round(b.LocationOriginScore*1000) / 1000
+	b.IntentionScore = math.Round(b.IntentionScore*1000) / 1000
 }
 
 type FinalScore struct {
@@ -256,11 +282,16 @@ func CalculateFinalSoloScore(user, match models.SoloSession, mlScore *float64, c
 		AgeScore:            CalculateAgeScore(uA.Age, mA.Age),
 		LifestyleScore:      CalculateLifestyleScore(uA.Smoking, uA.Drinking, mA.Smoking, mA.Drinking),
 		LocationOriginScore: locScore,
+		IntentionScore:      CalculateIntentionOverlapScore(user.Destination, mA.TravelIntentions),
 	}
 
 	weights := config.SoloWeights
 	
 	// Sum raw values first
+	intentionWeight := weights["intentions"]
+	if intentionWeight == 0 {
+		intentionWeight = 0.05 // Default weight if not in config
+	}
 	ruleBasedScore := breakdown.DestinationScore * weights["destination"] +
 		breakdown.DateOverlapScore * weights["dates"] +
 		breakdown.BudgetScore * weights["budget"] +
@@ -269,7 +300,8 @@ func CalculateFinalSoloScore(user, match models.SoloSession, mlScore *float64, c
 		breakdown.ReligionScore * (weights["religion"]) + 
 		breakdown.AgeScore * weights["age"] +
 		breakdown.LifestyleScore * weights["lifestyle"] +
-		breakdown.LocationOriginScore * weights["location"] 
+		breakdown.LocationOriginScore * weights["location"] +
+		breakdown.IntentionScore * intentionWeight
 	
 	finalScore := ruleBasedScore
 	if mlScore != nil {

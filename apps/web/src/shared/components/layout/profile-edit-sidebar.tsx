@@ -1,6 +1,6 @@
 "use client";
 import React, { KeyboardEvent, useCallback, useMemo, useRef } from "react";
-import { User, Briefcase, Globe2 } from "lucide-react";
+import { User, Briefcase, Globe2, MapPin } from "lucide-react";
 
 const TABS = [
   { key: "general", label: "General", icon: User, category: "profile" },
@@ -11,6 +11,7 @@ const TABS = [
     category: "profile",
   },
   { key: "personal", label: "Personal", icon: Globe2, category: "profile" },
+  { key: "travel", label: "Travel", icon: MapPin, category: "profile" },
 ] as const;
 
 interface ProfileEditSidebarProps {

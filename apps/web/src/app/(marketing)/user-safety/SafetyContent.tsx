@@ -70,7 +70,7 @@ export default function SafetyContent() {
           <div className="space-y-2">
             <h3 className="text-lg font-medium text-foreground">Identity Verification</h3>
             <p className="text-base md:text-lg text-muted-foreground leading-relaxed">
-              KOVARI does not currently verify user identities. Users are encouraged to make independent decisions and take personal precautions when interacting with others. Always prioritize your intuition.
+              Kovari does not currently verify user identities. Users are encouraged to make independent decisions and take personal precautions when interacting with others. Always prioritize your intuition.
             </p>
           </div>
         </div>

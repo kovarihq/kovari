@@ -36,6 +36,7 @@ interface ResultsDisplayProps {
   onRequestJoin?: (groupId: string) => Promise<void>;
   currentUserId?: string;
   destinationId?: string;
+  onSearchWithoutDestination?: () => void;
 }
 
 function isSoloMatch(match: SoloMatch | GroupMatch): match is SoloMatch {
@@ -62,6 +63,7 @@ export const ResultsDisplay = ({
   onRequestJoin,
   currentUserId,
   destinationId,
+  onSearchWithoutDestination,
 }: ResultsDisplayProps) => {
   const { toast } = useToast();
   const [reportDialogState, setReportDialogState] = useState<{
@@ -250,28 +252,34 @@ export const ResultsDisplay = ({
           <div className="text-center max-w-lg w-full border-none shadow-none min-h-[70vh] min-[930px]:min-h-0 flex flex-col justify-center items-center">
             {lastSearchData ? (
               <>
-                <h3 className="sm:text-md text-sm font-medium text-foreground mb-2">
-                  You&apos;re early.
+                <h3 className="sm:text-md text-sm font-semibold text-foreground mb-2">
+                  {lastSearchData.destination 
+                    ? `No one's heading to ${lastSearchData.destination.split(",")[0].trim()} yet.`
+                    : "No travelers found for these filters."
+                  }
                 </h3>
-                <p className="text-muted-foreground sm:text-sm text-xs">
-                  You&apos;re among the first travelers shaping Kovari. We&apos;ll
-                  notify you when others join.
+                <p className="text-muted-foreground sm:text-sm text-xs leading-relaxed mb-4">
+                  You're in the first batch of Kovari — 
+                  more travelers are joining every week.
                 </p>
+                {onSearchWithoutDestination && (
+                  <button
+                    onClick={() => {
+                      onSearchWithoutDestination();
+                    }}
+                    className="text-primary text-xs underline underline-offset-2 hover:text-primary/80 transition-colors"
+                  >
+                    Browse all travelers instead →
+                  </button>
+                )}
               </>
             ) : (
               <>
                 <h3 className="sm:text-md text-sm font-medium text-foreground mb-2">
-                  Start your search
+                  Finding travelers...
                 </h3>
                 <p className="text-muted-foreground sm:text-sm text-xs leading-relaxed">
-                  <span className="min-[930px]:hidden">
-                    Tap &apos;Filters&apos; to find compatible{" "}
-                  </span>
-                  <span className="hidden min-[930px]:inline">
-                    Enter your travel details in the sidebar to find
-                    compatible{" "}
-                  </span>
-                  {activeTab === 0 ? "travel companions" : "travel groups"}.
+                  Looking for compatible travel companions for you.
                 </p>
               </>
             )}

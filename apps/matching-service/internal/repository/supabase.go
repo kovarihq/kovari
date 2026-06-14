@@ -171,6 +171,7 @@ type profileResponse struct {
 	Avatar         *string     `json:"profile_photo"`
 	Bio            *string     `json:"bio"`
 	FoodPreference *string     `json:"food_preference"`
+	TravelIntentions interface{} `json:"travel_intentions"`
 	Latitude       *float64    `json:"latitude"`
 	Longitude      *float64    `json:"longitude"`
 }
@@ -206,7 +207,7 @@ func (r *SupabaseRepository) FetchProfilesBatch(ctx context.Context, clerkUserId
 	if len(clerkIdList) > 0 {
 		g.Go(func() error {
 			idsParam := fmt.Sprintf("(\"%s\")", strings.Join(clerkIdList, "\",\"")) 
-			profilesURL := fmt.Sprintf("%s/rest/v1/profiles?select=user_id,name,age,gender,personality,location,smoking,drinking,religion,interests,languages,nationality,job,profile_photo,bio,food_preference,users!inner(clerk_user_id)&users.clerk_user_id=in.%s", r.url, idsParam)
+			profilesURL := fmt.Sprintf("%s/rest/v1/profiles?select=user_id,name,age,gender,personality,location,smoking,drinking,religion,interests,languages,nationality,job,profile_photo,bio,food_preference,travel_intentions,users!inner(clerk_user_id)&users.clerk_user_id=in.%s", r.url, idsParam)
 			
 			req, _ := http.NewRequestWithContext(gCtx, "GET", profilesURL, nil)
 			req.Header.Set("apikey", r.anonKey)
@@ -240,7 +241,7 @@ func (r *SupabaseRepository) FetchProfilesBatch(ctx context.Context, clerkUserId
 	if len(uuidList) > 0 {
 		g.Go(func() error {
 			idsParam := fmt.Sprintf("(\"%s\")", strings.Join(uuidList, "\",\"")) 
-			profilesURL := fmt.Sprintf("%s/rest/v1/profiles?select=user_id,name,age,gender,personality,location,smoking,drinking,religion,interests,languages,nationality,job,profile_photo,bio,food_preference,users(clerk_user_id)&user_id=in.%s", r.url, idsParam)
+			profilesURL := fmt.Sprintf("%s/rest/v1/profiles?select=user_id,name,age,gender,personality,location,smoking,drinking,religion,interests,languages,nationality,job,profile_photo,bio,food_preference,travel_intentions,users(clerk_user_id)&user_id=in.%s", r.url, idsParam)
 			
 			req, _ := http.NewRequestWithContext(gCtx, "GET", profilesURL, nil)
 			req.Header.Set("apikey", r.anonKey)
@@ -308,6 +309,17 @@ func (r *SupabaseRepository) FetchProfilesBatch(ctx context.Context, clerkUserId
 		if p.FoodPreference != nil { attr.FoodPreference = *p.FoodPreference }
 		attr.Interests = p.Interests
 		attr.Languages = p.Languages
+
+		// Parse travel_intentions from raw JSON
+		if p.TravelIntentions != nil {
+			raw, err := json.Marshal(p.TravelIntentions)
+			if err == nil {
+				var intentions []models.TravelIntention
+				if err := json.Unmarshal(raw, &intentions); err == nil {
+					attr.TravelIntentions = intentions
+				}
+			}
+		}
 
 		if p.Location != nil {
 			if m, ok := p.Location.(map[string]interface{}); ok {

@@ -29,9 +29,9 @@ async function sendFeedbackEmail(payload: {
       "api-key": process.env.BREVO_API_KEY!,
     },
     body: JSON.stringify({
-      sender: { name: "KOVARI Feedback", email: "noreply@kovari.in" },
+      sender: { name: "Kovari Feedback", email: "noreply@kovari.in" },
       to: [{ email: "navneetprajapati46@gmail.com" }], // your email
-      subject: `[KOVARI Beta] ${payload.type.toUpperCase()}: ${payload.message.slice(0, 60)}${payload.message.length > 60 ? "..." : ""}`,
+      subject: `[Kovari Beta] ${payload.type.toUpperCase()}: ${payload.message.slice(0, 60)}${payload.message.length > 60 ? "..." : ""}`,
       htmlContent: html,
     }),
   });

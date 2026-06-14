@@ -169,7 +169,7 @@ export async function PATCH(req: Request) {
       "username", "bio", "avatar", "profession", "interests", "languages", 
       "gender", "age", "nationality", "location", "location_details", 
       "religion", "smoking", "drinking", "personality", "foodPreference",
-      "name", "email", "birthday"
+      "name", "email", "birthday", "travel_intentions"
     ];
 
     if (!safeFields.includes(field)) {

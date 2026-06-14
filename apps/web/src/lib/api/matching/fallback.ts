@@ -152,10 +152,48 @@ export async function performSoloDbMatchingFallback(
   }
 
   // 3. Transform via profileMapper to standardized MatchDTO
-  return rows.map((p: any) => {
+  const mappedResults = rows.map((p: any) => {
     const userDto = profileMapper.fromDb(p.users, p);
-    const score = currentUserDto ? calculateCompatibility(currentUserDto, userDto) : 0.75;
+    let score = currentUserDto ? calculateCompatibility(currentUserDto, userDto) : 0.75;
     const session = sessionsMap.get(userDto.id);
+    const sessionDest = session?.destination?.name;
+
+    // Boost if their travel intentions overlap with search destination
+    let hasIntentionOverlap = false;
+    if (filters.destination && filters.destination !== "Any" && userDto.travel_intentions && userDto.travel_intentions.length > 0) {
+      const destLower = filters.destination.toLowerCase();
+      hasIntentionOverlap = userDto.travel_intentions.some((intent: any) =>
+        intent.destination?.toLowerCase().includes(destLower) ||
+        destLower.includes(intent.destination?.toLowerCase() || "___")
+      );
+      if (hasIntentionOverlap) score += 0.3; // significant boost
+    }
+
+    // Boost confirmed intentions higher
+    if (filters.destination && filters.destination !== "Any" && userDto.travel_intentions && userDto.travel_intentions.length > 0) {
+      const hasConfirmed = userDto.travel_intentions.some((intent: any) =>
+        intent.is_confirmed &&
+        intent.destination?.toLowerCase().includes(
+          filters.destination?.toLowerCase() || ""
+        )
+      );
+      if (hasConfirmed) score += 0.2;
+    }
+
+    // Filter out users who do not match the destination (via active session or travel intentions)
+    if (filters.destination && filters.destination !== "Any" && filters.destination !== "Global") {
+      const sessionDestLower = sessionDest?.toLowerCase();
+      const filterDestLower = filters.destination.toLowerCase();
+      const hasSessionOverlap = sessionDestLower && (
+        sessionDestLower.includes(filterDestLower) || filterDestLower.includes(sessionDestLower)
+      );
+
+      if (!hasSessionOverlap && !hasIntentionOverlap) {
+        return null;
+      }
+    }
+
+    score = Math.min(0.98, score);
 
     return {
       id: userDto.id,
@@ -197,9 +235,14 @@ export async function performSoloDbMatchingFallback(
         smoking: userDto.smoking,
         drinking: userDto.drinking,
         foodPreference: userDto.foodPreference,
+        travel_intentions: userDto.travel_intentions || [],
       }
     };
   });
+
+  return mappedResults.filter(Boolean).sort((a: any, b: any) => 
+    (b.compatibility_score || 0) - (a.compatibility_score || 0)
+  );
 }
 
 
@@ -212,6 +255,17 @@ export async function performGroupDbMatchingFallback(
   limit: number = 30
 ) {
   const supabase = createAdminSupabaseClient();
+
+  // Fetch current user's travel intentions for scoring
+  const { data: currentUserProfile } = await supabase
+    .from("profiles")
+    .select("travel_intentions")
+    .eq("user_id", currentUserId)
+    .single();
+
+  const userIntentions: any[] = Array.isArray(currentUserProfile?.travel_intentions)
+    ? currentUserProfile.travel_intentions
+    : [];
 
   let query = supabase
     .from("groups")
@@ -267,20 +321,46 @@ export async function performGroupDbMatchingFallback(
 
   if (!groups) return [];
 
-  return groups.map((g: any) => ({
-    id: g.id,
-    name: g.name,
-    description: g.description,
-    destination: g.destination,
-    membersCount: g.members_count || 1, // Default to 1 (creator)
-    score: 0.5,
-    startDate: g.start_date,
-    endDate: g.end_date,
-    creatorId: g.creator_id,
-    status: g.status,
-    budget: g.budget,
-    ai_overview: g.ai_overview,
-    coverImage: g.cover_image,
-    is_public: g.is_public
-  }));
+  const results = groups.map((g: any) => {
+    let score = 0.5;
+
+    // Boost groups whose destination matches user's travel intentions
+    if (userIntentions.length > 0 && g.destination) {
+      const groupDestLower = g.destination.toLowerCase();
+      
+      const hasOverlap = userIntentions.some((intent: any) =>
+        intent.destination?.toLowerCase().includes(groupDestLower) ||
+        groupDestLower.includes(intent.destination?.toLowerCase() || "___")
+      );
+      if (hasOverlap) score += 0.3;
+
+      const hasConfirmed = userIntentions.some((intent: any) =>
+        intent.is_confirmed &&
+        (intent.destination?.toLowerCase().includes(groupDestLower) ||
+         groupDestLower.includes(intent.destination?.toLowerCase() || "___"))
+      );
+      if (hasConfirmed) score += 0.2;
+    }
+
+    score = Math.min(0.98, score);
+
+    return {
+      id: g.id,
+      name: g.name,
+      description: g.description,
+      destination: g.destination,
+      membersCount: g.members_count || 1, // Default to 1 (creator)
+      score,
+      startDate: g.start_date,
+      endDate: g.end_date,
+      creatorId: g.creator_id,
+      status: g.status,
+      budget: g.budget,
+      ai_overview: g.ai_overview,
+      coverImage: g.cover_image,
+      is_public: g.is_public
+    };
+  });
+
+  return results.sort((a: any, b: any) => (b.score || 0) - (a.score || 0));
 }

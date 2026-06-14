@@ -11,6 +11,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"sort"
+	"strings"
 	"syscall"
 	"time"
 
@@ -330,6 +331,28 @@ func main() {
 				mlScore = &s
 			}
 
+			// If the user has a search destination, check compatibility
+			if userSession.Destination.Name != "" && 
+				!strings.EqualFold(userSession.Destination.Name, "Any") && 
+				!strings.EqualFold(userSession.Destination.Name, "Global") {
+				userDestLower := strings.ToLower(userSession.Destination.Name)
+				matchDestLower := strings.ToLower(match.Destination.Name)
+				
+				hasSessionOverlap := matchDestLower != "" && (
+					strings.Contains(matchDestLower, userDestLower) || strings.Contains(userDestLower, matchDestLower))
+				
+				intentionScore := matching.CalculateIntentionOverlapScore(userSession.Destination, match.StaticAttributes.TravelIntentions)
+				hasIntentionOverlap := intentionScore >= 0.8
+
+				log.Printf("[FILTER DEBUG] Requester searching: %q | Candidate: %s (going to %q) | Session overlap: %v | Intention overlap: %v (score: %.2f)", 
+					userSession.Destination.Name, match.StaticAttributes.Name, match.Destination.Name, hasSessionOverlap, hasIntentionOverlap, intentionScore)
+
+				if !hasSessionOverlap && !hasIntentionOverlap {
+					log.Printf("[FILTER DEBUG] SKIPPING candidate %s (no overlap)", match.StaticAttributes.Name)
+					continue // Filter out candidate
+				}
+			}
+
 			result := matching.CalculateFinalSoloScore(*userSession, match, mlScore, matchConfig)
 			
 			finalMatches = append(finalMatches, ScoredMatch{
@@ -353,6 +376,7 @@ func main() {
 					FoodPreference: match.StaticAttributes.FoodPreference,
 					Location:       match.StaticAttributes.RawLocation,
 					LocationDisplay: match.StaticAttributes.RawLocation,
+					TravelIntentions: match.StaticAttributes.TravelIntentions,
 				},
 				Score:            result.Score,
 				Breakdown:        result.Breakdown,

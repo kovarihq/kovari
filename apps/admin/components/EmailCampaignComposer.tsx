@@ -61,7 +61,7 @@ export function EmailCampaignComposer({ profiles = [], waitlist = [] }: EmailCam
   const { user } = useUser();
 
   // Composer states
-  const [fromName, setFromName] = React.useState("KOVARI");
+  const [fromName, setFromName] = React.useState("Kovari");
   const [subject, setSubject] = React.useState("");
   const [title, setTitle] = React.useState("");
   const [subtitle, setSubtitle] = React.useState("");
@@ -71,9 +71,9 @@ export function EmailCampaignComposer({ profiles = [], waitlist = [] }: EmailCam
 
   React.useEffect(() => {
     if (user?.firstName) {
-      setFromName(`${user.firstName} from KOVARI`);
+      setFromName(`${user.firstName} from Kovari`);
     } else {
-      setFromName("KOVARI");
+      setFromName("Kovari");
     }
   }, [user]);
   
@@ -284,9 +284,9 @@ export function EmailCampaignComposer({ profiles = [], waitlist = [] }: EmailCam
         setSenderType("product");
         setReplyToEmail("support@kovari.in");
         if (user?.firstName) {
-          setFromName(`${user.firstName} from KOVARI`);
+          setFromName(`${user.firstName} from Kovari`);
         } else {
-          setFromName("KOVARI");
+          setFromName("Kovari");
         }
       }
     } catch (error: any) {
@@ -356,7 +356,7 @@ export function EmailCampaignComposer({ profiles = [], waitlist = [] }: EmailCam
                     From Name <span className="text-destructive">*</span>
                   </label>
                   <Input
-                    placeholder="e.g., Navneet from KOVARI"
+                    placeholder="e.g., Navneet from Kovari"
                     value={fromName}
                     onChange={(e) => setFromName(e.target.value)}
                     className="rounded-xl h-10 border-border bg-background focus-visible:ring-1 focus-visible:ring-primary shadow-none"
@@ -368,7 +368,7 @@ export function EmailCampaignComposer({ profiles = [], waitlist = [] }: EmailCam
                     Subject Line <span className="text-destructive">*</span>
                   </label>
                   <Input
-                    placeholder="e.g., Exciting updates about KOVARI closed beta!"
+                    placeholder="e.g., Exciting updates about Kovari closed beta!"
                     value={subject}
                     onChange={(e) => setSubject(e.target.value)}
                     className="rounded-xl h-10 border-border bg-background focus-visible:ring-1 focus-visible:ring-primary shadow-none"

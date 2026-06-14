@@ -38,6 +38,12 @@ export async function GET() {
     .select("id", { count: "exact", head: true })
     .eq("from_user_id", user.id);
 
+  // Check if user has skipped any travelers
+  const { count: skipCount } = await supabase
+    .from("match_skips")
+    .select("id", { count: "exact", head: true })
+    .eq("user_id", user.id);
+
   // Check if user is in any group
   const { count: groupCount } = await supabase
     .from("group_memberships")
@@ -54,7 +60,7 @@ export async function GET() {
     completed: false,
     steps: {
       profile_photo: !!profile?.profile_photo,
-      explored_match: (interestCount ?? 0) > 0,
+      explored_match: ((interestCount ?? 0) + (skipCount ?? 0)) > 0,
       joined_group: (groupCount ?? 0) > 0,
       sent_message: (messageCount ?? 0) > 0,
     },

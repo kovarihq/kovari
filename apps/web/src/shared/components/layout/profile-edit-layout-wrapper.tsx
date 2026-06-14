@@ -12,6 +12,7 @@ import { useProfileData } from "@/features/profile/hooks/use-profile-data";
 import GeneralSection from "@/app/(app)/profile/edit/general/section";
 import ProfessionalSection from "@/app/(app)/profile/edit/professional/section";
 import PersonalSection from "@/app/(app)/profile/edit/personal/section";
+import TravelSection from "@/app/(app)/profile/edit/travel/section";
 import { ChevronLeft } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { Button } from "../ui/button";
@@ -37,6 +38,7 @@ const DEFAULT_VALUES: ProfileEditForm = {
   drinking: "",
   personality: "",
   foodPreference: "",
+  travel_intentions: [],
 };
 
 const SectionContent = memo(
@@ -87,6 +89,18 @@ const SectionContent = memo(
     if (activeTab === "personal") {
       return (
         <PersonalSection
+          form={form}
+          isSubmitting={isSubmitting}
+          onSubmit={onSubmit}
+          profileData={profileData}
+          isLoading={isLoading}
+          updateProfileField={updateProfileField}
+        />
+      );
+    }
+    if (activeTab === "travel") {
+      return (
+        <TravelSection
           form={form}
           isSubmitting={isSubmitting}
           onSubmit={onSubmit}
@@ -209,6 +223,14 @@ export default function ProfileEditLayoutWrapper() {
                 updateProfileField={updateProfileField}
               />
               <PersonalSection
+                form={form}
+                isSubmitting={isSubmitting}
+                onSubmit={handleSubmit}
+                profileData={profileData}
+                isLoading={isLoading}
+                updateProfileField={updateProfileField}
+              />
+              <TravelSection
                 form={form}
                 isSubmitting={isSubmitting}
                 onSubmit={handleSubmit}

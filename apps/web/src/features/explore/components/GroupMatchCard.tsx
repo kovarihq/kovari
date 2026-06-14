@@ -90,6 +90,15 @@ export function GroupMatchCard({
     return clean === "prefer not to say";
   };
 
+  const getDestinationDisplay = (dest: any): string => {
+    const target = dest || group.locationDisplay;
+    if (!target) return "";
+    const name = typeof target === "object" && target.name 
+      ? target.name 
+      : (typeof target === "string" ? target : "");
+    return name.split(",")[0]?.trim() ?? name;
+  };
+
   // Add error boundary for missing group data
   if (!group) {
     return (
@@ -316,7 +325,14 @@ export function GroupMatchCard({
     const parts: string[] = [];
     if (creatorDisplayName) parts.push(`Created by ${creatorDisplayName}`);
     if (group.memberCount) parts.push(`${group.memberCount} members`);
-    if (group.destination) parts.push(`Traveling to ${group.destination}`);
+    if (group.destination) {
+      const destName = typeof group.destination === "object" && group.destination?.name 
+        ? group.destination.name 
+        : (typeof group.destination === "string" ? group.destination : "");
+      if (destName) {
+        parts.push(`Traveling to ${destName}`);
+      }
+    }
     return parts.length > 0
       ? parts.join(". ") + "."
       : "Join this amazing travel group!";
@@ -438,7 +454,7 @@ export function GroupMatchCard({
               {/* Trip Details Section */}
               <div className="space-y-1.5 bg-secondary rounded-2xl p-3 flex flex-col mb-4">
                 <p className="text-sm font-semibold text-foreground">
-                  {typeof group.destination === "string" ? group.destination.split(",")[0]?.trim() : group.destination}
+                  {getDestinationDisplay(group.destination)}
                   {(group.averageBudget != null || group.budget != null) && (
                     <>
                       <span className="mx-2 text-muted-foreground">•</span>
@@ -828,7 +844,7 @@ export function GroupMatchCard({
                   <div key="trip" className="space-y-1.5 bg-secondary rounded-2xl p-6 flex flex-col w-full">
                     <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-1">Trip Details</h3>
                     <p className="text-sm font-semibold text-foreground capitalize">
-                      {typeof group.destination === "string" ? group.destination.split(",")[0]?.trim() : group.destination}
+                      {getDestinationDisplay(group.destination)}
                       {group.budget != null && (
                         <>
                           <span className="mx-2 text-muted-foreground">•</span>

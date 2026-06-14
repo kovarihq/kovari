@@ -77,7 +77,7 @@ io.use(async (socket, next) => {
       verifiedUserId = claims.sub;
     }
     
-    // 2. Try to verify as KOVARI custom mobile JWT
+    // 2. Try to verify as Kovari custom mobile JWT
     if (!verifiedUserId) {
       const payload = verifyAccessToken(token);
       if (payload) verifiedUserId = payload.sub;

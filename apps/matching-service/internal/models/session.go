@@ -36,6 +36,13 @@ type StaticAttributes struct {
 	RawLocation string      `json:"raw_location,omitempty"`
 	GeoSource   string      `json:"geoSource,omitempty"`
 	FoodPreference string   `json:"foodPreference,omitempty"`
+	TravelIntentions []TravelIntention `json:"travel_intentions,omitempty"`
+}
+
+type TravelIntention struct {
+	Destination string `json:"destination"`
+	Timeframe   string `json:"timeframe"`
+	IsConfirmed bool   `json:"is_confirmed"`
 }
 
 type SoloSession struct {
@@ -106,4 +113,5 @@ type UserPreview struct {
 	Religion    string   `json:"religion"`
 	Profession  string   `json:"profession"`
 	FoodPreference string `json:"foodPreference"`
+	TravelIntentions []TravelIntention `json:"travelIntentions,omitempty"`
 }

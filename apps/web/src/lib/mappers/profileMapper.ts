@@ -72,6 +72,7 @@ export const profileMapper = {
       // Verification
       verified: !!p.verified,
       
+      travel_intentions: Array.isArray(p.travel_intentions) ? p.travel_intentions : [],
     };
   },
 
@@ -122,6 +123,8 @@ export const profileMapper = {
     
     // Verification
     if (dto.verified !== undefined) profileUpdates.verified = dto.verified;
+
+    if (dto.travel_intentions !== undefined) profileUpdates.travel_intentions = dto.travel_intentions;
 
     return { userUpdates, profileUpdates };
   }

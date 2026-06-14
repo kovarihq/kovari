@@ -278,8 +278,26 @@ export default function ProfileSetupForm() {
   const { user } = useUser();
   const router = useRouter();
   const [step, setStep] = useState(1);
-  const totalSteps = 7;
+  const totalSteps = 8;
   const [policyAccepted, setPolicyAccepted] = useState(false);
+
+  // Travel intent state
+  const [travelIntents, setTravelIntents] = useState<Array<{
+    destination: string;
+    destination_details?: any;
+    rough_dates: string;
+    budget_range: string;
+    travel_style: string;
+    is_confirmed: boolean;
+  }>>([]);
+
+  const [intentDestination, setIntentDestination] = useState("");
+  const [intentDestinationDetails, setIntentDestinationDetails] = useState<any>(null);
+  const [intentRoughDates, setIntentRoughDates] = useState("Next 1-2 months");
+  const [intentBudgetRange, setIntentBudgetRange] = useState("₹10,000 - ₹25,000");
+  const [intentTravelStyle, setIntentTravelStyle] = useState("Budget backpacker");
+  const [intentConfirmed, setIntentConfirmed] = useState(false);
+  const [intentLocationDetails, setIntentLocationDetails] = useState<LocationData | null>(null);
   const [completeClickedOnce, setCompleteClickedOnce] = useState(false);
   const [showMorePrefs, setShowMorePrefs] = useState(false);
   const [photoError, setPhotoError] = useState<string | null>(null);
@@ -652,6 +670,11 @@ export default function ProfileSetupForm() {
       return;
     }
     if (step === 7) {
+      // Travel intent step — fully optional, always allow proceeding
+      setStep(8);
+      return;
+    }
+    if (step === 8) {
       const valid = await step2Form.trigger(
         ["religion", "smoking", "drinking"],
         { shouldFocus: true }
@@ -815,6 +838,7 @@ export default function ProfileSetupForm() {
         personality: completeData.personality || "",
         food_preference: completeData.foodPreference || "",
         interests: interestsLabels,
+        travel_intentions: travelIntents,
       };
 
 
@@ -895,7 +919,7 @@ export default function ProfileSetupForm() {
         console.error("Error calling accept-policies API:", err);
       }
 
-      setStep(8);
+      setStep(9);
     } catch (error: any) {
       console.error("Error saving profile:", error);
       toast.error(error.message || "Failed to save profile");
@@ -920,8 +944,8 @@ export default function ProfileSetupForm() {
             Step {step} of {totalSteps}
           </span>
         </div>
-        <div className="grid grid-cols-7 gap-1.5">
-          {[1, 2, 3, 4, 5, 6, 7].map((stepNum) => (
+        <div className="grid grid-cols-8 gap-1.5">
+          {[1, 2, 3, 4, 5, 6, 7, 8].map((stepNum) => (
             <div
               key={stepNum}
               className={`h-1.5 rounded-full ${
@@ -1919,7 +1943,263 @@ export default function ProfileSetupForm() {
     </motion.div>
   );
 
-  // Step 7 - Smoking, Drinking, Religion & Policies
+  const renderTravelIntent = () => {
+    const roughDateOptions = [
+      "Next 2-4 weeks",
+      "Next 1-2 months", 
+      "Next 3-6 months",
+      "Next 6-12 months",
+      "Not sure yet",
+    ];
+
+    const budgetOptions = [
+      "Under ₹10,000",
+      "₹10,000 - ₹25,000",
+      "₹25,000 - ₹50,000",
+      "₹50,000 - ₹1,00,000",
+      "₹1,00,000+",
+    ];
+
+    const travelStyleOptions = [
+      "Budget backpacker",
+      "Mid-range comfort",
+      "Premium",
+      "Flexible",
+    ];
+
+    const addIntent = () => {
+      if (!intentDestination.trim()) return;
+      const newIntent = {
+        destination: intentDestination,
+        destination_details: intentDestinationDetails,
+        rough_dates: intentRoughDates,
+        budget_range: intentBudgetRange,
+        travel_style: intentTravelStyle,
+        is_confirmed: intentConfirmed,
+      };
+      setTravelIntents(prev => [...prev.slice(0, 2), newIntent]); // max 3
+      setIntentDestination("");
+      setIntentDestinationDetails(null);
+      setIntentLocationDetails(null);
+      setIntentRoughDates("Next 1-2 months");
+      setIntentBudgetRange("₹10,000 - ₹25,000");
+      setIntentTravelStyle("Budget backpacker");
+      setIntentConfirmed(false);
+    };
+
+    const removeIntent = (index: number) => {
+      setTravelIntents(prev => prev.filter((_, i) => i !== index));
+    };
+
+    return (
+      <motion.div
+        initial={{ opacity: 0, x: 20 }}
+        animate={{ opacity: 1, x: 0 }}
+        exit={{ opacity: 0, x: -20 }}
+        transition={{ duration: 0.4 }}
+        className="space-y-4"
+      >
+        <div className="text-center mb-4">
+          <h1 className="text-lg font-semibold text-foreground mb-1">
+            Where do you want to go?
+          </h1>
+          <p className="text-sm text-muted-foreground">
+            Add up to 3 trips you're planning or thinking about.
+            This helps us match you with the right travelers.
+          </p>
+        </div>
+
+        {/* Existing intents */}
+        {travelIntents.length > 0 && (
+          <div className="space-y-2">
+            {travelIntents.map((intent, index) => (
+              <div
+                key={index}
+                className="flex items-center justify-between p-3 rounded-lg border border-border bg-muted/30"
+              >
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-foreground truncate">
+                    {intent.destination}
+                    {intent.is_confirmed && (
+                      <span className="ml-2 text-xs text-green-600 font-normal">
+                        ✓ confirmed
+                      </span>
+                    )}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    {intent.rough_dates} · {intent.budget_range} · {intent.travel_style}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => removeIntent(index)}
+                  className="ml-2 text-muted-foreground hover:text-destructive transition-colors"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Add intent form — only show if less than 3 */}
+        {travelIntents.length < 3 && (
+          <div className="space-y-3 p-3 rounded-lg border border-border bg-card">
+            {/* Destination */}
+            <div>
+              <label className="text-xs font-medium text-muted-foreground mb-1 block">
+                Where? {travelIntents.length === 0 && <span className="text-destructive">*</span>}
+              </label>
+              <LocationAutocomplete
+                value={intentDestination}
+                onChange={(val) => setIntentDestination(val)}
+                onSelect={(data) => {
+                  setIntentDestination(data.city || data.formatted.split(",")[0]);
+                  setIntentDestinationDetails({
+                    city: data.city,
+                    state: data.state,
+                    country: data.country,
+                    lat: data.lat,
+                    lon: data.lon,
+                    formatted: data.formatted,
+                    place_id: data.place_id,
+                  });
+                  setIntentLocationDetails(data);
+                }}
+                placeholder="Goa, Manali, Bali, Europe..."
+                className="w-full bg-white"
+              />
+            </div>
+
+            {/* Rough dates */}
+            <div>
+              <label className="text-xs font-medium text-muted-foreground mb-1 block">
+                When roughly?
+              </label>
+              <div className="flex flex-wrap gap-1.5">
+                {roughDateOptions.map((option) => (
+                  <button
+                    key={option}
+                    type="button"
+                    onClick={() => setIntentRoughDates(option)}
+                    className={`px-2.5 py-1 rounded-full text-xs font-medium border transition-colors ${
+                      intentRoughDates === option
+                        ? "bg-primary text-primary-foreground border-primary"
+                        : "border-border text-muted-foreground hover:border-primary/50"
+                    }`}
+                  >
+                    {option}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Budget */}
+            <div>
+              <label className="text-xs font-medium text-muted-foreground mb-1 block">
+                Budget per person?
+              </label>
+              <div className="flex flex-wrap gap-1.5">
+                {budgetOptions.map((option) => (
+                  <button
+                    key={option}
+                    type="button"
+                    onClick={() => setIntentBudgetRange(option)}
+                    className={`px-2.5 py-1 rounded-full text-xs font-medium border transition-colors ${
+                      intentBudgetRange === option
+                        ? "bg-primary text-primary-foreground border-primary"
+                        : "border-border text-muted-foreground hover:border-primary/50"
+                    }`}
+                  >
+                    {option}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Travel style */}
+            <div>
+              <label className="text-xs font-medium text-muted-foreground mb-1 block">
+                Travel style?
+              </label>
+              <div className="flex flex-wrap gap-1.5">
+                {travelStyleOptions.map((option) => (
+                  <button
+                    key={option}
+                    type="button"
+                    onClick={() => setIntentTravelStyle(option)}
+                    className={`px-2.5 py-1 rounded-full text-xs font-medium border transition-colors ${
+                      intentTravelStyle === option
+                        ? "bg-primary text-primary-foreground border-primary"
+                        : "border-border text-muted-foreground hover:border-primary/50"
+                    }`}
+                  >
+                    {option}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Confirmed toggle */}
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={intentConfirmed}
+                onChange={(e) => setIntentConfirmed(e.target.checked)}
+                className="w-4 h-4 accent-primary"
+              />
+              <span className="text-xs text-muted-foreground">
+                I've actually decided to go (not just thinking about it)
+              </span>
+            </label>
+
+            {/* Add button */}
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={!intentDestination.trim()}
+              onClick={addIntent}
+              className="w-full text-xs"
+            >
+              + Add this trip
+            </Button>
+          </div>
+        )}
+
+        {/* Skip hint */}
+        <p className="text-center text-xs text-muted-foreground">
+          {travelIntents.length === 0
+            ? "You can skip this and add trips later from your profile."
+            : `${travelIntents.length} trip${travelIntents.length > 1 ? "s" : ""} added. You can add ${3 - travelIntents.length} more.`
+          }
+        </p>
+
+        {/* Navigation */}
+        <div className="flex space-x-2 pt-2">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={goBack}
+            className="flex-1 h-9 text-sm border-input text-muted-foreground hover:bg-muted rounded-lg transition-all"
+          >
+            <ChevronLeft className="h-3.5 w-3.5" />
+            Back
+          </Button>
+          <Button
+            type="button"
+            onClick={() => setStep(8)}
+            className="flex-1 h-9 text-sm bg-primary text-primary-foreground font-medium rounded-lg"
+          >
+            {travelIntents.length > 0 ? "Continue" : "Skip for now"}
+            <ChevronRight className="h-3.5 w-3.5" />
+          </Button>
+        </div>
+      </motion.div>
+    );
+  };
+
+  // Step 8 - Smoking, Drinking, Religion & Policies
   const renderSmokingDrinkingReligion = () => (
     <motion.div
       initial={{ opacity: 0, x: 20 }}
@@ -2206,8 +2486,9 @@ export default function ProfileSetupForm() {
             {step === 4 && <div key="step4">{renderLocation()}</div>}
             {step === 5 && <div key="step5">{renderLanguages()}</div>}
             {step === 6 && <div key="step6">{renderLifestyle()}</div>}
-            {step === 7 && <div key="step7">{renderSmokingDrinkingReligion()}</div>}
-            {step === 8 && <div key="step8">{renderStep4()}</div>}
+            {step === 7 && <div key="step7">{renderTravelIntent()}</div>}
+            {step === 8 && <div key="step8">{renderSmokingDrinkingReligion()}</div>}
+            {step === 9 && <div key="step9">{renderStep4()}</div>}
           </AnimatePresence>
         </CardContent>
       </Card>

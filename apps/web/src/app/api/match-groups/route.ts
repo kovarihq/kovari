@@ -49,7 +49,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Force a fresh fetch to purge the empty cache caused by previous payload failures
-    const userVersion = "v1-stable-groups-v7";
+    const userVersion = "v1-stable-groups-v10";
 
     const body = await request.json();
     const { userId: reqUserId, ...payloadContext } = body;

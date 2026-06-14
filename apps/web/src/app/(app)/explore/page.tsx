@@ -5,6 +5,7 @@ import {
   useEffect,
   useCallback,
   useMemo,
+  useRef,
   KeyboardEvent,
 } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
@@ -35,6 +36,32 @@ const EXPLORE_TABS = [
   { label: "Solo Travel", value: "solo" },
   { label: "Group Travel", value: "groups" },
 ] as const;
+
+// Persistent module-level cache for intent-based feed (survives page unmounts)
+let globalSoloIntentCache: any[] | null = null;
+let globalGroupIntentCache: any[] | null = null;
+
+const isIntentBased = (search: SearchData, currentFilters?: Filters) => {
+  const hasNoDestination = !search.destination || search.destination.trim() === "";
+  if (!currentFilters) return hasNoDestination;
+
+  // Check if filters match the default filters
+  const hasNoFilters =
+    currentFilters.ageRange[0] === 18 &&
+    currentFilters.ageRange[1] === 65 &&
+    currentFilters.gender === "Any" &&
+    currentFilters.personality === "Any" &&
+    currentFilters.smoking === "No" &&
+    currentFilters.drinking === "No" &&
+    currentFilters.nationality === "Any" &&
+    currentFilters.travelStyle === "Any" &&
+    (!currentFilters.interests || currentFilters.interests.length === 0) &&
+    (!currentFilters.languages || currentFilters.languages.length === 0) &&
+    currentFilters.budgetRange[0] === 5000 &&
+    currentFilters.budgetRange[1] === 50000;
+
+  return hasNoDestination && hasNoFilters;
+};
 
 export default function ExplorePage() {
   const searchParams = useSearchParams();
@@ -78,6 +105,25 @@ export default function ExplorePage() {
   const [datePickerPortalContainer, setDatePickerPortalContainer] =
     useState<HTMLDivElement | null>(null);
 
+  // Per-tab result cache for instant switching
+  const soloCache = useRef<{ results: any[]; index: number } | null>(null);
+  const groupCache = useRef<{ results: any[]; index: number } | null>(null);
+  const activeTabRef = useRef(activeTab);
+
+  // Sync activeTabRef with activeTab
+  useEffect(() => {
+    activeTabRef.current = activeTab;
+  }, [activeTab]);
+
+  // Clamp currentGroupIndex when matchedGroups length changes to prevent out of bounds
+  useEffect(() => {
+    if (matchedGroups.length === 0) {
+      setCurrentGroupIndex(0);
+    } else if (currentGroupIndex >= matchedGroups.length) {
+      setCurrentGroupIndex(Math.max(0, matchedGroups.length - 1));
+    }
+  }, [matchedGroups.length, currentGroupIndex]);
+
   // Search form state
   const [searchData, setSearchData] = useState<SearchData>({
     destination: getPrefilledDestination(),
@@ -116,6 +162,91 @@ export default function ExplorePage() {
       travelMode: activeTab === 0 ? "solo" : "group",
     }));
   }, [activeTab]);
+
+  // Auto-search on mount with empty destination to show all travelers
+  const hasInitialized = useRef(false);
+  useEffect(() => {
+    if (!user?.id) return;
+    
+    const initialSearch: SearchData = {
+      destination: getPrefilledDestination(), // use URL param if present
+      budget: 20000,
+      startDate: new Date(),
+      endDate: new Date(Date.now() + 4 * 24 * 60 * 60 * 1000),
+      travelMode: activeTab === 0 ? "solo" : "group",
+    };
+
+    // Restore persistent intent-based cache directly if available
+    const isIntent = isIntentBased(initialSearch, filters);
+    if (isIntent) {
+      const globalCache = activeTab === 0 ? globalSoloIntentCache : globalGroupIntentCache;
+      if (globalCache && globalCache.length > 0) {
+        setMatchedGroups(globalCache);
+        setCurrentGroupIndex(0);
+        if (activeTab === 0) {
+          soloCache.current = { results: globalCache, index: 0 };
+        } else {
+          groupCache.current = { results: globalCache, index: 0 };
+        }
+      }
+    }
+    
+    performSearch(initialSearch);
+    // Mark as initialized after a tick to let the mount effect complete
+    requestAnimationFrame(() => { hasInitialized.current = true; });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id]); // Only runs once when user is available
+
+  // Auto-fetch on tab change: restore cache instantly, then refresh
+  useEffect(() => {
+    if (!user?.id) return;
+    // Skip the initial mount — handled by the effect above
+    if (!hasInitialized.current) return;
+
+    // Restore cached results instantly for perceived speed
+    const isIntent = isIntentBased(searchData, filters);
+    const globalCache = activeTab === 0 ? globalSoloIntentCache : globalGroupIntentCache;
+    const cache = activeTab === 0 ? soloCache.current : groupCache.current;
+
+    if (isIntent && globalCache && globalCache.length > 0) {
+      setMatchedGroups(globalCache);
+      setCurrentGroupIndex(0);
+    } else if (cache) {
+      setMatchedGroups(cache.results);
+      setCurrentGroupIndex(cache.index);
+    } else {
+      setMatchedGroups([]);
+      setCurrentGroupIndex(0);
+    }
+    setSearchError(null);
+    setLastSearchData(null);
+    setLastFilters(null);
+
+    // Trigger fresh fetch for this tab
+    const refreshSearch: SearchData = {
+      ...searchData,
+      travelMode: activeTab === 0 ? "solo" : "group",
+    };
+    performSearch(refreshSearch);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab]);
+
+  // Auto-trigger search when filters change with a debounce of 300ms
+  useEffect(() => {
+    if (!user?.id) return;
+    if (!hasInitialized.current) return;
+
+    const delayDebounce = setTimeout(() => {
+      const fullSearchData: SearchData = {
+        ...searchData,
+        travelMode: activeTab === 0 ? "solo" : "group",
+      };
+      performSearch(fullSearchData);
+    }, 300);
+
+    return () => clearTimeout(delayDebounce);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filters]);
 
   // Handle tab change with URL sync
   const handleTabChange = useCallback(
@@ -227,17 +358,51 @@ export default function ExplorePage() {
     performSearch(fullSearchData);
   };
 
-  const performSearch = async (fullSearchData: SearchData) => {
+  const performSearch = async (fullSearchData: SearchData, overrideFilters?: Filters) => {
+    const activeFilters = overrideFilters || filters;
+
+    const isStillCurrent = () => {
+      const currentMode = activeTabRef.current === 0 ? "solo" : "group";
+      return fullSearchData.travelMode === currentMode;
+    };
+
+    const isIntent = isIntentBased(fullSearchData, activeFilters);
+    const globalCache = fullSearchData.travelMode === "solo" ? globalSoloIntentCache : globalGroupIntentCache;
+    const currentCache = fullSearchData.travelMode === "solo" ? soloCache.current : groupCache.current;
+    
+    // Check if parameters/filters have changed compared to last successful search
+    const paramsChanged = hasSearchParamsChanged(fullSearchData, activeFilters);
+
+    // Cache is valid if parameters/filters haven't changed, OR if we are transitioning to the intent-based feed and have the global cache
+    const hasCache = (!paramsChanged && (currentCache && currentCache.results.length > 0)) ||
+                     (isIntent && globalCache && globalCache.length > 0);
+
     console.log("Starting search with data:", fullSearchData);
-    setSearchLoading(true);
-    setSearchError(null);
-    setMatchedGroups([]);
-    setCurrentGroupIndex(0);
+    if (isStillCurrent()) {
+      // Only show the loading spinner if we don't have cached results to show directly
+      if (!hasCache) {
+        setSearchLoading(true);
+      }
+      setSearchError(null);
+      
+      const resultsToKeep = isIntent 
+        ? (globalCache || []) 
+        : (currentCache?.results || []);
+
+      // If params changed and it's NOT an intent-based cache restore, clear matches
+      if ((paramsChanged && !isIntent) || resultsToKeep.length === 0) {
+        setMatchedGroups([]);
+        setCurrentGroupIndex(0);
+      } else if (isIntent && globalCache && globalCache.length > 0) {
+        setMatchedGroups(globalCache);
+        setCurrentGroupIndex(0);
+      }
+    }
 
     try {
       const userId = user?.id;
 
-      if (activeTab === 0) {
+      if (fullSearchData.travelMode === "solo") {
         // SOLO TRAVEL MODE - Only search for solo travelers
         if (!userId) {
           throw new Error("Please sign in to search for solo travelers");
@@ -265,50 +430,30 @@ export default function ExplorePage() {
           };
         }
 
-        const sessionResponse = await fetch("/api/session", {
+        // Step 1: Store session first and wait for it to complete to prevent race conditions in Redis
+        await fetch("/api/session", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(sessionPayload),
-        });
+        }).catch((err) => console.warn("Session store failed:", err));
 
-        if (!sessionResponse.ok) {
-          const errorData = await sessionResponse.json().catch(() => ({}));
-          const errorMessage = errorData.message || "Failed to create session";
-          const errorHint = errorData.hint || "";
-
-          // Provide helpful error message based on error type
-          if (
-            errorData.error === "PROFILE_NOT_FOUND" ||
-            errorData.error === "PROFILE_INCOMPLETE"
-          ) {
-            throw new Error(
-              `${errorMessage}${errorHint ? ` ${errorHint}` : ""}`,
-            );
-          }
-
-          throw new Error(errorMessage);
-        }
-
-        // Add a small delay to ensure Redis session is fully committed
-        await new Promise((resolve) => setTimeout(resolve, 100));
-
-        // Step 2: Get solo matches using centralized helper
+        // Step 2: Fetch solo matches
         const { data: travelers, meta: soloMeta } = await fetchSoloTravelers(
           userId,
           {
             destination: fullSearchData.destination,
-            ageMin: filters.ageRange[0],
-            ageMax: filters.ageRange[1],
-            gender: filters.gender,
-            interests: filters.interests,
-            languages: filters.languages,
-            personality: filters.personality,
-            smoking: filters.smoking,
-            drinking: filters.drinking,
-            nationality: filters.nationality,
+            ageMin: activeFilters.ageRange[0],
+            ageMax: activeFilters.ageRange[1],
+            gender: activeFilters.gender,
+            interests: activeFilters.interests,
+            languages: activeFilters.languages,
+            personality: activeFilters.personality,
+            smoking: activeFilters.smoking,
+            drinking: activeFilters.drinking,
+            nationality: activeFilters.nationality,
             dateStart: fullSearchData.startDate,
             dateEnd: fullSearchData.endDate,
-            budgetRange: `${filters.budgetRange[0]}-${filters.budgetRange[1]}`
+            budgetRange: `${activeFilters.budgetRange[0]}-${activeFilters.budgetRange[1]}`
           } as any
         );
 
@@ -332,12 +477,24 @@ export default function ExplorePage() {
             is_solo_match: true,
           }));
 
-          setMatchedGroups(soloMatchesAsGroups);
-          setCurrentGroupIndex(0);
-          setLastSearchData(fullSearchData);
-          setLastFilters(filters);
+          // Cache solo results
+          soloCache.current = { results: soloMatchesAsGroups, index: 0 };
+
+          // If this is an intent-based search, cache in global persistent cache too
+          if (isIntent) {
+            globalSoloIntentCache = soloMatchesAsGroups;
+          }
+
+          if (isStillCurrent()) {
+            setMatchedGroups(soloMatchesAsGroups);
+            setCurrentGroupIndex(0);
+            setLastSearchData(fullSearchData);
+            setLastFilters(activeFilters);
+          }
         } else if (soloMeta?.degraded) {
-          setSearchError("Matching service is currently degraded. Showing limited results.");
+          if (isStillCurrent()) {
+            setSearchError("Matching service is currently degraded. Showing limited results.");
+          }
         }
       } else {
         // GROUP TRAVEL MODE - Use centralized helper
@@ -347,15 +504,15 @@ export default function ExplorePage() {
             destination: fullSearchData.destination,
             dateStart: fullSearchData.startDate,
             dateEnd: fullSearchData.endDate,
-            ageMin: filters.ageRange[0],
-            ageMax: filters.ageRange[1],
-            gender: filters.gender,
-            interests: filters.interests,
-            languages: filters.languages,
-            smoking: filters.smoking,
-            drinking: filters.drinking,
-            nationality: filters.nationality,
-            budgetRange: `${filters.budgetRange[0]}-${filters.budgetRange[1]}`
+            ageMin: activeFilters.ageRange[0],
+            ageMax: activeFilters.ageRange[1],
+            gender: activeFilters.gender,
+            interests: activeFilters.interests,
+            languages: activeFilters.languages,
+            smoking: activeFilters.smoking,
+            drinking: activeFilters.drinking,
+            nationality: activeFilters.nationality,
+            budgetRange: `${activeFilters.budgetRange[0]}-${activeFilters.budgetRange[1]}`
           } as any
         );
 
@@ -375,27 +532,34 @@ export default function ExplorePage() {
           score: (group as any).score || 0,
         }));
 
-        setMatchedGroups(transformedGroups);
-        setCurrentGroupIndex(0);
-        setLastSearchData(fullSearchData);
-        setLastFilters(filters);
+        // Cache group results
+        groupCache.current = { results: transformedGroups, index: 0 };
+
+        // If this is an intent-based search, cache in global persistent cache too
+        if (isIntent) {
+          globalGroupIntentCache = transformedGroups;
+        }
+
+        if (isStillCurrent()) {
+          setMatchedGroups(transformedGroups);
+          setCurrentGroupIndex(0);
+          setLastSearchData(fullSearchData);
+          setLastFilters(activeFilters);
+        }
       }
     } catch (err: any) {
-      setSearchError(err.message || "Unknown error");
+      if (isStillCurrent()) {
+        setSearchError(err.message || "Unknown error");
+      }
       console.error("Search error:", err);
     } finally {
-      setSearchLoading(false);
+      if (isStillCurrent()) {
+        setSearchLoading(false);
+      }
     }
   };
 
-  // Reset search data when tab changes
-  useEffect(() => {
-    setLastSearchData(null);
-    setLastFilters(null);
-    setMatchedGroups([]);
-    setCurrentGroupIndex(0);
-    setSearchError(null);
-  }, [activeTab]);
+  // Tab change state reset is now handled in the auto-fetch useEffect above
 
   const handleFilterChange = (key: string, value: any) => {
     setFilters((prev) => ({ ...prev, [key]: value }));
@@ -418,20 +582,42 @@ export default function ExplorePage() {
     }
   };
 
+  // Helper to remove swiped/interacted matches from UI and cache immediately
+  const handleRemoveMatchedGroup = useCallback((id: string) => {
+    setMatchedGroups((prev) => {
+      const filtered = prev.filter((m) => m.id !== id && m.userId !== id && m.user?.userId !== id);
+      
+      // Update cache refs
+      if (activeTabRef.current === 0) {
+        if (soloCache.current) {
+          soloCache.current.results = filtered;
+        }
+        globalSoloIntentCache = filtered;
+      } else {
+        if (groupCache.current) {
+          groupCache.current.results = filtered;
+        }
+        globalGroupIntentCache = filtered;
+      }
+      
+      return filtered;
+    });
+  }, []);
+
   // Action handlers
   const handleConnect = async (matchId: string) => {
     // API call is handled directly in SoloMatchCard
-    handleNextGroup();
+    handleRemoveMatchedGroup(matchId);
   };
 
   const handleSuperLike = async (matchId: string) => {
     console.warn("Super like not yet implemented");
-    handleNextGroup();
+    handleRemoveMatchedGroup(matchId);
   };
 
   const handlePass = async (matchId: string) => {
     // API call is handled directly in SoloMatchCard
-    handleNextGroup();
+    handleRemoveMatchedGroup(matchId);
   };
 
   const handleComment = async (
@@ -449,7 +635,7 @@ export default function ExplorePage() {
 
   const handleJoinGroup = async (groupId: string) => {
     // API call is handled directly in GroupMatchCard
-    handleNextGroup();
+    handleRemoveMatchedGroup(groupId);
   };
 
   const handleRequestJoin = async (groupId: string) => {
@@ -458,7 +644,7 @@ export default function ExplorePage() {
 
   const handlePassGroup = async (groupId: string) => {
     // API call is handled directly in GroupMatchCard
-    handleNextGroup();
+    handleRemoveMatchedGroup(groupId);
   };
 
   const handleViewGroup = (groupId: string) => {
@@ -549,6 +735,27 @@ export default function ExplorePage() {
               onRequestJoin={handleRequestJoin}
               onPassGroup={handlePassGroup}
               onViewGroup={handleViewGroup}
+              onSearchWithoutDestination={() => {
+                setSearchData(prev => ({ ...prev, destination: "" }));
+                const defaultFilters: Filters = {
+                  ageRange: [18, 65],
+                  gender: "Any",
+                  interests: [],
+                  travelStyle: "Any",
+                  budgetRange: [5000, 50000],
+                  personality: "Any",
+                  smoking: "No",
+                  drinking: "No",
+                  nationality: "Any",
+                  languages: [],
+                };
+                setFilters(defaultFilters);
+                performSearch({
+                  ...searchData,
+                  destination: "",
+                  travelMode: activeTab === 0 ? "solo" : "group",
+                }, defaultFilters);
+              }}
             />
           </div>
         </div>
