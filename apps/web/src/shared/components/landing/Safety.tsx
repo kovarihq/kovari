@@ -28,14 +28,16 @@ export default function Safety() {
           </p>
 
           {/* Pills row */}
-          <div className="flex flex-row gap-2 justify-center select-none">
-            <span className="px-4 py-1.5 rounded-full border border-border bg-card text-foreground text-xs sm:text-sm">
+          <div className="flex flex-row gap-2 justify-center select-none items-center">
+            <span className="px-4 py-1.5 rounded-full text-foreground text-xs sm:text-sm">
               Block Instantly
             </span>
-            <span className="px-4 py-1.5 rounded-full border border-border bg-card text-foreground text-xs sm:text-sm">
+            <span className="text-foreground bg-muted rounded-full w-1.5 h-1.5"></span>
+            <span className="px-4 py-1.5 rounded-full  text-foreground text-xs sm:text-sm">
               Reports Reviewed
             </span>
-            <span className="px-4 py-1.5 rounded-full border border-border bg-card text-foreground text-xs sm:text-sm">
+             <span className="text-foreground bg-muted rounded-full w-1.5 h-1.5"></span>
+            <span className="px-4 py-1.5 rounded-full  text-foreground text-xs sm:text-sm">
               Community Moderated
             </span>
           </div>

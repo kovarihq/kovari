@@ -18,7 +18,7 @@ const HERO_SUBTITLE_GRADIENT =
   "bg-gradient-to-b from-primary from-50% to-transparent to-100% bg-clip-text text-transparent";
 
 const HERO_DESCRIPTION =
-  "Connect with real travelers going your way — same destination, similar pace, compatible budget. No bailing, no vague 'let's plan something', no trips that stay as screenshots.";
+  "Real travelers. Same destination. Same energy.\nNo more group chats that go nowhere.";
 
 const HERO_SECTION_CLASSES =
   "z-20 flex flex-col items-center gap-[28px] sm:gap-6 sm:justify-center";
