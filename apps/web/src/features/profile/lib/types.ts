@@ -56,8 +56,8 @@ export const profileEditSchema = z.object({
   travel_intentions: z.array(z.object({
     destination: z.string().min(1, { message: "Destination is required" }),
     timeframe: z.string().min(1, { message: "Timeframe is required" }),
-    is_confirmed: z.boolean().default(false),
-  })).default([]),
+    is_confirmed: z.boolean(),
+  })),
 });
 
 export type ProfileEditForm = z.infer<typeof profileEditSchema>;
