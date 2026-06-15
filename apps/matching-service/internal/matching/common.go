@@ -79,6 +79,24 @@ func CalculateDateOverlapGroup(start1, end1, start2, end2 string) (float64, floa
 	return math.Max(0, overlapDays), math.Max(1, tripDuration)
 }
 
+func getInterestWeight(interest string) float64 {
+	clean := strings.ToLower(strings.TrimSpace(interest))
+	switch clean {
+	// Outdoor Adventure (Weight: 1.5)
+	case "himalayan treks", "camping & stargazing", "river rafting", "skiing & snow", "wildlife & safaris", "beach bumming", "scuba & snorkeling", "island hopping":
+		return 1.5
+	// Travel Style (Weight: 1.2)
+	case "solo backpacking", "weekend getaways", "long-term travel", "workations", "road trips", "train journeys":
+		return 1.2
+	// Food & Social (Weight: 0.8)
+	case "street food crawls", "local markets", "chai & conversations", "nightlife & clubs":
+		return 0.8
+	// Default / Culture & Art / Content (Weight: 1.0)
+	default:
+		return 1.0
+	}
+}
+
 func CalculateJaccardSimilarity(a, b []string) float64 {
 	if len(a) == 0 || len(b) == 0 {
 		return 0.5
@@ -99,29 +117,47 @@ func CalculateJaccardSimilarity(a, b []string) float64 {
 		}
 	}
 
-	intersection := 0
+	intersectionWeight := 0.0
+	unionWeight := 0.0
+
+	// Calculate weighted intersection
 	for k := range setA {
 		if setB[k] {
-			intersection++
+			intersectionWeight += getInterestWeight(k)
 		}
 	}
 
-	if intersection == 0 {
+	if intersectionWeight == 0 {
 		return 0.1
 	}
 
-	// Calculate Jaccard Similarity: |A ∩ B| / |A ∪ B|
-	union := len(setA) + len(setB) - intersection
-	jaccard := float64(intersection) / float64(union)
-
-	// Calculate Overlap Coefficient: |A ∩ B| / min(|A|, |B|)
-	minLen := len(setA)
-	if len(setB) < minLen {
-		minLen = len(setB)
+	// Calculate weighted union
+	for k := range setA {
+		unionWeight += getInterestWeight(k)
 	}
-	overlap := float64(intersection) / float64(minLen)
+	for k := range setB {
+		if !setA[k] {
+			unionWeight += getInterestWeight(k)
+		}
+	}
+
+	jaccard := intersectionWeight / unionWeight
+
+	// Calculate weighted overlap coefficient
+	lenAWeight := 0.0
+	for k := range setA {
+		lenAWeight += getInterestWeight(k)
+	}
+	lenBWeight := 0.0
+	for k := range setB {
+		lenBWeight += getInterestWeight(k)
+	}
+	minWeight := lenAWeight
+	if lenBWeight < minWeight {
+		minWeight = lenBWeight
+	}
+	overlap := intersectionWeight / minWeight
 
 	// Hybrid approach: (Overlap + Jaccard) / 2
-	// This rewards subsets (good for users with 1-2 interests) while still rewarding large common sets
 	return (jaccard + overlap) / 2
 }

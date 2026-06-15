@@ -13,18 +13,30 @@ export const languageOptions = [
 ];
 
 export const interestOptions = [
-  "Travel", "Hiking", "Camping", "Backpacking", "Surfing", "Skiing", "Rock Climbing",
-  "Food", "Cooking", "Wine", "Coffee", "Brunch",
-  "Fitness", "Yoga", "Running", "Cycling", "Dance",
-  "Sports", "Football", "Basketball", "Tennis",
-  "Art", "Photography", "Museums", "Concerts", "Festivals",
-  "Music", "Live Music",
-  "Movies", "Netflix", "Podcasts",
-  "Reading", "Books",
-  "Volunteering",
-  "Fashion",
-  "Dogs", "Cats",
-  "Nightlife", "Bars"
+  "Solo Backpacking",
+  "Weekend Getaways",
+  "Long-Term Travel",
+  "Workations",
+  "Road Trips",
+  "Train Journeys",
+  "Himalayan Treks",
+  "Camping & Stargazing",
+  "River Rafting",
+  "Skiing & Snow",
+  "Wildlife & Safaris",
+  "Beach Bumming",
+  "Scuba & Snorkeling",
+  "Island Hopping",
+  "Street Food Crawls",
+  "Local Markets",
+  "Chai & Conversations",
+  "Heritage & History",
+  "Art & Galleries",
+  "Music & Festivals",
+  "Spiritual Travel",
+  "Photography",
+  "Aesthetic Spots",
+  "Nightlife & Clubs"
 ];
 
 export const religionOptions = [

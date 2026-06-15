@@ -163,68 +163,43 @@ const languageOptions = [
 const nationalityOptions = COUNTRIES;
 
 const interestOptions = [
-  // Travel & Adventure
-  { id: "travel", label: "Travel" },
-  { id: "hiking", label: "Hiking" },
-  { id: "camping", label: "Camping" },
-  { id: "backpacking", label: "Backpacking" },
-  { id: "surfing", label: "Surfing" },
-  { id: "skiing", label: "Skiing" },
-  { id: "rock-climbing", label: "Rock Climbing" },
+  // How they travel
+  { id: "solo-backpacking", label: "Solo Backpacking" },
+  { id: "weekend-getaways", label: "Weekend Getaways" },
+  { id: "long-term-travel", label: "Long-Term Travel" },
+  { id: "workations", label: "Workations" },
+  { id: "road-trips", label: "Road Trips" },
+  { id: "train-journeys", label: "Train Journeys" },
 
-  // Food & Drink
-  { id: "food", label: "Food" },
-  { id: "cooking", label: "Cooking" },
-  { id: "wine", label: "Wine" },
-  { id: "coffee", label: "Coffee" },
-  { id: "brunch", label: "Brunch" },
+  // Mountains & outdoors
+  { id: "himalayan-treks", label: "Himalayan Treks" },
+  { id: "camping-stargazing", label: "Camping & Stargazing" },
+  { id: "river-rafting", label: "River Rafting" },
+  { id: "skiing-snow", label: "Skiing & Snow" },
+  { id: "wildlife-safaris", label: "Wildlife & Safaris" },
 
-  // Fitness & Wellness
-  { id: "fitness", label: "Fitness" },
-  { id: "yoga", label: "Yoga" },
-  { id: "running", label: "Running" },
-  { id: "cycling", label: "Cycling" },
-  { id: "dance", label: "Dance" },
+  // Beaches & water
+  { id: "beach-bumming", label: "Beach Bumming" },
+  { id: "scuba-snorkeling", label: "Scuba & Snorkeling" },
+  { id: "island-hopping", label: "Island Hopping" },
 
-  // Sports
-  { id: "sports", label: "Sports" },
-  { id: "football", label: "Football" },
-  { id: "basketball", label: "Basketball" },
-  { id: "tennis", label: "Tennis" },
+  // Food & local
+  { id: "street-food-crawls", label: "Street Food Crawls" },
+  { id: "local-markets", label: "Local Markets" },
+  { id: "chai-conversations", label: "Chai & Conversations" },
 
-  // Arts & Culture
-  { id: "art", label: "Art" },
+  // Culture & art
+  { id: "heritage-history", label: "Heritage & History" },
+  { id: "art-galleries", label: "Art & Galleries" },
+  { id: "music-festivals", label: "Music & Festivals" },
+  { id: "spiritual-travel", label: "Spiritual Travel" },
+
+  // Photography & content
   { id: "photography", label: "Photography" },
-  { id: "museums", label: "Museums" },
-  { id: "concerts", label: "Concerts" },
-  { id: "festivals", label: "Festivals" },
-
-  // Music
-  { id: "music", label: "Music" },
-  { id: "live-music", label: "Live Music" },
-
-  // Entertainment
-  { id: "movies", label: "Movies" },
-  { id: "netflix", label: "Netflix" },
-  { id: "podcasts", label: "Podcasts" },
-
-  // Reading & Learning
-  { id: "reading", label: "Reading" },
-  { id: "books", label: "Books" },
-
-  // Social & Causes
-  { id: "volunteering", label: "Volunteering" },
-
-  // Lifestyle
-  { id: "fashion", label: "Fashion" },
-
-  // Pets & Animals
-  { id: "dogs", label: "Dogs" },
-  { id: "cats", label: "Cats" },
+  { id: "aesthetic-spots", label: "Aesthetic Spots" },
 
   // Nightlife
-  { id: "nightlife", label: "Nightlife" },
-  { id: "bars", label: "Bars" },
+  { id: "nightlife-clubs", label: "Nightlife & Clubs" },
 ];
 
 const religionOptions = [
@@ -1421,7 +1396,6 @@ export default function ProfileSetupForm() {
                         setLocationDetails(data);
                       }}
                       placeholder="Search your city..."
-                      className="bg-white"
                     />
                   </div>
                 </FormControl>
@@ -1441,7 +1415,7 @@ export default function ProfileSetupForm() {
                   <div className="relative">
                     <Input
                       placeholder="Enter your job type"
-                      className="h-9 text-sm border-input focus:border-primary focus:ring-primary rounded-lg placeholder:text-muted-foreground"
+                      className="h-9 text-sm border-border focus:border-primary focus:ring-primary rounded-lg placeholder:text-muted-foreground"
                       {...field}
                     />
                   </div>
@@ -2067,7 +2041,7 @@ export default function ProfileSetupForm() {
                   setIntentLocationDetails(data);
                 }}
                 placeholder="Goa, Manali, Bali, Europe..."
-                className="w-full bg-white"
+                className="w-full rounded-lg"
               />
             </div>
 

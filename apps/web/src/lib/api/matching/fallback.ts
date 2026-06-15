@@ -2,6 +2,39 @@ import { createAdminSupabaseClient, redis, ensureRedisConnection } from "@kovari
 import { logger } from "@/lib/api/logger";
 import { profileMapper } from "@/lib/mappers/profileMapper";
 
+function getInterestWeight(interest: string): number {
+  const clean = interest.toLowerCase().trim();
+  switch (clean) {
+    // Outdoor Adventure (Weight: 1.5)
+    case "himalayan treks":
+    case "camping & stargazing":
+    case "river rafting":
+    case "skiing & snow":
+    case "wildlife & safaris":
+    case "beach bumming":
+    case "scuba & snorkeling":
+    case "island hopping":
+      return 1.5;
+    // Travel Style (Weight: 1.2)
+    case "solo backpacking":
+    case "weekend getaways":
+    case "long-term travel":
+    case "workations":
+    case "road trips":
+    case "train journeys":
+      return 1.2;
+    // Food & Social (Weight: 0.8)
+    case "street food crawls":
+    case "local markets":
+    case "chai & conversations":
+    case "nightlife & clubs":
+      return 0.8;
+    // Default / Culture & Art / Content (Weight: 1.0)
+    default:
+      return 1.0;
+  }
+}
+
 function calculateCompatibility(p1: any, p2: any): number {
   let score = 0;
   let totalWeight = 0;
@@ -10,10 +43,31 @@ function calculateCompatibility(p1: any, p2: any): number {
   const interests1 = Array.isArray(p1.interests) ? p1.interests : [];
   const interests2 = Array.isArray(p2.interests) ? p2.interests : [];
   if (interests1.length > 0 && interests2.length > 0) {
-    const intersection = interests1.filter((i: string) => interests2.includes(i)).length;
-    const union = new Set([...interests1, ...interests2]).size;
-    const jaccard = union > 0 ? intersection / union : 0;
-    score += jaccard * 0.50;
+    const set1 = new Set<string>(interests1.map((i: any) => String(i).toLowerCase().trim()).filter(Boolean));
+    const set2 = new Set<string>(interests2.map((i: any) => String(i).toLowerCase().trim()).filter(Boolean));
+    
+    let intersectionWeight = 0;
+    let unionWeight = 0;
+    
+    set1.forEach((item: string) => {
+      if (set2.has(item)) {
+        intersectionWeight += getInterestWeight(item);
+      }
+    });
+    
+    if (intersectionWeight > 0) {
+      set1.forEach((item: string) => { unionWeight += getInterestWeight(item); });
+      set2.forEach((item: string) => {
+        if (!set1.has(item)) {
+          unionWeight += getInterestWeight(item);
+        }
+      });
+      
+      const jaccard = unionWeight > 0 ? intersectionWeight / unionWeight : 0;
+      score += jaccard * 0.50;
+    } else {
+      score += 0.1 * 0.50;
+    }
     totalWeight += 0.50;
   } else {
     score += 0.3 * 0.50;

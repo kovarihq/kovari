@@ -22,14 +22,30 @@ interface FiltersPanelProps {
 }
 
 const INTEREST_OPTIONS = [
-  "Adventure",
-  "Culture",
-  "Food",
-  "Nature",
-  "Nightlife",
-  "Relaxation",
-  "Shopping",
-  "Sports",
+  "Solo Backpacking",
+  "Weekend Getaways",
+  "Long-Term Travel",
+  "Workations",
+  "Road Trips",
+  "Train Journeys",
+  "Himalayan Treks",
+  "Camping & Stargazing",
+  "River Rafting",
+  "Skiing & Snow",
+  "Wildlife & Safaris",
+  "Beach Bumming",
+  "Scuba & Snorkeling",
+  "Island Hopping",
+  "Street Food Crawls",
+  "Local Markets",
+  "Chai & Conversations",
+  "Heritage & History",
+  "Art & Galleries",
+  "Music & Festivals",
+  "Spiritual Travel",
+  "Photography",
+  "Aesthetic Spots",
+  "Nightlife & Clubs"
 ];
 
 const TRAVEL_STYLE_OPTIONS = [
