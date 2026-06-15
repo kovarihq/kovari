@@ -10,8 +10,8 @@ export async function POST(req: NextRequest) {
     }
 
     const body = await req.json().catch(() => ({}));
-    const userIds = Array.isArray(body?.userIds)
-      ? body.userIds.filter((v: unknown) => typeof v === "string")
+    const userIds: string[] = Array.isArray(body?.userIds)
+      ? body.userIds.filter((v: unknown): v is string => typeof v === "string")
       : [];
 
     if (userIds.length === 0) {
@@ -20,70 +20,78 @@ export async function POST(req: NextRequest) {
 
     const supabase = createAdminSupabaseClient();
 
-    const { data: currentUser, error: currentUserError } = await supabase
-      .from("users")
-      .select("id")
-      .eq("clerk_user_id", clerkUserId)
-      .single();
+    // 1. Separate inputs into Clerk IDs ('user_...') and UUIDs
+    const clerkIds = userIds.filter(id => id.startsWith("user_"));
+    const uuids = userIds.filter(id => !id.startsWith("user_"));
 
-    // Log if current user is missing in DB, but don't hard-block yet if it's a valid Clerk user.
-    // This allows the profile lookup to proceed so the UI doesn't break during onboarding.
-    if (currentUserError || !currentUser) {
-      console.warn("[POST /api/direct-chat/profiles] Current user not in DB, proceeding with Clerk context:", clerkUserId);
+    // 2. Fetch User mappings in bulk
+    let userMappings: { id: string; clerk_user_id: string | null }[] = [];
+    if (clerkIds.length > 0 || uuids.length > 0) {
+      const conditions: string[] = [];
+      if (clerkIds.length > 0) {
+        conditions.push(`clerk_user_id.in.(${clerkIds.join(",")})`);
+      }
+      if (uuids.length > 0) {
+        conditions.push(`id.in.(${uuids.join(",")})`);
+      }
+      const { data, error } = await supabase
+        .from("users")
+        .select("id, clerk_user_id")
+        .or(conditions.join(","));
+      
+      if (error) {
+        console.error("Profiles lookup DB error mapping users:", error);
+      } else {
+        userMappings = data || [];
+      }
     }
 
-    // Resolve all input IDs (could be Clerk IDs or UUIDs)
-    const profileResults = await Promise.all(
-      userIds.map(async (id: string) => {
-        let internalId = id;
-        let clerkId = id.startsWith("user_") ? id : null;
+    const internalIds = Array.from(new Set([
+      ...uuids,
+      ...userMappings.map(u => u.id)
+    ]));
 
-        // 1. Resolve Clerk ID to UUID if necessary
-        if (id.startsWith("user_")) {
-          const { data } = await supabase
-            .from("users")
-            .select("id, clerk_user_id")
-            .eq("clerk_user_id", id)
-            .single();
-          if (data) {
-            internalId = data.id;
-            clerkId = data.clerk_user_id;
-          }
-        } else {
-          // If it's a UUID, try to get its Clerk ID
-          const { data } = await supabase
-            .from("users")
-            .select("clerk_user_id")
-            .eq("id", id)
-            .single();
-          if (data) {
-            clerkId = data.clerk_user_id;
-          }
-        }
+    // 3. Fetch Profiles in bulk
+    let profilesData: { user_id: string; name: string | null; username: string | null; profile_photo: string | null; deleted: boolean | null }[] = [];
+    if (internalIds.length > 0) {
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("user_id, name, username, profile_photo, deleted")
+        .in("user_id", internalIds);
 
-        // 2. Fetch the profile data
-        const { data: profile } = await supabase
-          .from("profiles")
-          .select("name, username, profile_photo, deleted")
-          .eq("user_id", internalId)
-          .single();
+      if (error) {
+        console.error("Profiles lookup DB error fetching profiles:", error);
+      } else {
+        profilesData = data || [];
+      }
+    }
 
-        // 3. Return a synthesized object
-        if (profile || clerkId) {
-          return {
-            user_id: internalId,
-            clerk_id: clerkId,
-            name: profile?.name || "User",
-            username: profile?.username || "user",
-            profile_photo: profile?.profile_photo,
-            deleted: profile?.deleted || false
-          };
-        }
-        return null;
-      })
-    );
+    // 4. Map DB results to local lookup maps
+    const mappingMap = new Map<string, string>(userMappings.filter(u => u.clerk_user_id !== null).map(u => [u.clerk_user_id!, u.id]));
+    const clerkIdMap = new Map<string, string>(userMappings.filter(u => u.clerk_user_id !== null).map(u => [u.id, u.clerk_user_id!]));
+    const profileMap = new Map(profilesData.map(p => [p.user_id, p]));
 
-    const validProfiles = profileResults.filter(p => p !== null);
+    // 5. Build canonical output array matching original keys
+    const validProfiles = userIds.map(id => {
+      const isClerk = id.startsWith("user_");
+      const internalId = isClerk ? mappingMap.get(id) : id;
+      if (!internalId) return null;
+
+      const clerkId = isClerk ? id : clerkIdMap.get(internalId) || null;
+      const profile = profileMap.get(internalId);
+
+      if (profile || clerkId) {
+        return {
+          user_id: internalId,
+          clerk_id: clerkId,
+          name: profile?.name || "User",
+          username: profile?.username || "user",
+          profile_photo: profile?.profile_photo,
+          deleted: profile?.deleted || false
+        };
+      }
+      return null;
+    }).filter(p => p !== null);
     return NextResponse.json({ profiles: validProfiles });
   } catch (error) {
     console.error("[POST /api/direct-chat/profiles] error", error);

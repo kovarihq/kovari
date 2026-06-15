@@ -178,43 +178,25 @@ const fetchCurrentUserProfile = async (): Promise<UserProfileType | null> => {
 
     // 3. Count followers/following (exclude soft-deleted users)
     // We keep follow rows for history/analytics, so counts must filter deleted accounts.
-    const [{ data: followerRows, error: followerErr }, { data: followingRows, error: followingErr }] =
+    // Optimized follow counts using inner joins to filter deleted users directly in the database
+    const [{ count: followersCount, error: followerErr }, { count: followingCount, error: followingErr }] =
       await Promise.all([
         supabase
           .from("user_follows")
-          .select("follower_id")
-          .eq("following_id", userId),
+          .select("follower_id!inner(isDeleted)", { count: "exact", head: true })
+          .eq("following_id", userId)
+          .eq("follower_id.isDeleted", false),
         supabase
           .from("user_follows")
-          .select("following_id")
-          .eq("follower_id", userId),
+          .select("following_id!inner(isDeleted)", { count: "exact", head: true })
+          .eq("follower_id", userId)
+          .eq("following_id.isDeleted", false)
       ]);
 
     if (followerErr || followingErr) {
-      console.error("Error fetching follow ids:", { followerErr, followingErr });
+      console.error("Error fetching follow counts:", { followerErr, followingErr });
       return null;
     }
-
-    const followerIds = (followerRows || []).map((r: any) => r.follower_id);
-    const followingIds = (followingRows || []).map((r: any) => r.following_id);
-
-    const [{ count: followersCount }, { count: followingCount }] =
-      await Promise.all([
-        followerIds.length
-          ? supabase
-              .from("users")
-              .select("id", { count: "exact", head: true })
-              .in("id", followerIds)
-              .eq("isDeleted", false)
-          : Promise.resolve({ count: 0 } as any),
-        followingIds.length
-          ? supabase
-              .from("users")
-              .select("id", { count: "exact", head: true })
-              .in("id", followingIds)
-              .eq("isDeleted", false)
-          : Promise.resolve({ count: 0 } as any),
-      ]);
 
     // 5. Count posts and sum likes
     // const { count: postsCount, data: postsLikesData } = await supabase

@@ -583,14 +583,41 @@ export const useDirectChat = (
     };
   }, [user?.id, currentUserUuid, partnerUuid, fetchMessages, decryptMessage, sharedSecret]);
 
-  // Poll messages to keep direct chat synced when RLS blocks client subscriptions
+  // Poll messages only as a backup when the WebSocket connection is offline
   useEffect(() => {
     if (!currentUserUuid || !partnerUuid) return;
-    const interval = window.setInterval(() => {
-      fetchMessages(false);
-    }, 5000);
-    return () => window.clearInterval(interval);
-  }, [currentUserUuid, partnerUuid, fetchMessages]);
+
+    const handleVisibilityAndPoll = () => {
+      // Do not poll if the page is hidden in background
+      if (typeof document !== "undefined" && document.hidden) return;
+
+      const socket = getSocket(user?.id || "");
+      // Poll only if the WebSocket is disconnected/offline
+      if (!socket || !socket.connected) {
+        fetchMessages(false);
+      }
+    };
+
+    // Immediate check on visibility focus
+    const handleVisibilityChange = () => {
+      if (typeof document !== "undefined" && !document.hidden) {
+        handleVisibilityAndPoll();
+      }
+    };
+
+    if (typeof document !== "undefined") {
+      document.addEventListener("visibilitychange", handleVisibilityChange);
+    }
+
+    const interval = window.setInterval(handleVisibilityAndPoll, 15000); // Check socket health & fallback every 15s instead of 5s
+
+    return () => {
+      window.clearInterval(interval);
+      if (typeof document !== "undefined") {
+        document.removeEventListener("visibilitychange", handleVisibilityChange);
+      }
+    };
+  }, [currentUserUuid, partnerUuid, fetchMessages, user?.id]);
 
   // Reset cursor when chat changes
   useEffect(() => {

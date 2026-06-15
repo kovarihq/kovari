@@ -73,9 +73,9 @@ export async function GET(req: NextRequest) {
       )
     );
 
-    // Fetch unique conversations by getting messages where user is sender or receiver
+    // Fetch unique conversations by getting messages where user is sender or receiver from deduplicated view
     const { data, error } = await supabase
-      .from("direct_messages")
+      .from("latest_conversations")
       .select("*")
       .or(`sender_id.eq.${userId},receiver_id.eq.${userId}`)
       .order("created_at", { ascending: false });
@@ -85,18 +85,8 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
-    // Manual deduplication to ensure we have the absolute LATEST message per chat_id
-    const latestMap = new Map<string, any>();
-    (data || []).forEach(m => {
-      const partnerId = m.sender_id === userId ? m.receiver_id : m.sender_id;
-      
-      if (!latestMap.has(partnerId)) {
-        latestMap.set(partnerId, m);
-      }
-    });
-    
-    const processedData = Array.from(latestMap.values());
-    console.log(`🛡️ [InboxAPI] Deduplicated ${data?.length || 0} messages into ${processedData.length} conversations`);
+    const processedData = data || [];
+    console.log(`🛡️ [InboxAPI] Retrieved ${processedData.length} active conversations`);
 
     if (!processedData || processedData.length === 0) {
       return NextResponse.json({ messages: [] });

@@ -1,6 +1,5 @@
-import { auth } from "@clerk/nextjs/server";
-import { redirect } from "next/navigation";
 import LandingContent from "@/shared/components/landing/LandingContent";
+import ClientRedirectGate from "@/shared/components/landing/ClientRedirectGate";
 
 export async function generateMetadata() {
   return {
@@ -11,13 +10,13 @@ export async function generateMetadata() {
     },
   };
 }
-export default async function HomePage() {
-  const { userId } = await auth();
-  
-  if (userId) {
-    redirect("/dashboard");
-  }
 
-  return <LandingContent />;
+export default function HomePage() {
+  return (
+    <>
+      <ClientRedirectGate />
+      <LandingContent />
+    </>
+  );
 }
 

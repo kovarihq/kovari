@@ -32,47 +32,91 @@ export async function resolveUser(
     const supabase = createRouteHandlerSupabaseClientWithServiceRole();
 
     // 2. STAGE: VALIDATE
-    let identity: { id: string; email: string; provider: 'jwt' | 'clerk' } | null = null;
+    let identity: { id: string; email: string; provider: 'jwt' | 'clerk'; dbUuid?: string } | null = null;
 
     // A. Priority: Mobile JWT
     const authHeader = req.headers.get("authorization");
     if (authHeader?.startsWith("Bearer ")) {
       const token = authHeader.substring(7);
       const payload = verifyAccessToken(token);
-
       if (payload) {
-        // payload.sub is the internal UUID (for mobile users)
-        identity = { id: payload.sub, email: payload.email, provider: 'jwt' };
+        identity = { id: payload.sub, email: payload.email, provider: 'jwt', dbUuid: payload.sub };
       } else {
         logger.warn(requestId, "Invalid Mobile JWT token presented (falling back to Clerk check)");
       }
     }
 
-    // B. Fallback: Clerk (Web)
+    // B. Fallback: Clerk (Web Claims Caching & Local DB Lookup Caching)
     if (!identity) {
-      const { userId: clerkUserId } = await auth();
-      if (clerkUserId) {
-        const clerk = await clerkClient();
-        const clerkUser = await clerk.users.getUser(clerkUserId);
-        
-        // Final Rule: Accept ANY verified email, but prefer primary if verified
-        const primaryEmailObj = clerkUser.emailAddresses.find(e => e.id === clerkUser.primaryEmailAddressId);
-        const isPrimaryVerified = primaryEmailObj?.verification?.status === "verified";
-        
-        const anyVerifiedEmailObj = clerkUser.emailAddresses.find(e => e.verification?.status === "verified");
-        const verifiedEmail = isPrimaryVerified ? primaryEmailObj?.emailAddress : anyVerifiedEmailObj?.emailAddress;
+      const authObj = await auth();
+      const clerkUserId = authObj.userId;
+      const sessionClaims = authObj.sessionClaims;
 
-        if (!verifiedEmail) {
-          logger.warn(requestId, "Clerk identity rejected (No verified emails found)", { 
-            clerkUserId,
-            hasPrimary: !!primaryEmailObj,
-            primaryStatus: primaryEmailObj?.verification?.status 
-          });
-          if (options.mode === 'protected') {
-            return { ok: false, reason: 'UNVERIFIED_EMAIL', message: "Verified email required", requestId };
+      if (clerkUserId) {
+        // Fast-path 1: Read database UUID from Clerk JWT template custom claims (if configured)
+        const cachedDbUuid = sessionClaims?.db_uuid as string | undefined;
+        const cachedEmail = sessionClaims?.email as string | undefined;
+
+        if (cachedDbUuid && cachedEmail) {
+          return {
+            ok: true,
+            user: {
+              userId: cachedDbUuid,
+              email: cachedEmail,
+              provider: 'clerk',
+              providerId: clerkUserId
+            },
+            requestId
+          };
+        }
+
+        // Fast-path 2: DB-First Lookup (Checks if already mapped locally, bypassing Clerk API)
+        const { data: dbUser } = await supabase
+          .from("users")
+          .select("id, email")
+          .eq("clerk_user_id", clerkUserId)
+          .maybeSingle();
+
+        if (dbUser) {
+          return {
+            ok: true,
+            user: {
+              userId: dbUser.id,
+              email: dbUser.email,
+              provider: 'clerk',
+              providerId: clerkUserId
+            },
+            requestId
+          };
+        }
+
+        // Fallback: Clerk API request (Only on first login before sync is finalized)
+        try {
+          const clerk = await clerkClient();
+          const clerkUser = await clerk.users.getUser(clerkUserId);
+          const primaryEmailObj = clerkUser.emailAddresses.find(e => e.id === clerkUser.primaryEmailAddressId);
+          const isPrimaryVerified = primaryEmailObj?.verification?.status === "verified";
+          
+          const anyVerifiedEmailObj = clerkUser.emailAddresses.find(e => e.verification?.status === "verified");
+          const verifiedEmail = isPrimaryVerified ? primaryEmailObj?.emailAddress : anyVerifiedEmailObj?.emailAddress;
+
+          if (!verifiedEmail) {
+            logger.warn(requestId, "Clerk identity rejected (No verified emails found)", { 
+              clerkUserId,
+              hasPrimary: !!primaryEmailObj,
+              primaryStatus: primaryEmailObj?.verification?.status 
+            });
+            if (options.mode === 'protected') {
+              return { ok: false, reason: 'UNVERIFIED_EMAIL', message: "Verified email required", requestId };
+            }
+          } else {
+            identity = { id: clerkUserId, email: verifiedEmail, provider: 'clerk' };
           }
-        } else {
-          identity = { id: clerkUserId, email: verifiedEmail, provider: 'clerk' };
+        } catch (clerkErr) {
+          logger.error(requestId, "Clerk API call failed", clerkErr);
+          if (options.mode === 'protected') {
+            return { ok: false, reason: 'INVALID_TOKEN', message: "Authentication provider unreachable", requestId };
+          }
         }
       }
     }
@@ -80,21 +124,47 @@ export async function resolveUser(
     // Handle Anonymous for Optional Mode
     if (!identity) {
       if (options.mode === 'optional') {
-        return { ok: true, user: null as any, requestId }; // Type cast for optional null
+        return { ok: true, user: null as any, requestId };
       }
       return { ok: false, reason: 'INVALID_TOKEN', message: "Authentication required", requestId };
     }
 
-    // 3. STAGE: ATOMIC IDENTITY SYNC (Provisioning & Self-healing)
-    // We move from manual find/insert to a deterministic RPC that handles
-    // concurrency and identity linking at the database level.
+    // 3. STAGE: ATOMIC IDENTITY SYNC (Fallback write path - executed once per new user)
+    if (identity.dbUuid) {
+      const { data: dbUser, error: fetchError } = await supabase
+        .from("users")
+        .select("id, email, name, isDeleted")
+        .eq("id", identity.dbUuid)
+        .single();
+
+      if (fetchError || !dbUser) {
+        logger.error(requestId, "Identity verification failed", fetchError);
+        return { ok: false, reason: 'USER_NOT_FOUND', message: "Identity verification failed", requestId };
+      }
+
+      if (dbUser.isDeleted) {
+        logger.warn(requestId, "User account is deleted", { userId: dbUser.id });
+        return { ok: false, reason: 'BANNED_USER', message: "Account unavailable", requestId };
+      }
+
+      return {
+        ok: true,
+        user: {
+          userId: dbUser.id,
+          email: dbUser.email,
+          provider: identity.provider,
+          providerId: identity.id
+        },
+        requestId
+      };
+    }
+
     const canonicalEmail = identity.email.toLowerCase().trim();
-    
     const { data: userId, error: syncError } = await supabase.rpc("sync_user_identity", {
       p_email: canonicalEmail,
       p_name: identity.provider === 'clerk' ? 'Clerk User' : 'Mobile User',
       p_clerk_id: identity.provider === 'clerk' ? identity.id : null,
-      p_google_id: null, 
+      p_google_id: null,
       p_password_hash: null,
     });
 
@@ -104,7 +174,6 @@ export async function resolveUser(
     }
 
     // 4. STAGE: VERIFY & RESOLVE
-    // Ensure the user exists and is not banned/deleted
     const { data: dbUser, error: fetchError } = await supabase
       .from("users")
       .select("id, email, name, isDeleted")
@@ -119,6 +188,15 @@ export async function resolveUser(
     if (dbUser.isDeleted) {
       logger.warn(requestId, "User account is deleted", { userId: dbUser.id });
       return { ok: false, reason: 'BANNED_USER', message: "Account unavailable", requestId };
+    }
+
+    // Async Metadata update to Clerk public metadata in background (does not block current execution)
+    if (identity.provider === 'clerk') {
+      clerkClient().then((clerk) => {
+        clerk.users.updateUserMetadata(identity!.id, {
+          publicMetadata: { db_uuid: userId }
+        }).catch(err => console.error("Failed to push Clerk metadata background", err));
+      }).catch(err => console.error("Failed to get Clerk client background", err));
     }
 
     logger.info(requestId, "User resolved successfully", { userId: dbUser.id, provider: identity.provider });

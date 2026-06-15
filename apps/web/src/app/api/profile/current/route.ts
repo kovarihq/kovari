@@ -41,28 +41,18 @@ export async function GET(request: NextRequest) {
 
     const hasCompletedOnboarding = Boolean(dbUser.onboarding_completed ?? false);
 
-    // 🚀 AUTO-REPAIR: If profile exists but flag is false, mark as complete.
-    if (dbProfile.id && !hasCompletedOnboarding) {
-      const { error: repairError } = await supabase
-        .from("users")
-        .update({ onboarding_completed: true })
-        .eq("id", internalUserId);
-      
-      if (repairError) {
-        logger.error(requestId, "Auto-repair onboarding failed", repairError);
-      }
-    }
-
-    // 4. Fetch follower/following counts
+    // Counts are optimized to use single PostgREST count queries with joins filtering deleted users
     const { count: followersCount } = await supabase
       .from("user_follows")
-      .select("*", { count: "exact", head: true })
-      .eq("following_id", internalUserId);
+      .select("follower_id!inner(isDeleted)", { count: "exact", head: true })
+      .eq("following_id", internalUserId)
+      .eq("follower_id.isDeleted", false);
 
     const { count: followingCount } = await supabase
       .from("user_follows")
-      .select("*", { count: "exact", head: true })
-      .eq("follower_id", internalUserId);
+      .select("following_id!inner(isDeleted)", { count: "exact", head: true })
+      .eq("follower_id", internalUserId)
+      .eq("following_id.isDeleted", false);
 
     // ✅ Map to ProfileResponse (Final Contract)
     const profileData: ProfileResponse = {
