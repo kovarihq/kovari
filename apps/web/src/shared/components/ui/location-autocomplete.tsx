@@ -172,7 +172,7 @@ export function LocationAutocomplete({
           onKeyDown={handleKeyDown}
           placeholder={placeholder}
           disabled={disabled}
-          className="pr-10 bg-transparent border-border" 
+          className="pr-10 bg-transparent border-border text-foreground" 
           autoComplete="off"
         />
         {isLoading && (
@@ -198,13 +198,13 @@ export function LocationAutocomplete({
       </div>
 
       {isOpen && suggestions.length > 0 && (
-        <div className="absolute z-50 mt-1 max-h-60 w-full overflow-auto hide-scrollbar rounded-md border bg-popover p-1 text-popover-foreground shadow-md animate-in fade-in-0 zoom-in-95">
+        <div className="absolute z-50 mt-1 max-h-60 w-full overflow-auto hide-scrollbar rounded-md border border-border bg-popover p-1 text-popover-foreground shadow-md animate-in fade-in-0 zoom-in-95">
              {suggestions.map((suggestion, index) => (
             <div
               key={suggestion.place_id}
               className={cn(
                 "relative flex cursor-pointer select-none items-center rounded-md px-3 py-1.5 text-sm outline-none",
-                index === selectedIndex ? "bg-secondary text-foreground" : "hover:bg-secondary hover:text-foreground"
+                index === selectedIndex ? "bg-secondary text-foreground font-medium" : "hover:bg-secondary hover:text-foreground"
               )}
               onClick={() => handleSelect(suggestion)}
               onMouseEnter={() => setSelectedIndex(index)}

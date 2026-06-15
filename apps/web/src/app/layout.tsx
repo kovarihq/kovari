@@ -111,14 +111,24 @@ export default async function RootLayout({
               __html: `
                 try {
                   var marketingRoutes = ['/', '/about', '/privacy', '/terms', '/community-guidelines', '/user-safety', '/data-deletion'];
-                  var isMarketing = marketingRoutes.includes(window.location.pathname);
+                  var authRoutes = ['/sign-in', '/sign-up', '/forgot-password', '/sso-callback', '/verify-email', '/banned'];
+                  var path = window.location.pathname.replace(/\\/$/, "") || "/";
+                  
+                  var isMarketing = marketingRoutes.includes(path);
+                  var isAuth = authRoutes.some(function(r) { return path.indexOf(r) === 0; });
+                  var isForcedLight = isMarketing || isAuth;
+                  
                   var d = document.documentElement;
                   
-                  if (isMarketing) {
+                  if (isForcedLight) {
                     d.classList.remove('dark');
                     d.style.colorScheme = 'light';
                   } else {
                     var theme = localStorage.getItem('kovari-theme');
+                    if (!theme) {
+                      localStorage.setItem('kovari-theme', 'light');
+                      theme = 'light';
+                    }
                     if (theme === 'dark' || (theme === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
                       d.classList.add('dark');
                       d.style.colorScheme = 'dark';

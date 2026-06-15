@@ -15,14 +15,26 @@ const MARKETING_ROUTES = [
   "/data-deletion"
 ];
 
+const AUTH_ROUTES = [
+  "/sign-in",
+  "/sign-up",
+  "/forgot-password",
+  "/sso-callback",
+  "/verify-email",
+  "/banned"
+];
+
 export function ThemeProvider({ children, ...props }: ThemeProviderProps) {
   const pathname = usePathname();
-  const isMarketing = MARKETING_ROUTES.includes(pathname);
+  const normalizedPath = pathname.replace(/\/$/, "") || "/";
+  const isMarketing = MARKETING_ROUTES.includes(normalizedPath);
+  const isAuth = AUTH_ROUTES.some((route) => normalizedPath.startsWith(route));
+  const isForcedLight = isMarketing || isAuth;
 
   return (
     <NextThemesProvider 
       {...props} 
-      forcedTheme={isMarketing ? "light" : undefined}
+      forcedTheme={isForcedLight ? "light" : undefined}
     >
       {children}
     </NextThemesProvider>

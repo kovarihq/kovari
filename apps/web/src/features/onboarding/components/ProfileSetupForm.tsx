@@ -1150,7 +1150,7 @@ export default function ProfileSetupForm() {
                         />
                       )}
                     </div>
-                    <div className="flex w-full flex-col gap-1 md:w-auto">
+                    <div className="flex w-full flex-col gap-0 md:w-auto">
                       <div className="flex items-center gap-1 justify-center md:justify-start">
                         <Button
                           type="button"
@@ -1212,10 +1212,10 @@ export default function ProfileSetupForm() {
                         className="hidden"
                         aria-label="Upload profile photo"
                       />
-                      <p className="text-[11px] text-muted-foreground text-center md:text-left hidden md:block mt-1">
+                      {/* <p className="text-[11px] text-muted-foreground text-center md:text-left hidden md:block mt-1">
                         Recommended at least 400×400px. JPG, PNG or WEBP, up to
                         10MB.
-                      </p>
+                      </p> */}
                     </div>
                   </div>
                 </FormControl>
