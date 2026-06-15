@@ -312,11 +312,17 @@ func (r *SupabaseRepository) FetchProfilesBatch(ctx context.Context, clerkUserId
 
 		// Parse travel_intentions from raw JSON
 		if p.TravelIntentions != nil {
-			raw, err := json.Marshal(p.TravelIntentions)
-			if err == nil {
-				var intentions []models.TravelIntention
-				if err := json.Unmarshal(raw, &intentions); err == nil {
+			var intentions []models.TravelIntention
+			if strVal, ok := p.TravelIntentions.(string); ok {
+				if err := json.Unmarshal([]byte(strVal), &intentions); err == nil {
 					attr.TravelIntentions = intentions
+				}
+			} else {
+				raw, err := json.Marshal(p.TravelIntentions)
+				if err == nil {
+					if err := json.Unmarshal(raw, &intentions); err == nil {
+						attr.TravelIntentions = intentions
+					}
 				}
 			}
 		}

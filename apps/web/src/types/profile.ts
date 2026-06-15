@@ -34,5 +34,5 @@ export interface UserProfileDTO {
   // Verification
   verified: boolean;
 
-  travel_intentions?: any[];
+  travel_intentions: any[];
 }

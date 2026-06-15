@@ -4,22 +4,21 @@ import React, { useState, useCallback } from "react";
 import { UseFormReturn } from "react-hook-form";
 import { ProfileEditForm } from "@/features/profile/lib/types";
 import { useIsMobile } from "@/shared/hooks/use-mobile";
+import { LocationAutocomplete } from "@/shared/components/ui/location-autocomplete";
+import { Button } from "@/shared/components/ui/button";
 import { MapPin, Plus, Trash2, Check, X, Pencil } from "lucide-react";
-
-const TIMEFRAME_OPTIONS = [
-  "This month",
-  "Next month",
-  "In 2-3 months",
-  "In 3-6 months",
-  "Flexible",
-];
+import { Spinner } from "@heroui/react";
 
 const MAX_INTENTIONS = 5;
 
 interface TravelIntention {
   destination: string;
-  timeframe: string;
-  is_confirmed: boolean;
+  destination_details?: {
+    city?: string | null;
+    country?: string | null;
+    lat?: number | null;
+    lon?: number | null;
+  } | null;
 }
 
 interface TravelSectionProps {
@@ -37,6 +36,7 @@ interface TravelSectionProps {
 const TravelSection: React.FC<TravelSectionProps> = ({
   form,
   updateProfileField,
+  isLoading,
 }) => {
   const isMobile = useIsMobile();
   const [isAdding, setIsAdding] = useState(false);
@@ -46,8 +46,7 @@ const TravelSection: React.FC<TravelSectionProps> = ({
   // Draft state for add/edit form
   const [draft, setDraft] = useState<TravelIntention>({
     destination: "",
-    timeframe: "",
-    is_confirmed: false,
+    destination_details: null,
   });
 
   const intentions: TravelIntention[] = form.watch("travel_intentions") || [];
@@ -68,20 +67,26 @@ const TravelSection: React.FC<TravelSectionProps> = ({
   );
 
   const handleAdd = useCallback(async () => {
-    if (!draft.destination.trim() || !draft.timeframe) return;
+    if (!draft.destination.trim()) return;
     const updated = [...intentions, { ...draft, destination: draft.destination.trim() }];
     await saveIntentions(updated);
-    setDraft({ destination: "", timeframe: "", is_confirmed: false });
+    setDraft({
+      destination: "",
+      destination_details: null,
+    });
     setIsAdding(false);
   }, [draft, intentions, saveIntentions]);
 
   const handleEdit = useCallback(
     async (index: number) => {
-      if (!draft.destination.trim() || !draft.timeframe) return;
+      if (!draft.destination.trim()) return;
       const updated = [...intentions];
       updated[index] = { ...draft, destination: draft.destination.trim() };
       await saveIntentions(updated);
-      setDraft({ destination: "", timeframe: "", is_confirmed: false });
+      setDraft({
+        destination: "",
+        destination_details: null,
+      });
       setEditingIndex(null);
     },
     [draft, intentions, saveIntentions]
@@ -97,7 +102,10 @@ const TravelSection: React.FC<TravelSectionProps> = ({
 
   const startEdit = useCallback(
     (index: number) => {
-      setDraft({ ...intentions[index] });
+      setDraft({
+        destination: intentions[index].destination,
+        destination_details: intentions[index].destination_details,
+      });
       setEditingIndex(index);
       setIsAdding(false);
     },
@@ -105,105 +113,79 @@ const TravelSection: React.FC<TravelSectionProps> = ({
   );
 
   const startAdd = useCallback(() => {
-    setDraft({ destination: "", timeframe: "", is_confirmed: false });
+    setDraft({
+      destination: "",
+      destination_details: null,
+    });
     setIsAdding(true);
     setEditingIndex(null);
   }, []);
 
   const cancelForm = useCallback(() => {
-    setDraft({ destination: "", timeframe: "", is_confirmed: false });
+    setDraft({
+      destination: "",
+      destination_details: null,
+    });
     setIsAdding(false);
     setEditingIndex(null);
   }, []);
 
   const renderForm = (onSave: () => void) => (
-    <div className="space-y-3 p-4 rounded-xl border border-border bg-secondary/30">
-      {/* Destination */}
-      <div className="space-y-1.5">
-        <label className="text-xs font-medium text-muted-foreground">
-          Destination
-        </label>
-        <input
-          type="text"
-          placeholder="e.g. Goa, Manali, Bali..."
-          value={draft.destination}
-          onChange={(e) =>
-            setDraft((d) => ({ ...d, destination: e.target.value }))
-          }
-          className="w-full px-3 py-2 text-sm rounded-lg border border-border bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/20"
-          maxLength={100}
-          autoFocus
-        />
+    <div className="w-full py-1">
+      <div className="font-semibold text-foreground text-sm mb-1">
+        Destination
       </div>
-
-      {/* Timeframe */}
-      <div className="space-y-1.5">
-        <label className="text-xs font-medium text-muted-foreground">
-          When do you plan to go?
-        </label>
-        <div className="flex flex-wrap gap-2">
-          {TIMEFRAME_OPTIONS.map((tf) => (
-            <button
-              key={tf}
-              type="button"
-              onClick={() => setDraft((d) => ({ ...d, timeframe: tf }))}
-              className={`px-3 py-1.5 text-xs font-medium rounded-full border transition-colors ${
-                draft.timeframe === tf
-                  ? "bg-primary text-primary-foreground border-primary"
-                  : "bg-background text-muted-foreground border-border hover:border-foreground/30"
-              }`}
-            >
-              {tf}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* Confirmed Toggle */}
-      <div className="flex items-center gap-2">
-        <button
-          type="button"
-          onClick={() =>
-            setDraft((d) => ({ ...d, is_confirmed: !d.is_confirmed }))
-          }
-          className={`w-9 h-5 rounded-full transition-colors relative ${
-            draft.is_confirmed
-              ? "bg-primary"
-              : "bg-muted-foreground/30"
-          }`}
-        >
-          <span
-            className={`absolute top-0.5 w-4 h-4 rounded-full bg-white transition-transform ${
-              draft.is_confirmed ? "translate-x-4" : "translate-x-0.5"
-            }`}
+      <div className="flex gap-2 items-center">
+        <div className="flex-1 min-w-0">
+          <LocationAutocomplete
+            value={draft.destination}
+            onChange={(val) =>
+              setDraft((d) => ({ ...d, destination: val }))
+            }
+            onSelect={(data) => {
+              setDraft((d) => ({
+                ...d,
+                destination: data.city || data.formatted.split(",")[0],
+                destination_details: {
+                  city: data.city || "",
+                  country: data.country || "",
+                  lat: data.lat,
+                  lon: data.lon,
+                },
+              }));
+            }}
+            placeholder="Enter destination"
+            className="w-full"
           />
-        </button>
-        <span className="text-xs text-muted-foreground">
-          {draft.is_confirmed
-            ? "Confirmed — I'm definitely going"
-            : "Exploring — Still deciding"}
-        </span>
-      </div>
+        </div>
 
-      {/* Actions */}
-      <div className="flex items-center gap-2 pt-1">
-        <button
-          type="button"
+        <Button
+          size={isMobile ? "icon" : "sm"}
           onClick={onSave}
-          disabled={!draft.destination.trim() || !draft.timeframe || isSaving}
-          className="flex items-center gap-1.5 px-4 py-2 text-xs font-medium rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          disabled={!draft.destination.trim() || isSaving}
+          className={
+            isMobile
+              ? "bg-primary text-primary-foreground text-xs h-9 w-9"
+              : "bg-primary text-xs text-primary-foreground h-9"
+          }
+          aria-label="Save"
         >
           <Check className="w-3.5 h-3.5" />
-          {isSaving ? "Saving..." : "Save"}
-        </button>
-        <button
-          type="button"
+        </Button>
+
+        <Button
+          size={isMobile ? "icon" : "sm"}
+          variant="outline"
           onClick={cancelForm}
-          className="flex items-center gap-1.5 px-4 py-2 text-xs font-medium rounded-lg bg-secondary text-muted-foreground hover:text-foreground transition-colors"
+          className={
+            isMobile
+              ? "text-xs h-9 w-9"
+              : "text-xs h-9"
+          }
+          aria-label="Cancel"
         >
           <X className="w-3.5 h-3.5" />
-          Cancel
-        </button>
+        </Button>
       </div>
     </div>
   );
@@ -216,16 +198,6 @@ const TravelSection: React.FC<TravelSectionProps> = ({
           <h1 className="md:text-lg text-sm font-semibold text-foreground">
             Travel Intentions
           </h1>
-          {intentions.length < MAX_INTENTIONS && !isAdding && editingIndex === null && (
-            <button
-              type="button"
-              onClick={startAdd}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
-            >
-              <Plus className="w-3.5 h-3.5" />
-              Add
-            </button>
-          )}
         </div>
         <p className="md:text-sm text-xs text-muted-foreground">
           Tell others where you&apos;re planning to travel. This helps match you
@@ -241,97 +213,91 @@ const TravelSection: React.FC<TravelSectionProps> = ({
             : "border-none py-4 shadow-none"
         }`}
       >
-        <div className={isMobile ? "space-y-3 px-4 pt-2 pb-4" : "space-y-3"}>
-          {/* Existing Intentions */}
-          {intentions.length === 0 && !isAdding && (
-            <div className="flex flex-col items-center justify-center py-8 text-center">
-              <div className="w-12 h-12 rounded-full bg-secondary flex items-center justify-center mb-3">
-                <MapPin className="w-5 h-5 text-muted-foreground" />
-              </div>
-              <p className="text-sm font-medium text-foreground mb-1">
-                No travel plans yet
-              </p>
-              <p className="text-xs text-muted-foreground mb-4 max-w-[240px]">
-                Add where you&apos;re planning to go and get matched with
-                travelers heading the same way.
-              </p>
-              <button
-                type="button"
-                onClick={startAdd}
-                className="flex items-center gap-1.5 px-4 py-2 text-xs font-medium rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
-              >
-                <Plus className="w-3.5 h-3.5" />
-                Add your first destination
-              </button>
+        <div className={isMobile ? "space-y-3 px-4 pt-4 pb-4" : "space-y-3"}>
+          {isLoading ? (
+            <div className="flex flex-col items-center justify-center py-12">
+              <Spinner variant="spinner" size="sm" classNames={{ spinnerBars: "bg-foreground" }} />
             </div>
-          )}
-
-          {intentions.map((intention, index) => (
-            <div key={index}>
-              {editingIndex === index ? (
-                renderForm(() => handleEdit(index))
-              ) : (
-                <div className="flex items-center justify-between p-3 rounded-xl border border-border bg-secondary/20 hover:bg-secondary/40 transition-colors group">
-                  <div className="flex items-center gap-3 min-w-0">
-                    <div
-                      className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${
-                        intention.is_confirmed
-                          ? "bg-emerald-500/15 text-emerald-600"
-                          : "bg-amber-500/15 text-amber-600"
-                      }`}
-                    >
-                      <MapPin className="w-4 h-4" />
-                    </div>
-                    <div className="min-w-0">
-                      <p className="text-sm font-medium text-foreground truncate">
-                        {intention.destination}
-                      </p>
-                      <div className="flex items-center gap-2 mt-0.5">
-                        <span className="text-xs text-muted-foreground">
-                          {intention.timeframe}
-                        </span>
-                        <span
-                          className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full ${
-                            intention.is_confirmed
-                              ? "bg-emerald-500/15 text-emerald-600"
-                              : "bg-amber-500/15 text-amber-600"
-                          }`}
-                        >
-                          {intention.is_confirmed ? "Confirmed" : "Exploring"}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <button
-                      type="button"
-                      onClick={() => startEdit(index)}
-                      className="p-1.5 rounded-md hover:bg-secondary text-muted-foreground hover:text-foreground transition-colors"
-                    >
-                      <Pencil className="w-3.5 h-3.5" />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleDelete(index)}
-                      disabled={isSaving}
-                      className="p-1.5 rounded-md hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
+          ) : (
+            <>
+              {/* Existing Intentions */}
+              {intentions.length === 0 && !isAdding && (
+                <div className="flex flex-col items-center justify-center py-4 text-center">
+                  <p className="text-sm font-medium text-foreground mb-1">
+                    No travel plans yet
+                  </p>
+                  <p className="text-xs text-muted-foreground mb-4">
+                    Add where you&apos;re planning to go and get matched with
+                    travelers heading the same way.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={startAdd}
+                    className="flex items-center gap-1.5 px-4 py-2 text-xs font-medium rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    Add your first destination
+                  </button>
                 </div>
               )}
-            </div>
-          ))}
 
-          {/* Add Form */}
-          {isAdding && renderForm(handleAdd)}
+              {intentions.map((intention, index) => (
+                <div key={index}>
+                  {editingIndex === index ? (
+                    renderForm(() => handleEdit(index))
+                  ) : (
+                    <div className="flex items-center justify-between p-3 rounded-lg border border-border transition-all hover:bg-muted/30 group">
+                      <div className="flex items-center gap-3 min-w-0">
+                        <p className="text-sm font-medium text-foreground truncate">
+                          {intention.destination}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <button
+                          type="button"
+                          onClick={() => startEdit(index)}
+                          className="p-1 rounded text-muted-foreground hover:text-foreground bg-secondary border border-border transition-all"
+                        >
+                          <Pencil className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleDelete(index)}
+                          disabled={isSaving}
+                          className="p-1 rounded text-muted-foreground bg-secondary border border-border transition-all"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ))}
 
-          {/* Limit indicator */}
-          {intentions.length > 0 && (
-            <p className="text-[10px] text-muted-foreground text-right pt-1">
-              {intentions.length}/{MAX_INTENTIONS} destinations
-            </p>
+              {/* Add Form */}
+              {isAdding && renderForm(handleAdd)}
+
+              {/* Add Button Below List */}
+              {intentions.length > 0 && intentions.length < MAX_INTENTIONS && !isAdding && editingIndex === null && (
+                <div className="flex sm:justify-end justify-center mt-2">
+                  <button
+                    type="button"
+                    onClick={startAdd}
+                    className="flex items-center justify-center gap-1.5 px-4 py-2 text-xs font-medium rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 transition-colors sm:w-auto w-full"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    Add Destination
+                  </button>
+                </div>
+              )}
+
+              {/* Limit indicator */}
+              {intentions.length > 0 && (
+                <p className="text-[10px] text-muted-foreground text-right pt-1">
+                  {intentions.length}/{MAX_INTENTIONS} destinations
+                </p>
+              )}
+            </>
           )}
         </div>
       </section>

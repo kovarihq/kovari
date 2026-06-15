@@ -1,4 +1,4 @@
-import { redis } from "@kovari/api";
+import { redis, ensureRedisConnection } from "@kovari/api";
 import crypto from "crypto";
 import { logger } from "@/lib/api/logger";
 
@@ -25,6 +25,8 @@ export function generateMatchCacheKey(userId: string, type: "solo" | "group", pa
 export async function getMatchingCache(key: string) {
   try {
     if (!isRedisActive) return null; // Graceful skip if Redis is unconfigured
+
+    await ensureRedisConnection();
 
     const data = await Promise.race([
       redis.get(key),
@@ -55,6 +57,7 @@ export async function getMatchingCache(key: string) {
 export async function setMatchingCache(userId: string, key: string, data: any, version: string) {
   try {
     if (!isRedisActive) return; // Graceful skip if Redis is unconfigured
+    await ensureRedisConnection();
     const payload = {
       data,
       version,
@@ -79,6 +82,7 @@ export async function setMatchingCache(userId: string, key: string, data: any, v
 export async function invalidateMatchingCache(userId: string) {
   try {
     if (!isRedisActive) return; // Graceful skip if Redis is unconfigured
+    await ensureRedisConnection();
     const indexKey = `user:${userId}:match_keys`;
     const keys = await redis.sMembers(indexKey);
     
@@ -95,6 +99,7 @@ export async function invalidateMatchingCache(userId: string) {
  */
 export async function tryAcquireRefreshLock(key: string): Promise<boolean> {
   try {
+    await ensureRedisConnection();
     const lockKey = `lock:refresh:${key}`;
     const result = await redis.set(lockKey, "1", { NX: true, EX: 30 });
     return result === "OK";

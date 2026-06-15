@@ -23,6 +23,7 @@ export interface MatchDTO {
   languages?: string[];
   locationDisplay?: string;
   bio?: string;
+  travel_intentions?: any[];
 
   user?: {
     userId: string;
@@ -41,6 +42,7 @@ export interface MatchDTO {
     smoking?: string;
     drinking?: string;
     foodPreference?: string;
+    travel_intentions?: any[];
   };
 }
 
@@ -85,6 +87,9 @@ export class MatchTransformer implements Transformer<any, MatchDTO> {
       languages: userDto.languages,
       locationDisplay: userDto.location || m.destination || 'India',
       bio: userDto.bio,
+      travel_intentions: (userDto.travel_intentions && userDto.travel_intentions.length > 0)
+        ? userDto.travel_intentions
+        : (m.travelIntentions || m.travel_intentions || (m.user?.travelIntentions || m.user?.travel_intentions) || []),
 
       user: {
         userId,
@@ -103,6 +108,9 @@ export class MatchTransformer implements Transformer<any, MatchDTO> {
         smoking: userDto.smoking,
         drinking: userDto.drinking,
         foodPreference: userDto.foodPreference,
+        travel_intentions: (userDto.travel_intentions && userDto.travel_intentions.length > 0)
+          ? userDto.travel_intentions
+          : (m.travelIntentions || m.travel_intentions || (m.user?.travelIntentions || m.user?.travel_intentions) || []),
       }
     };
   }

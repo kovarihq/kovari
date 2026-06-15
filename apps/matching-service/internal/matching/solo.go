@@ -203,10 +203,7 @@ func CalculateIntentionOverlapScore(userDest models.Destination, matchIntentions
 	for _, intent := range matchIntentions {
 		intentDest := strings.ToLower(intent.Destination)
 		if strings.Contains(intentDest, destLower) || strings.Contains(destLower, intentDest) {
-			score := 0.8
-			if intent.IsConfirmed {
-				score = 1.0
-			}
+			score := 1.0
 			if score > bestScore {
 				bestScore = score
 			}

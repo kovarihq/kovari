@@ -52,6 +52,7 @@ export function formatStandardResponse<T>(
   nextResponse.headers.set("X-Request-Id", context.requestId);
   nextResponse.headers.set("X-Kovari-Version", "v1");
   nextResponse.headers.set("X-Kovari-Contract", contractState);
+  nextResponse.headers.set("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
   
   return nextResponse;
 }

@@ -27,6 +27,7 @@ import {
   Check,
   AlertCircle,
   Search,
+  Plus,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import Image from "next/image";
@@ -259,20 +260,16 @@ export default function ProfileSetupForm() {
   // Travel intent state
   const [travelIntents, setTravelIntents] = useState<Array<{
     destination: string;
-    destination_details?: any;
-    rough_dates: string;
-    budget_range: string;
-    travel_style: string;
-    is_confirmed: boolean;
+    destination_details?: {
+      city: string;
+      country: string;
+      lat: number;
+      lon: number;
+    };
   }>>([]);
 
   const [intentDestination, setIntentDestination] = useState("");
   const [intentDestinationDetails, setIntentDestinationDetails] = useState<any>(null);
-  const [intentRoughDates, setIntentRoughDates] = useState("Next 1-2 months");
-  const [intentBudgetRange, setIntentBudgetRange] = useState("₹10,000 - ₹25,000");
-  const [intentTravelStyle, setIntentTravelStyle] = useState("Budget backpacker");
-  const [intentConfirmed, setIntentConfirmed] = useState(false);
-  const [intentLocationDetails, setIntentLocationDetails] = useState<LocationData | null>(null);
   const [completeClickedOnce, setCompleteClickedOnce] = useState(false);
   const [showMorePrefs, setShowMorePrefs] = useState(false);
   const [photoError, setPhotoError] = useState<string | null>(null);
@@ -813,7 +810,10 @@ export default function ProfileSetupForm() {
         personality: completeData.personality || "",
         food_preference: completeData.foodPreference || "",
         interests: interestsLabels,
-        travel_intentions: travelIntents,
+        travel_intentions: travelIntents.map(intent => ({
+          destination: intent.destination,
+          destination_details: intent.destination_details ?? null,
+        })),
       };
 
 
@@ -1917,261 +1917,149 @@ export default function ProfileSetupForm() {
     </motion.div>
   );
 
-  const renderTravelIntent = () => {
-    const roughDateOptions = [
-      "Next 2-4 weeks",
-      "Next 1-2 months", 
-      "Next 3-6 months",
-      "Next 6-12 months",
-      "Not sure yet",
-    ];
-
-    const budgetOptions = [
-      "Under ₹10,000",
-      "₹10,000 - ₹25,000",
-      "₹25,000 - ₹50,000",
-      "₹50,000 - ₹1,00,000",
-      "₹1,00,000+",
-    ];
-
-    const travelStyleOptions = [
-      "Budget backpacker",
-      "Mid-range comfort",
-      "Premium",
-      "Flexible",
-    ];
-
-    const addIntent = () => {
-      if (!intentDestination.trim()) return;
-      const newIntent = {
-        destination: intentDestination,
-        destination_details: intentDestinationDetails,
-        rough_dates: intentRoughDates,
-        budget_range: intentBudgetRange,
-        travel_style: intentTravelStyle,
-        is_confirmed: intentConfirmed,
-      };
-      setTravelIntents(prev => [...prev.slice(0, 2), newIntent]); // max 3
-      setIntentDestination("");
-      setIntentDestinationDetails(null);
-      setIntentLocationDetails(null);
-      setIntentRoughDates("Next 1-2 months");
-      setIntentBudgetRange("₹10,000 - ₹25,000");
-      setIntentTravelStyle("Budget backpacker");
-      setIntentConfirmed(false);
-    };
-
-    const removeIntent = (index: number) => {
-      setTravelIntents(prev => prev.filter((_, i) => i !== index));
-    };
-
-    return (
-      <motion.div
-        initial={{ opacity: 0, x: 20 }}
-        animate={{ opacity: 1, x: 0 }}
-        exit={{ opacity: 0, x: -20 }}
-        transition={{ duration: 0.4 }}
-        className="space-y-4"
-      >
-        <div className="text-center mb-4">
-          <h1 className="text-lg font-semibold text-foreground mb-1">
-            Where do you want to go?
-          </h1>
-          <p className="text-sm text-muted-foreground">
-            Add up to 3 trips you're planning or thinking about.
-            This helps us match you with the right travelers.
-          </p>
-        </div>
-
-        {/* Existing intents */}
-        {travelIntents.length > 0 && (
-          <div className="space-y-2">
-            {travelIntents.map((intent, index) => (
-              <div
-                key={index}
-                className="flex items-center justify-between p-3 rounded-lg border border-border bg-muted/30"
-              >
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-foreground truncate">
-                    {intent.destination}
-                    {intent.is_confirmed && (
-                      <span className="ml-2 text-xs text-green-600 font-normal">
-                        ✓ confirmed
-                      </span>
-                    )}
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    {intent.rough_dates} · {intent.budget_range} · {intent.travel_style}
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => removeIntent(index)}
-                  className="ml-2 text-muted-foreground hover:text-destructive transition-colors"
-                >
-                  <X className="h-4 w-4" />
-                </button>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {/* Add intent form — only show if less than 3 */}
-        {travelIntents.length < 3 && (
-          <div className="space-y-3 p-3 rounded-lg border border-border bg-card">
-            {/* Destination */}
-            <div>
-              <label className="text-xs font-medium text-muted-foreground mb-1 block">
-                Where? {travelIntents.length === 0 && <span className="text-destructive">*</span>}
-              </label>
-              <LocationAutocomplete
-                value={intentDestination}
-                onChange={(val) => setIntentDestination(val)}
-                onSelect={(data) => {
-                  setIntentDestination(data.city || data.formatted.split(",")[0]);
-                  setIntentDestinationDetails({
-                    city: data.city,
-                    state: data.state,
-                    country: data.country,
-                    lat: data.lat,
-                    lon: data.lon,
-                    formatted: data.formatted,
-                    place_id: data.place_id,
-                  });
-                  setIntentLocationDetails(data);
-                }}
-                placeholder="Goa, Manali, Bali, Europe..."
-                className="w-full rounded-lg"
-              />
-            </div>
-
-            {/* Rough dates */}
-            <div>
-              <label className="text-xs font-medium text-muted-foreground mb-1 block">
-                When roughly?
-              </label>
-              <div className="flex flex-wrap gap-1.5">
-                {roughDateOptions.map((option) => (
-                  <button
-                    key={option}
-                    type="button"
-                    onClick={() => setIntentRoughDates(option)}
-                    className={`px-2.5 py-1 rounded-full text-xs font-medium border transition-colors ${
-                      intentRoughDates === option
-                        ? "bg-primary text-primary-foreground border-primary"
-                        : "border-border text-muted-foreground hover:border-primary/50"
-                    }`}
-                  >
-                    {option}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Budget */}
-            <div>
-              <label className="text-xs font-medium text-muted-foreground mb-1 block">
-                Budget per person?
-              </label>
-              <div className="flex flex-wrap gap-1.5">
-                {budgetOptions.map((option) => (
-                  <button
-                    key={option}
-                    type="button"
-                    onClick={() => setIntentBudgetRange(option)}
-                    className={`px-2.5 py-1 rounded-full text-xs font-medium border transition-colors ${
-                      intentBudgetRange === option
-                        ? "bg-primary text-primary-foreground border-primary"
-                        : "border-border text-muted-foreground hover:border-primary/50"
-                    }`}
-                  >
-                    {option}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Travel style */}
-            <div>
-              <label className="text-xs font-medium text-muted-foreground mb-1 block">
-                Travel style?
-              </label>
-              <div className="flex flex-wrap gap-1.5">
-                {travelStyleOptions.map((option) => (
-                  <button
-                    key={option}
-                    type="button"
-                    onClick={() => setIntentTravelStyle(option)}
-                    className={`px-2.5 py-1 rounded-full text-xs font-medium border transition-colors ${
-                      intentTravelStyle === option
-                        ? "bg-primary text-primary-foreground border-primary"
-                        : "border-border text-muted-foreground hover:border-primary/50"
-                    }`}
-                  >
-                    {option}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Confirmed toggle */}
-            <label className="flex items-center gap-2 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={intentConfirmed}
-                onChange={(e) => setIntentConfirmed(e.target.checked)}
-                className="w-4 h-4 accent-primary"
-              />
-              <span className="text-xs text-muted-foreground">
-                I've actually decided to go (not just thinking about it)
-              </span>
-            </label>
-
-            {/* Add button */}
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              disabled={!intentDestination.trim()}
-              onClick={addIntent}
-              className="w-full text-xs"
-            >
-              + Add this trip
-            </Button>
-          </div>
-        )}
-
-        {/* Skip hint */}
-        <p className="text-center text-xs text-muted-foreground">
-          {travelIntents.length === 0
-            ? "You can skip this and add trips later from your profile."
-            : `${travelIntents.length} trip${travelIntents.length > 1 ? "s" : ""} added. You can add ${3 - travelIntents.length} more.`
-          }
+  const renderTravelIntent = () => (
+    <motion.div
+      initial={{ opacity: 0, x: 20 }}
+      animate={{ opacity: 1, x: 0 }}
+      exit={{ opacity: 0, x: -20 }}
+      transition={{ duration: 0.4 }}
+      className="space-y-4"
+    >
+      <div className="text-center mb-6">
+        <h1 className="text-lg font-semibold text-foreground mb-1">
+          Where do you want to go?
+        </h1>
+        <p className="text-sm text-muted-foreground">
+          Add up to 3 destinations you're thinking about.
+          We'll match you with travelers heading the same way.
         </p>
+      </div>
 
-        {/* Navigation */}
-        <div className="flex space-x-2 pt-2">
+      {/* Added destinations */}
+      {travelIntents.length > 0 && (
+        <div className="flex flex-wrap gap-2">
+          {travelIntents.map((intent, index) => (
+            <div
+              key={index}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-primary/30 bg-primary/5 text-sm font-medium text-primary"
+            >
+              <span>{intent.destination}</span>
+              <button
+                type="button"
+                onClick={() =>
+                  setTravelIntents(prev => prev.filter((_, i) => i !== index))
+                }
+                className="text-primary/60 hover:text-primary transition-colors ml-0.5"
+              >
+                <X className="h-3 w-3" />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Destination input — only show if less than 3 */}
+      {travelIntents.length < 3 && (
+        <div className="flex gap-2">
+          <div className="flex-1">
+            <LocationAutocomplete
+              value={intentDestination}
+              onChange={(val) => setIntentDestination(val)}
+              onSelect={(data) => {
+                setIntentDestination(
+                  data.city || data.formatted.split(",")[0]
+                );
+                setIntentDestinationDetails({
+                  city: data.city,
+                  country: data.country,
+                  lat: data.lat,
+                  lon: data.lon,
+                });
+              }}
+              placeholder="Enter your destination"
+              className="w-full"
+            />
+          </div>
           <Button
             type="button"
             variant="outline"
-            onClick={goBack}
-            className="flex-1 h-9 text-sm border-input text-muted-foreground hover:bg-muted rounded-lg transition-all"
+            size="sm"
+            disabled={!intentDestination.trim()}
+            onClick={() => {
+              if (!intentDestination.trim()) return;
+              setTravelIntents(prev => [
+                ...prev,
+                {
+                  destination: intentDestination,
+                  destination_details: intentDestinationDetails ?? undefined,
+                },
+              ]);
+              setIntentDestination("");
+              setIntentDestinationDetails(null);
+            }}
+            className="h-9 px-4 shrink-0"
           >
-            <ChevronLeft className="h-3.5 w-3.5" />
-            Back
-          </Button>
-          <Button
-            type="button"
-            onClick={() => setStep(8)}
-            className="flex-1 h-9 text-sm bg-primary text-primary-foreground font-medium rounded-lg"
-          >
-            {travelIntents.length > 0 ? "Continue" : "Skip for now"}
-            <ChevronRight className="h-3.5 w-3.5" />
+            Add
           </Button>
         </div>
-      </motion.div>
-    );
-  };
+      )}
+
+      {/* Popular suggestions — shown when no intents yet */}
+      {travelIntents.length === 0 && (
+        <div>
+          <p className="text-xs text-muted-foreground mb-2">Popular among travelers</p>
+          <div className="flex flex-wrap gap-2">
+            {[
+              "Goa", "Manali", "Rishikesh", "Spiti Valley",
+              "Leh Ladakh", "Kerala", "Pondicherry", "Ooty",
+            ].map((dest) => (
+              <button
+                key={dest}
+                type="button"
+                onClick={() =>
+                  setTravelIntents(prev =>
+                    prev.length < 3
+                      ? [...prev, { destination: dest }]
+                      : prev
+                  )
+                }
+                className="px-3 py-1 rounded-full border border-border text-xs text-muted-foreground hover:border-primary/40 hover:text-primary transition-colors"
+              >
+                {dest}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <p className="text-center text-xs text-muted-foreground">
+        {travelIntents.length === 0
+          ? "You can skip this and add destinations later from your profile."
+          : `${travelIntents.length}/3 added`}
+      </p>
+
+      {/* Navigation */}
+      <div className="flex space-x-2 pt-2">
+        <Button
+          type="button"
+          variant="outline"
+          onClick={goBack}
+          className="flex-1 h-9 text-sm border-input text-muted-foreground hover:bg-muted rounded-lg"
+        >
+          <ChevronLeft className="h-3.5 w-3.5" />
+          Back
+        </Button>
+        <Button
+          type="button"
+          onClick={() => setStep(8)}
+          className="flex-1 h-9 text-sm bg-primary text-primary-foreground font-medium rounded-lg flex items-center justify-center gap-1"
+        >
+          {travelIntents.length > 0 ? "Continue" : "Skip for now"}
+          <ChevronRight className="h-3.5 w-3.5" />
+        </Button>
+      </div>
+    </motion.div>
+  );
 
   // Step 8 - Smoking, Drinking, Religion & Policies
   const renderSmokingDrinkingReligion = () => (

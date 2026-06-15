@@ -36,6 +36,25 @@ export const profileMapper = {
     const shortId = u.id.replace(/-/g, '').slice(0, 8);
     const fallbackUsername = `user_${shortId}`;
 
+    // Safely parse JSON strings for travel_intentions and location_details
+    let parsedTravelIntentions = p.travel_intentions;
+    if (typeof parsedTravelIntentions === 'string') {
+      try {
+        parsedTravelIntentions = JSON.parse(parsedTravelIntentions);
+      } catch {
+        parsedTravelIntentions = [];
+      }
+    }
+
+    let parsedLocationDetails = p.location_details;
+    if (typeof parsedLocationDetails === 'string') {
+      try {
+        parsedLocationDetails = JSON.parse(parsedLocationDetails);
+      } catch {
+        parsedLocationDetails = {};
+      }
+    }
+
     // 4. Transform and Normalize
     return {
       id: u.id,
@@ -56,7 +75,7 @@ export const profileMapper = {
       gender: p.gender || "Prefer not to say",
       nationality: p.nationality || "",
       location: p.location || "",
-      location_details: p.location_details || {},
+      location_details: parsedLocationDetails || {},
       
       // Arrays Safety (Strict validation)
       interests: Array.isArray(p.interests) ? p.interests : [],
@@ -72,7 +91,7 @@ export const profileMapper = {
       // Verification
       verified: !!p.verified,
       
-      travel_intentions: Array.isArray(p.travel_intentions) ? p.travel_intentions : [],
+      travel_intentions: Array.isArray(parsedTravelIntentions) ? parsedTravelIntentions : [],
     };
   },
 

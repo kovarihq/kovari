@@ -26,6 +26,20 @@ export const ProfileResponseSchema = z.object({
   following: z.number().default(0),
   onboardingCompleted: z.boolean().default(false),
   email: z.string().default(""),
+  travel_intentions: z.array(
+    z.object({
+      destination: z.string(),
+      destination_details: z
+        .object({
+          city: z.string().optional().nullable(),
+          country: z.string().optional().nullable(),
+          lat: z.number().optional().nullable(),
+          lon: z.number().optional().nullable(),
+        })
+        .optional()
+        .nullable(),
+    })
+  ).default([]),
 });
 
 export type ProfileResponse = z.infer<typeof ProfileResponseSchema>;

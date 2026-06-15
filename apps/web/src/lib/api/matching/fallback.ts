@@ -220,18 +220,7 @@ export async function performSoloDbMatchingFallback(
         intent.destination?.toLowerCase().includes(destLower) ||
         destLower.includes(intent.destination?.toLowerCase() || "___")
       );
-      if (hasIntentionOverlap) score += 0.3; // significant boost
-    }
-
-    // Boost confirmed intentions higher
-    if (filters.destination && filters.destination !== "Any" && userDto.travel_intentions && userDto.travel_intentions.length > 0) {
-      const hasConfirmed = userDto.travel_intentions.some((intent: any) =>
-        intent.is_confirmed &&
-        intent.destination?.toLowerCase().includes(
-          filters.destination?.toLowerCase() || ""
-        )
-      );
-      if (hasConfirmed) score += 0.2;
+      if (hasIntentionOverlap) score += 0.5; // significant overlap boost
     }
 
     // Filter out users who do not match the destination (via active session or travel intentions)
@@ -271,6 +260,7 @@ export async function performSoloDbMatchingFallback(
       languages: userDto.languages,
       locationDisplay: userDto.location || filters.destination || 'India',
       bio: userDto.bio,
+      travel_intentions: userDto.travel_intentions || [],
 
       user: {
         userId: userDto.id,
@@ -386,14 +376,7 @@ export async function performGroupDbMatchingFallback(
         intent.destination?.toLowerCase().includes(groupDestLower) ||
         groupDestLower.includes(intent.destination?.toLowerCase() || "___")
       );
-      if (hasOverlap) score += 0.3;
-
-      const hasConfirmed = userIntentions.some((intent: any) =>
-        intent.is_confirmed &&
-        (intent.destination?.toLowerCase().includes(groupDestLower) ||
-         groupDestLower.includes(intent.destination?.toLowerCase() || "___"))
-      );
-      if (hasConfirmed) score += 0.2;
+      if (hasOverlap) score += 0.5; // combined overlap boost
     }
 
     score = Math.min(0.98, score);

@@ -95,6 +95,7 @@ interface SoloMatchCardProps {
       foodPreference?: string;
       bio?: string;
       travel_intentions?: any[];
+      travelIntentions?: any[];
     };
     is_solo_match: boolean;
   };
@@ -122,6 +123,17 @@ export function SoloMatchCard({
     ...((match as any) || {}),
     ...(match.user || {})
   };
+  const travelIntentionsRaw = 
+    (match as any)?.travel_intentions || 
+    (match as any)?.travelIntentions || 
+    match?.user?.travel_intentions || 
+    (match?.user as any)?.travelIntentions || 
+    user?.travel_intentions || 
+    (user as any)?.travelIntentions || 
+    [];
+  const travelIntentions = typeof travelIntentionsRaw === 'string'
+    ? (() => { try { return JSON.parse(travelIntentionsRaw); } catch { return []; } })()
+    : (Array.isArray(travelIntentionsRaw) ? travelIntentionsRaw : []);
 
   const hasTripDetails = !!(
     match?.destination &&
@@ -450,7 +462,7 @@ export function SoloMatchCard({
           {activeTab === "left" ? (
             <div className="flex flex-col">
               {/* Avatar (Centered and correctly sized) */}
-                <div className="w-full max-w-[400px] aspect-[4/3] rounded-2xl overflow-hidden bg-secondary shadow-none border border-border my-4">
+                <div className="w-full max-w-[400px] aspect-square rounded-2xl overflow-hidden bg-secondary shadow-none border border-border my-4">
                   {user.avatar ? (
                     <img
                       src={getFeedImageUrl(user.avatar)}
@@ -497,21 +509,17 @@ export function SoloMatchCard({
           ) : (
             <div className="flex flex-col gap-4 pt-4">
               {/* Travel Intentions */}
-              {user.travel_intentions && user.travel_intentions.length > 0 && (
-                <div className="bg-secondary rounded-2xl p-3 flex flex-col gap-y-2">
-                  <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Planning to visit</h3>
-                  <div className="flex flex-wrap gap-2">
-                    {user.travel_intentions.map((intent: any, idx: number) => (
-                      <span
-                        key={idx}
-                        className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold border ${
-                          intent.is_confirmed
-                            ? "bg-green-50 text-green-700 border-green-200"
-                            : "bg-blue-50 text-blue-700 border-blue-100"
-                        }`}
-                      >
-                        {intent.is_confirmed ? "✓" : "~"} {intent.destination}
-                      </span>
+              {travelIntentions && travelIntentions.length > 0 && (
+                <div className="space-y-1.5 bg-secondary rounded-2xl p-3 flex flex-col">
+                  <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                    Wants to visit
+                  </p>
+                  <div className="text-sm font-semibold text-foreground flex flex-wrap items-center gap-y-1">
+                    {travelIntentions.map((intent: any, idx: number) => (
+                      <React.Fragment key={idx}>
+                        {idx > 0 && <span className="mx-2 text-muted-foreground">•</span>}
+                        <span>{intent.destination}</span>
+                      </React.Fragment>
                     ))}
                   </div>
                 </div>
@@ -520,6 +528,9 @@ export function SoloMatchCard({
               {/* Trip Details Section */}
               {hasTripDetails && (
                 <div className="space-y-1.5 bg-secondary rounded-2xl p-3 flex flex-col">
+                  <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                    Trip Details
+                  </p>
                   <p className="text-sm font-semibold text-foreground capitalize">
                     {match.destination?.split(",")[0]?.trim() ?? match.destination}
                     <span className="mx-2 text-muted-foreground">•</span>
@@ -533,6 +544,9 @@ export function SoloMatchCard({
 
               {/* About Section */}
               <div className="space-y-1.5 bg-secondary rounded-2xl p-3 flex flex-col">
+                <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                  About Me
+                </p>
                 {gender && !isPreferNotToSay(gender) && (
                   <p className="text-sm font-semibold text-foreground">
                     {gender.charAt(0).toUpperCase() + gender.slice(1)}
@@ -568,15 +582,20 @@ export function SoloMatchCard({
 
               {/* Interests Section */}
               {user.interests && user.interests.length > 0 && (
-                <div className="bg-secondary rounded-2xl p-3 flex flex-wrap items-center gap-y-1">
-                  {user.interests.map((interest: string, idx: number) => (
-                    <React.Fragment key={idx}>
-                      {idx > 0 && <span className="mx-2 text-muted-foreground">•</span>}
-                      <span className="text-sm font-semibold text-foreground">
-                        {interest.charAt(0).toUpperCase() + interest.slice(1)}
-                      </span>
-                    </React.Fragment>
-                  ))}
+                <div className="space-y-1.5 bg-secondary rounded-2xl p-3 flex flex-col">
+                  <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                    My Interests
+                  </p>
+                  <div className="text-sm font-semibold text-foreground flex flex-wrap items-center gap-y-1">
+                    {user.interests.map((interest: string, idx: number) => (
+                      <React.Fragment key={idx}>
+                        {idx > 0 && <span className="mx-2 text-muted-foreground">•</span>}
+                        <span>
+                          {interest.charAt(0).toUpperCase() + interest.slice(1)}
+                        </span>
+                      </React.Fragment>
+                    ))}
+                  </div>
                 </div>
               )}
 
@@ -586,8 +605,12 @@ export function SoloMatchCard({
                 (user.smoking && !isPreferNotToSay(user.smoking)) ||
                 (user.drinking && !isPreferNotToSay(user.drinking))
               ) && (
-                <div className="bg-secondary rounded-2xl p-3 flex flex-wrap items-center gap-y-1">
-                  {(() => {
+                <div className="space-y-1.5 bg-secondary rounded-2xl p-3 flex flex-col">
+                  <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                    Lifestyle
+                  </p>
+                  <div className="text-sm font-semibold text-foreground flex flex-wrap items-center gap-y-1">
+                    {(() => {
                     const foodText = user.foodPreference && !isPreferNotToSay(user.foodPreference)
                       ? String(user.foodPreference)
                           .replace(/_/g, " ")
@@ -627,6 +650,7 @@ export function SoloMatchCard({
                       </React.Fragment>
                     ));
                   })()}
+                  </div>
                 </div>
               )}
             </div>
@@ -770,22 +794,16 @@ export function SoloMatchCard({
                 }
 
                 // 1.5. Travel Intentions Container
-                if (user.travel_intentions && user.travel_intentions.length > 0) {
+                if (travelIntentions && travelIntentions.length > 0) {
                   cards.push(
                     <div key="intentions" className="bg-secondary rounded-2xl p-6 flex flex-col gap-y-2 w-full">
-                      <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-1">Planning to visit</h3>
-                      <div className="flex flex-wrap gap-2.5">
-                        {user.travel_intentions.map((intent: any, idx: number) => (
-                          <span
-                            key={idx}
-                            className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold border ${
-                              intent.is_confirmed
-                                ? "bg-green-50 text-green-700 border-green-200"
-                                : "bg-blue-50 text-blue-700 border-blue-100"
-                            }`}
-                          >
-                            {intent.is_confirmed ? "✓" : "~"} {intent.destination}
-                          </span>
+                      <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-1">Wants to visit</h3>
+                      <div className="text-sm font-semibold text-foreground flex flex-wrap items-center gap-y-1">
+                        {travelIntentions.map((intent: any, idx: number) => (
+                          <React.Fragment key={idx}>
+                            {idx > 0 && <span className="mx-2 text-muted-foreground">•</span>}
+                            <span>{intent.destination}</span>
+                          </React.Fragment>
                         ))}
                       </div>
                     </div>

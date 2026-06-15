@@ -29,6 +29,34 @@ export const GoSoloMatchSchema = z.object({
     religion: z.string().default(""),
     profession: z.string().default(""),
     foodPreference: z.string().default(""),
+    travelIntentions: z.array(
+      z.object({
+        destination: z.string(),
+        destination_details: z
+          .object({
+            city: z.string().optional().nullable(),
+            country: z.string().optional().nullable(),
+            lat: z.number().optional().nullable(),
+            lon: z.number().optional().nullable(),
+          })
+          .optional()
+          .nullable(),
+      })
+    ).optional().default([]),
+    travel_intentions: z.array(
+      z.object({
+        destination: z.string(),
+        destination_details: z
+          .object({
+            city: z.string().optional().nullable(),
+            country: z.string().optional().nullable(),
+            lat: z.number().optional().nullable(),
+            lon: z.number().optional().nullable(),
+          })
+          .optional()
+          .nullable(),
+      })
+    ).optional().default([]),
   }).nullish().default({}),
 }).passthrough();
 

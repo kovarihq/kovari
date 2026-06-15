@@ -46,7 +46,7 @@ export default function FinalCTA({ onJoinWaitlist }: FinalCTAProps) {
 
           {/* Subtext */}
           <p className="text-muted-foreground text-sm sm:text-base md:text-lg font-light mb-8 max-w-xl mx-auto leading-relaxed">
-            First invitations go out next week. Join the waitlist.
+            First invitations go out this week. Join the waitlist.
           </p>
 
           {/* Primary CTA */}

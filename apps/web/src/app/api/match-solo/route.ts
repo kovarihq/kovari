@@ -49,7 +49,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Force a fresh fetch by bumping the version string
-    const userVersion = "v1-stable-final-v8";
+    const userVersion = "v1-stable-final-v10";
 
     const { searchParams } = new URL(request.url);
     const params = Object.fromEntries(searchParams.entries());
