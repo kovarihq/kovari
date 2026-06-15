@@ -1087,28 +1087,6 @@ export function GroupMatchCard({
             )}
           </Button>
           <Button
-            variant="secondary"
-            size="sm"
-            onClick={() => {
-              if (onReportClick) {
-                onReportClick();
-              } else {
-                setShowReportDialog(true);
-              }
-            }}
-            disabled={hasReported}
-            className={`flex-1 h-12 rounded-2xl border border-border ${
-              hasReported 
-                ? "bg-muted text-muted-foreground opacity-50 cursor-not-allowed pointer-events-none" 
-                : "text-foreground bg-secondary"
-            }`}
-          >
-            <Flag className="w-5 h-5 md:hidden shrink-0" aria-hidden />
-            <span className="hidden md:inline text-md font-semibold">
-              {hasReported ? "Reported" : "Report"}
-            </span>
-          </Button>
-          <Button
             variant="default"
             size="sm"
             onClick={handleJoinGroup}

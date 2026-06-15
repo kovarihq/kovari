@@ -104,18 +104,41 @@ export function InterestCard({
 
       {/* Content: Destination & Bio */}
       <div className="flex flex-col gap-3 py-1">
-         {interest.destination && (
-            <div className="flex items-start gap-2.5">
-               <div className="flex flex-col gap-0.5">
-                  <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
-                     Interested in traveling to
-                  </span>
-                  <span className="text-sm font-semibold text-foreground leading-tight">
-                     {interest.destination}
-                  </span>
+         {(() => {
+           const hasDestination = 
+             interest.destination && 
+             interest.destination.trim() !== "" && 
+             interest.destination.toLowerCase() !== "global" && 
+             interest.destination.toLowerCase() !== "any";
+           
+           if (hasDestination) {
+             return (
+               <div className="flex items-start gap-2.5">
+                  <div className="flex flex-col gap-0.5">
+                     <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
+                        Interested in traveling to
+                     </span>
+                     <span className="text-sm font-semibold text-foreground leading-tight">
+                        {interest.destination}
+                     </span>
+                  </div>
                </div>
-            </div>
-         )}
+             );
+           } else {
+             return (
+               <div className="flex items-start gap-2.5">
+                  <div className="flex flex-col gap-0.5">
+                     <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
+                        Connection Request
+                     </span>
+                     <span className="text-sm font-semibold text-foreground leading-tight">
+                        Interested in connecting with you
+                     </span>
+                  </div>
+               </div>
+             );
+           }
+         })()}
       </div>
 
        {/* Actions */}

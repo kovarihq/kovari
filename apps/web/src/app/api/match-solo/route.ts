@@ -213,6 +213,14 @@ async function filterInteractedMatches(userId: string, matches: any[]) {
   // Get users I showed interest in
   const { data: interests } = await supabase.from("match_interests").select("to_user_id").eq("from_user_id", userId).eq("match_type", "solo");
 
+  // Get users who showed interest in me and I accepted or rejected
+  const { data: incomingInterests } = await supabase
+    .from("match_interests")
+    .select("from_user_id")
+    .eq("to_user_id", userId)
+    .eq("match_type", "solo")
+    .in("status", ["accepted", "rejected"]);
+
   // Get users I skipped
   const { data: skips } = await supabase.from("match_skips").select("skipped_user_id").eq("user_id", userId).eq("match_type", "solo");
 
@@ -225,6 +233,7 @@ async function filterInteractedMatches(userId: string, matches: any[]) {
   iBlocked?.forEach(b => excludeUuidSet.add(b.blocked_id));
   theyBlockedMe?.forEach(b => excludeUuidSet.add(b.blocker_id));
   interests?.forEach(i => excludeUuidSet.add(i.to_user_id));
+  incomingInterests?.forEach(i => excludeUuidSet.add(i.from_user_id));
   skips?.forEach(s => excludeUuidSet.add(s.skipped_user_id));
   matchesA?.forEach(m => excludeUuidSet.add(m.user_b_id));
   matchesB?.forEach(m => excludeUuidSet.add(m.user_a_id));
