@@ -142,7 +142,7 @@ export function GroupMatchCard({
       createGroupInterest(
         currentUserId,
         group.id,
-        destinationId,
+        destinationId || "Global",
       ).catch((err) => {
         console.error("Background group interest sync failed:", err);
       });
@@ -177,7 +177,7 @@ export function GroupMatchCard({
       createSkipRecord(
         currentUserId,
         group.id,
-        destinationId,
+        destinationId || "Global",
         "group",
       ).catch((err) => {
         console.error("Background skip sync failed:", err);

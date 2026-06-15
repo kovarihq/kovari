@@ -47,12 +47,13 @@ export async function createSoloInterest(
   destinationId: string
 ): Promise<{ success: boolean; interestId?: string; error?: string }> {
   try {
+    const dest = destinationId || "Global";
     // Validate params before calling server API
-    if (!fromUserId || !toUserId || !destinationId) {
+    if (!fromUserId || !toUserId || !dest) {
       console.error("createSoloInterest: missing parameter", {
         fromUserId,
         toUserId,
-        destinationId,
+        destinationId: dest,
       });
       return { success: false, error: "Missing parameters" };
     }
@@ -62,7 +63,7 @@ export async function createSoloInterest(
       const resp = await fetch("/api/matching/interest", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ fromUserId, toUserId, destinationId }),
+        body: JSON.stringify({ fromUserId, toUserId, destinationId: dest }),
       });
       const json = await resp.json();
       if (!json.success) {
@@ -94,12 +95,13 @@ export async function createGroupInterest(
   destinationId: string
 ): Promise<{ success: boolean; interestId?: string; error?: string }> {
   try {
+    const dest = destinationId || "Global";
     // Validate params
-    if (!fromUserId || !toGroupId || !destinationId) {
+    if (!fromUserId || !toGroupId || !dest) {
       console.error("createGroupInterest: missing parameter", {
         fromUserId,
         toGroupId,
-        destinationId,
+        destinationId: dest,
       });
       return { success: false, error: "Missing parameters" };
     }
@@ -108,7 +110,7 @@ export async function createGroupInterest(
     const resp = await fetch("/api/groups/interest", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ fromUserId, toGroupId, destinationId }),
+      body: JSON.stringify({ fromUserId, toGroupId, destinationId: dest }),
     });
 
     if (!resp.ok) {
@@ -224,12 +226,13 @@ export async function createSkipRecord(
   type: "solo" | "group" = "solo"
 ): Promise<{ success: boolean; error?: string }> {
   try {
+    const dest = destinationId || "Global";
     // Validate params before calling server API
-    if (!skipperId || !skippedUserId || !destinationId) {
+    if (!skipperId || !skippedUserId || !dest) {
       console.error("createSkipRecord: missing parameter", {
         skipperId,
         skippedUserId,
-        destinationId,
+        destinationId: dest,
       });
       return { success: false, error: "Missing parameters" };
     }
@@ -239,7 +242,7 @@ export async function createSkipRecord(
       const resp = await fetch("/api/matching/skip", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ skipperId, skippedUserId, destinationId, type }),
+        body: JSON.stringify({ skipperId, skippedUserId, destinationId: dest, type }),
       });
 
       if (!resp.ok) {

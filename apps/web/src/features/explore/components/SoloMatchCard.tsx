@@ -175,7 +175,7 @@ export function SoloMatchCard({
       createSoloInterest(
         currentUserId,
         user.userId,
-        destinationId,
+        destinationId || "Global",
       ).catch((err) => {
         console.error("Background interest sync failed:", err);
       });
@@ -212,7 +212,7 @@ export function SoloMatchCard({
       createSkipRecord(
         currentUserId,
         user.userId,
-        destinationId,
+        destinationId || "Global",
         "solo",
       ).catch((err) => {
         console.error("Background skip sync failed:", err);

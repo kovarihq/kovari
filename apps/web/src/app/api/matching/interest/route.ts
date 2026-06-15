@@ -19,7 +19,8 @@ export async function POST(request: Request) {
     const supabaseAdmin = createAdminSupabaseClient();
 
     const body = await request.json();
-    const { toUserId, destinationId } = body;
+    const { toUserId } = body;
+    const destinationId = body.destinationId || "Global";
 
     // Use authenticated user as sender
     const fromUserId = clerkUserId;

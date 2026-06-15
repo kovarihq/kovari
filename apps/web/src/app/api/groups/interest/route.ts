@@ -16,7 +16,8 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { toGroupId, destinationId } = body;
+    const { toGroupId } = body;
+    const destinationId = body.destinationId || "Global";
     // Overwrite fromUserId with the authenticated user's ID
     const fromUserId = clerkUserId;
 

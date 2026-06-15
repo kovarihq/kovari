@@ -22,7 +22,8 @@ export async function POST(request: Request) {
     const supabaseAdmin = createAdminSupabaseClient();
 
     const body = await request.json();
-    const { skippedUserId, destinationId, type = "solo" } = body;
+    const { skippedUserId, type = "solo" } = body;
+    const destinationId = body.destinationId || "Global";
 
     // Use authenticated user as skipper
     const skipperId = clerkUserId;
