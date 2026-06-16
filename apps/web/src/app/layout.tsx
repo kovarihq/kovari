@@ -96,11 +96,14 @@ export default async function RootLayout({
 }>) {
   const headersList = await headers();
   const nonce = headersList.get("x-nonce") || "";
+  const pathname = headersList.get("x-pathname") || "";
+  const canonicalUrl = `https://kovari.in${pathname}`;
 
   return (
     <ClerkProvider nonce={nonce}>
       <html lang="en" suppressHydrationWarning>
         <head>
+          <link rel="canonical" href={canonicalUrl} />
           {process.env.NODE_ENV === "production" && (
             <script src="/scripts/disable-console.js" nonce={nonce} suppressHydrationWarning />
           )}

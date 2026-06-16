@@ -322,6 +322,14 @@ const ALLOWED_ORIGINS = [
 ].filter(Boolean) as string[];
 
 export default async function middleware(req: NextRequest, evt: any) {
+  const host = req.headers.get("host");
+  if (host === "www.kovari.in") {
+    const url = req.nextUrl.clone();
+    url.host = "kovari.in";
+    url.protocol = "https:";
+    return NextResponse.redirect(url, 301);
+  }
+
   const nonce = Buffer.from(crypto.randomUUID()).toString("base64");
   const cspHeader = `
     default-src 'self';
@@ -339,11 +347,12 @@ export default async function middleware(req: NextRequest, evt: any) {
     form-action 'self';
   `.replace(/\s{2,}/g, " ").trim();
 
-  // Inject nonce and CSP to request headers
+  const pathname = req.nextUrl.pathname;
+
+  // Inject nonce, CSP, and pathname to request headers
   req.headers.set("x-nonce", nonce);
   req.headers.set("Content-Security-Policy", cspHeader);
-
-  const pathname = req.nextUrl.pathname;
+  req.headers.set("x-pathname", pathname);
   const isApiRoute = pathname.startsWith("/api/") || pathname.startsWith("/apiauth/");
   const origin = req.headers.get("origin") || "";
   

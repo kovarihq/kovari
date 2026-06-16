@@ -79,7 +79,7 @@ export const emailLayout = ({ content, previewText, hideLogo = false }: EmailLay
               <table role="presentation" style="width: 100%; border: none; border-spacing: 0;">
                 <tr>
                   <td align="center" style="padding: 0 0 24px; text-align: center;">
-                    <a href="${process.env.NEXT_PUBLIC_APP_URL || 'https://www.kovari.in'}" style="text-decoration: none; display: inline-block;">
+                    <a href="${process.env.NEXT_PUBLIC_APP_URL || 'https://kovari.in'}" style="text-decoration: none; display: inline-block;">
                       <img src="https://res.cloudinary.com/ds8vth6ci/image/upload/assets/kovari_email_logo_png.png" alt="Kovari" width="100" style="display: block; width: 100px; max-width: 100%; height: auto; outline: none; border: none; text-decoration: none;">
                     </a>
                   </td>

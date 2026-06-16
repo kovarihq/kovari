@@ -6,9 +6,6 @@ export async function generateMetadata(): Promise<Metadata> {
   return {
     title: "About Kovari | Social Travel Platform",
     description: "Learn how Kovari is reimagining group travel planning for the WhatsApp-and-spreadsheet generation.",
-    alternates: {
-      canonical: "https://kovari.in/about",
-    },
   };
 }
 
