@@ -14,6 +14,7 @@ export interface Coordinates {
 export interface GeoapifyResult {
   place_id: string;
   formatted: string;
+  name?: string;
   city?: string;
   state?: string;
   country?: string;
@@ -59,6 +60,7 @@ export const searchLocationDirect = async (
     return (data.features || []).map((feature: any) => ({
       place_id: feature.properties.place_id,
       formatted: feature.properties.formatted,
+      name: feature.properties.name,
       city:
         feature.properties.city ||
         feature.properties.town ||

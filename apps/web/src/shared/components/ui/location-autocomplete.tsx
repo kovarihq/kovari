@@ -15,6 +15,16 @@ interface LocationAutocompleteProps {
   disabled?: boolean;
 }
 
+const getSecondaryLabel = (suggestion: GeoapifyResult) => {
+  const parts = [];
+  if (suggestion.name && suggestion.city && suggestion.name.toLowerCase() !== suggestion.city.toLowerCase()) {
+    parts.push(suggestion.city);
+  }
+  if (suggestion.state) parts.push(suggestion.state);
+  if (suggestion.country) parts.push(suggestion.country);
+  return parts.join(", ") || suggestion.formatted;
+};
+
 export function LocationAutocomplete({
   value = "",
   onChange,
@@ -196,10 +206,10 @@ export function LocationAutocomplete({
               {/* <MapPin className="mr-2 h-4 w-4 shrink-0 opacity-50" /> */}
               <div className="flex flex-col overflow-hidden">
                   <span className="truncate font-medium">
-                      {suggestion.city || suggestion.address_line1 || suggestion.formatted.split(",")[0]}
+                      {suggestion.name || suggestion.city || suggestion.address_line1 || suggestion.formatted.split(",")[0]}
                   </span>
                   <span className="truncate text-xs text-muted-foreground">
-                      {[suggestion.state, suggestion.country].filter(Boolean).join(", ") || suggestion.formatted}
+                      {getSecondaryLabel(suggestion)}
                   </span>
               </div>
             </div>

@@ -69,12 +69,17 @@ const CURATED_DESTINATIONS: CuratedDestination[] = [
   { name: "Bangkok", state: "Bangkok", country: "Thailand", lat: 13.7563, lon: 100.5018 },
   { name: "Singapore", state: "Singapore", country: "Singapore", lat: 1.3521, lon: 103.8198 },
   { name: "Dubai", state: "Dubai", country: "United Arab Emirates", lat: 25.2048, lon: 55.2708 },
+
+  // Landour and Landour Cantonment
+  { name: "Landour", state: "Uttarakhand", lat: 30.4586, lon: 78.0936 },
+  { name: "Landour Cantonment", state: "Uttarakhand", lat: 30.4586, lon: 78.0936 },
 ];
 
 // Convert to GeoapifyResult shape
 const destinationToResult = (dest: CuratedDestination): GeoapifyResult => ({
   place_id: `local_${dest.name.toLowerCase().replace(/\s+/g, "_")}`,
   formatted: `${dest.name}, ${dest.state}, ${dest.country || "India"}`,
+  name: dest.name,
   city: dest.name,
   state: dest.state,
   country: dest.country || "India",
@@ -123,6 +128,7 @@ export const searchLocation = async (
     const apiResults: GeoapifyResult[] = (data.features || []).map((feature: any) => ({
       place_id: feature.properties.place_id,
       formatted: feature.properties.formatted,
+      name: feature.properties.name,
       city:
         feature.properties.city ||
         feature.properties.town ||

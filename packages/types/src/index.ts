@@ -35,6 +35,7 @@ export interface Group {
 export interface GeoapifyResult {
   place_id: string;
   formatted: string;
+  name?: string;
   city?: string;
   state?: string;
   country?: string;
