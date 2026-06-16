@@ -181,9 +181,9 @@ export function DestinationCard({
               <div
                 className="flex flex-col items-center gap-1.5 rounded-3xl p-4 pointer-events-none"
               >
-                <div className="rounded-full p-1">
-                  <Upload className="w-5 h-5 text-gray-400" />
-                </div>
+                <span className="text-[10px] sm:text-xs text-gray-400 font-semibold mb-0.5">
+                  Add Destination Image
+                </span>
               </div>
             ) : (
               <div className="flex flex-col items-center gap-1.5">

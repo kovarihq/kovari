@@ -5,7 +5,17 @@ const isPublicRoute = createRouteMatcher(['/sign-in(.*)', '/sso-callback(.*)']);
 const isApiRoute = createRouteMatcher(['/api(.*)']);
 
 export default clerkMiddleware(async (auth, req) => {
-  // Allow public routes
+  const authResult = await auth();
+  const userId = authResult.userId;
+  console.log(`[middleware] Path: ${req.nextUrl.pathname}, userId: ${userId}`);
+
+  // If user is signed in and trying to access sign-in or other public auth routes, redirect to root
+  if (userId && isPublicRoute(req)) {
+    const rootUrl = new URL('/', req.url);
+    return NextResponse.redirect(rootUrl);
+  }
+
+  // Allow public routes for signed-out users
   if (isPublicRoute(req)) {
     console.log("[middleware] Public route allowed:", req.nextUrl.pathname);
     return;
@@ -16,10 +26,6 @@ export default clerkMiddleware(async (auth, req) => {
     console.log("[middleware] API route allowed:", req.nextUrl.pathname);
     return;
   }
-
-  const authResult = await auth();
-  const userId = authResult.userId;
-  console.log(`[middleware] Path: ${req.nextUrl.pathname}, userId: ${userId}`);
 
   if (!userId) {
     console.log("[middleware] No userId, redirecting to sign-in");

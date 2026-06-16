@@ -22,23 +22,26 @@ export default function AuthForm({ mode }: AuthFormProps) {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [rememberMe, setRememberMe] = useState(false);
   const [loadingState, setLoadingState] = useState<string | null>(null);
-  const isLoading = loadingState !== null;
   const [error, setError] = useState("");
 
-  const { signIn, setActive } = useSignIn();
-  const { signUp, setActive: setActiveSignUp } = useSignUp();
-  const { isSignedIn, signOut } = useAuth();
+  const { isLoaded: isSignInLoaded, signIn, setActive } = useSignIn();
+  const { isLoaded: isSignUpLoaded, signUp, setActive: setActiveSignUp } = useSignUp();
+  const { isSignedIn, signOut, isLoaded: isAuthLoaded } = useAuth();
   const router = useRouter();
 
   const isSignUp = mode === "sign-up";
+  const isClerkLoaded = isSignUp ? (isSignUpLoaded && !!signUp) : (isSignInLoaded && !!signIn);
+  const isLoading = loadingState !== null || !isClerkLoaded;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!isClerkLoaded) return;
     setLoadingState("email");
     setError("");
 
     try {
       if (isSignUp) {
+        if (!signUp) return;
         // Sign up with email and password
         if (password !== confirmPassword) {
           setError("Passwords don't match");
@@ -46,7 +49,7 @@ export default function AuthForm({ mode }: AuthFormProps) {
         }
 
         // First, prepare the sign-up
-        const result = await signUp?.create({
+        const result = await signUp.create({
           emailAddress: email,
           password,
         });
@@ -57,7 +60,7 @@ export default function AuthForm({ mode }: AuthFormProps) {
           router.push("/onboarding");
         } else if (result?.status === "missing_requirements") {
           // Prepare email verification
-          await signUp?.prepareEmailAddressVerification();
+          await signUp.prepareEmailAddressVerification();
           router.push("/verify-email");
         } else if (result) {
           console.warn("Unhandled sign-up status:", result.status);
@@ -66,6 +69,7 @@ export default function AuthForm({ mode }: AuthFormProps) {
           setError("Sign-up failed to initialize.");
         }
       } else {
+        if (!signIn) return;
         // Sign in with email and password
         // If user is already signed in, sign them out first
         if (isSignedIn) {
@@ -74,7 +78,7 @@ export default function AuthForm({ mode }: AuthFormProps) {
           await new Promise((resolve) => setTimeout(resolve, 500));
         }
 
-        const result = await signIn?.create({
+        const result = await signIn.create({
           identifier: email,
           password,
           strategy: "password",
@@ -111,23 +115,39 @@ export default function AuthForm({ mode }: AuthFormProps) {
   const handleSocialAuth = async (
     provider: "oauth_google" // | "oauth_facebook" | "oauth_apple"
   ) => {
+    if (isSignUp && (!isSignUpLoaded || !signUp)) {
+      setError("Sign up service is not ready. Please try again.");
+      return;
+    }
+    if (!isSignUp && (!isSignInLoaded || !signIn)) {
+      setError("Sign in service is not ready. Please try again.");
+      return;
+    }
+
     setLoadingState(provider);
     setError("");
 
     try {
       if (isSignUp) {
-        await signUp?.authenticateWithRedirect({
+        if (!signUp) return;
+        await signUp.authenticateWithRedirect({
           strategy: provider,
           redirectUrl: "/sso-callback",
           redirectUrlComplete: "/onboarding",
         });
       } else {
-        await signIn?.authenticateWithRedirect({
+        if (!signIn) return;
+        await signIn.authenticateWithRedirect({
           strategy: provider,
           redirectUrl: "/sso-callback",
           redirectUrlComplete: "/dashboard",
         });
       }
+
+      // Safety timeout to reset loading state if redirection takes too long or fails to navigate
+      setTimeout(() => {
+        setLoadingState(null);
+      }, 5000);
     } catch (err: any) {
       setError(err.errors?.[0]?.message || "An error occurred");
       setLoadingState(null);

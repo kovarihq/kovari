@@ -18,19 +18,21 @@ export default function AuthForm() {
   const [password, setPassword] = useState("");
   const [rememberMe, setRememberMe] = useState(false);
   const [loadingState, setLoadingState] = useState<string | null>(null);
-  const isLoading = loadingState !== null;
   const [error, setError] = useState("");
 
-  const { signIn, setActive } = useSignIn();
+  const { isLoaded, signIn, setActive } = useSignIn();
   const router = useRouter();
+
+  const isLoading = loadingState !== null || !isLoaded;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!isLoaded || !signIn) return;
     setLoadingState("email");
     setError("");
 
     try {
-      const result = await signIn?.create({
+      const result = await signIn.create({
         identifier: email,
         password,
         strategy: "password",
@@ -56,6 +58,10 @@ export default function AuthForm() {
   const handleSocialAuth = async (
     provider: "oauth_google" | "oauth_facebook" | "oauth_apple"
   ) => {
+    if (!isLoaded || !signIn) {
+      setError("Sign in service is not ready. Please try again.");
+      return;
+    }
     setLoadingState(provider);
     setError("");
 
@@ -64,11 +70,16 @@ export default function AuthForm() {
         sessionStorage.setItem("admin_login_pending", "true");
       }
       
-      await signIn?.authenticateWithRedirect({
+      await signIn.authenticateWithRedirect({
         strategy: provider,
         redirectUrl: "/sso-callback",
         redirectUrlComplete: "/",
       });
+
+      // Safety timeout to reset loading state if redirection takes too long or fails to navigate
+      setTimeout(() => {
+        setLoadingState(null);
+      }, 5000);
     } catch (err: any) {
       setError(err.errors?.[0]?.message || "An error occurred");
       setLoadingState(null);

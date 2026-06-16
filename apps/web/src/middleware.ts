@@ -7,6 +7,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 
 const isBannedPage = createRouteMatcher(["/banned"]);
+const isAuthPage = createRouteMatcher(["/sign-in(.*)", "/sign-up(.*)"]);
 
 /** When true, only landing + waitlist are public; devs/admins bypass via launch_bypass_users table */
 const isWaitlistLaunchMode = () =>
@@ -162,6 +163,13 @@ const clerk = clerkMiddleware(async (auth, req: NextRequest) => {
 
   const authObj = await auth();
   const { userId, sessionId } = authObj;
+
+  // If user is signed in and trying to access sign-in or sign-up, redirect to root
+  if (userId && isAuthPage(req)) {
+    const url = req.nextUrl.clone();
+    url.pathname = "/";
+    return NextResponse.redirect(url);
+  }
 
   // 3. Absolute Priority: Ban & Deletion Checks
   // We must do this before ANY bypass logic (like waitlist admin bypass)
