@@ -91,41 +91,25 @@ export function LocationAutocomplete({
     }, 200); // 200ms debounce for faster feel
   };
 
-  const handleSelect = async (result: GeoapifyResult) => {
+  const handleSelect = (result: GeoapifyResult) => {
     // 1. Update UI immediately with formatted address
     setInputValue(result.formatted);
     setSuggestions([]);
     setIsOpen(false);
     onChange?.(result.formatted);
 
-    // 2. Fetch full details
-    setIsLoading(true);
-    try {
-      // Resolve final location using Geoapify Geocoding / Place Details API as requested
-      const details = await getLocationDetails(result.place_id);
-      
-      // If details found, use them. Otherwise fallback to the result we have.
-      if (details) {
-        onSelect(details);
-      } else {
-        // Fallback: construct LocationData from the autocomplete result
-         const fallbackData: LocationData = {
-          city: result.city || "",
-          state: result.state || "",
-          country: result.country || "",
-          lat: result.lat,
-          lon: result.lon,
-          formatted: result.formatted,
-          place_id: result.place_id,
-          display_name: result.formatted
-        };
-        onSelect(fallbackData);
-      }
-    } catch (error) {
-      console.error("Failed to fetch location details", error);
-    } finally {
-      setIsLoading(false);
-    }
+    // 2. Construct LocationData from the autocomplete result synchronously
+    const locationData: LocationData = {
+      city: result.city || "",
+      state: result.state || "",
+      country: result.country || "",
+      lat: result.lat,
+      lon: result.lon,
+      formatted: result.formatted,
+      place_id: result.place_id,
+      display_name: result.formatted
+    };
+    onSelect(locationData);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {

@@ -6,7 +6,7 @@ import { ProfileEditForm } from "@/features/profile/lib/types";
 import { useIsMobile } from "@/shared/hooks/use-mobile";
 import { LocationAutocomplete } from "@/shared/components/ui/location-autocomplete";
 import { Button } from "@/shared/components/ui/button";
-import { MapPin, Plus, Trash2, Check, X, Pencil } from "lucide-react";
+import { MapPin, Plus, Trash2, Check, X, Pencil, Loader2 } from "lucide-react";
 import { Spinner } from "@heroui/react";
 
 const MAX_INTENTIONS = 5;
@@ -55,8 +55,8 @@ const TravelSection: React.FC<TravelSectionProps> = ({
     async (updated: TravelIntention[]) => {
       setIsSaving(true);
       try {
-        form.setValue("travel_intentions", updated as any);
         await updateProfileField("travel_intentions", updated);
+        form.setValue("travel_intentions", updated as any);
       } catch (err) {
         console.error("Failed to save travel intentions:", err);
       } finally {
@@ -170,7 +170,11 @@ const TravelSection: React.FC<TravelSectionProps> = ({
           }
           aria-label="Save"
         >
-          <Check className="w-3.5 h-3.5" />
+          {isSaving ? (
+            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+          ) : (
+            <Check className="w-3.5 h-3.5" />
+          )}
         </Button>
 
         <Button
@@ -283,9 +287,9 @@ const TravelSection: React.FC<TravelSectionProps> = ({
                   <button
                     type="button"
                     onClick={startAdd}
-                    className="flex items-center justify-center gap-1.5 px-4 py-2 text-xs font-medium rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 transition-colors sm:w-auto w-full"
+                    className="flex items-center justify-center gap-1.5 px-4 py-2 text-sm font-medium rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 transition-colors sm:w-auto w-full"
                   >
-                    <Plus className="w-3.5 h-3.5" />
+                    <Plus className="w-4 h-4" />
                     Add Destination
                   </button>
                 </div>
