@@ -1,3 +1,5 @@
+export const dynamic = "force-dynamic";
+
 import { NextRequest, NextResponse } from "next/server";
 import { checkRateLimit } from "@kovari/api";
 
@@ -26,9 +28,10 @@ export async function GET(req: NextRequest) {
       url.searchParams.append("text", query);
       url.searchParams.append("limit", "7");
       url.searchParams.append("lang", "en");
+      url.searchParams.append("bias", "countrycode:in");
       url.searchParams.append("apiKey", apiKey!);
       
-      const res = await fetch(url.toString());
+      const res = await fetch(url.toString(), { cache: "no-store" });
       const data = await res.json();
       return NextResponse.json(data);
     } else if (type === "details") {
@@ -38,7 +41,7 @@ export async function GET(req: NextRequest) {
       url.searchParams.append("id", placeId);
       url.searchParams.append("apiKey", apiKey!);
       
-      const res = await fetch(url.toString());
+      const res = await fetch(url.toString(), { cache: "no-store" });
       const data = await res.json();
       return NextResponse.json(data);
     } else {
@@ -49,4 +52,5 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }
+
 

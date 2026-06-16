@@ -46,9 +46,10 @@ export const searchLocationDirect = async (
     // REMOVED: type=city
     url.searchParams.append("limit", "7");
     url.searchParams.append("lang", "en");
+    url.searchParams.append("bias", "countrycode:in");
     url.searchParams.append("apiKey", apiKey);
 
-    const res = await fetch(url.toString());
+    const res = await fetch(url.toString(), { cache: "no-store" });
     if (!res.ok) {
       console.error(`Geoapify API error: ${res.status}`);
       return [];
@@ -95,7 +96,7 @@ export const getLocationDetailsDirect = async (placeId: string) => {
     url.searchParams.append("id", placeId);
     url.searchParams.append("apiKey", apiKey);
 
-    const res = await fetch(url.toString());
+    const res = await fetch(url.toString(), { cache: "no-store" });
     if (!res.ok) throw new Error("Failed to fetch location details");
     const data = await res.json();
     const feature = data.features?.[0];

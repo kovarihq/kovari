@@ -21,8 +21,16 @@ export interface LocationData {
 // In-memory cache for autocomplete queries to make them instant
 const queryCache = new Map<string, GeoapifyResult[]>();
 
-// Curated list of popular Indian trek routes and passes
-const INDIA_TREK_DESTINATIONS = [
+interface CuratedDestination {
+  name: string;
+  state: string;
+  country?: string;
+  lat: number;
+  lon: number;
+}
+
+// Curated list of popular Indian trek routes and popular global destinations
+const CURATED_DESTINATIONS: CuratedDestination[] = [
   // Mountain passes
   { name: "Hampta Pass", state: "Himachal Pradesh", lat: 32.2667, lon: 77.3167 },
   { name: "Rohtang Pass", state: "Himachal Pradesh", lat: 32.3714, lon: 77.2500 },
@@ -53,34 +61,43 @@ const INDIA_TREK_DESTINATIONS = [
   { name: "Tirthan Valley", state: "Himachal Pradesh", lat: 31.6341, lon: 77.3487 },
   { name: "Sangla Valley", state: "Himachal Pradesh", lat: 31.4175, lon: 78.2382 },
   { name: "Parvati Valley", state: "Himachal Pradesh", lat: 31.9000, lon: 77.2000 },
+
+  // Popular global destinations (especially those not easily found via city autocomplete)
+  { name: "Bali", state: "Bali", country: "Indonesia", lat: -8.3405, lon: 115.092 },
+  { name: "Maldives", state: "Maldives", country: "Maldives", lat: 3.2028, lon: 73.2207 },
+  { name: "Phuket", state: "Phuket", country: "Thailand", lat: 7.8804, lon: 98.3923 },
+  { name: "Bangkok", state: "Bangkok", country: "Thailand", lat: 13.7563, lon: 100.5018 },
+  { name: "Singapore", state: "Singapore", country: "Singapore", lat: 1.3521, lon: 103.8198 },
+  { name: "Dubai", state: "Dubai", country: "United Arab Emirates", lat: 25.2048, lon: 55.2708 },
 ];
 
 // Convert to GeoapifyResult shape
-const trekToResult = (trek: typeof INDIA_TREK_DESTINATIONS[0]): GeoapifyResult => ({
-  place_id: `local_${trek.name.toLowerCase().replace(/\s+/g, "_")}`,
-  formatted: `${trek.name}, ${trek.state}, India`,
-  city: trek.name,
-  state: trek.state,
-  country: "India",
-  lat: trek.lat,
-  lon: trek.lon,
+const destinationToResult = (dest: CuratedDestination): GeoapifyResult => ({
+  place_id: `local_${dest.name.toLowerCase().replace(/\s+/g, "_")}`,
+  formatted: `${dest.name}, ${dest.state}, ${dest.country || "India"}`,
+  city: dest.name,
+  state: dest.state,
+  country: dest.country || "India",
+  lat: dest.lat,
+  lon: dest.lon,
 });
 
 // Search local list first
 const searchLocalDestinations = (query: string): GeoapifyResult[] => {
   const q = query.toLowerCase().trim();
-  return INDIA_TREK_DESTINATIONS
+  return CURATED_DESTINATIONS
     .filter(d =>
       d.name.toLowerCase().includes(q) ||
-      d.state.toLowerCase().includes(q)
+      d.state.toLowerCase().includes(q) ||
+      (d.country && d.country.toLowerCase().includes(q))
     )
     .slice(0, 3)
-    .map(trekToResult);
+    .map(destinationToResult);
 };
 
 /**
  * Searches for locations using Geoapify Autocomplete API via server proxy,
- * merged with a curated local search layer for Indian trek routes/passes.
+ * merged with a curated local search layer for Indian trek routes/passes and global destinations.
  * Safe for client-side usage.
  */
 export const searchLocation = async (
@@ -98,7 +115,7 @@ export const searchLocation = async (
   try {
     const res = await fetch(
       `/api/proxy/geocoding?type=autocomplete&q=${encodeURIComponent(query)}`,
-      { signal, credentials: "same-origin" }
+      { signal, credentials: "same-origin", cache: "no-store" }
     );
     if (!res.ok) return localResults;
 
@@ -123,23 +140,24 @@ export const searchLocation = async (
       address_line2: feature.properties.address_line2,
     }));
 
-    // Merge: local results first, then API results
+    // Merge: local curated results first, then API results
     // Deduplicate by name to avoid "Kasol" appearing twice
     const localNames = new Set(
       localResults.map((r: GeoapifyResult) => r.city?.toLowerCase())
     );
-    const deduped = apiResults.filter(
+    const dedupedApi = apiResults.filter(
       (r: GeoapifyResult) => !localNames.has(r.city?.toLowerCase())
     );
 
-    // India first, then international
-    const sorted = [...localResults, ...deduped].sort((a, b) => {
+    // Sort API results: India first, then international
+    const sortedApi = dedupedApi.sort((a, b) => {
       if (a.country === "India" && b.country !== "India") return -1;
       if (a.country !== "India" && b.country === "India") return 1;
       return 0;
     });
 
-    const final = sorted.slice(0, 7);
+    // Final list: local results are always prioritized first, then API results
+    const final = [...localResults, ...sortedApi].slice(0, 7);
     queryCache.set(normalizedQuery, final);
     return final;
 
@@ -155,7 +173,10 @@ export const searchLocation = async (
  */
 export const getLocationDetails = async (placeId: string): Promise<LocationData | null> => {
   try {
-    const res = await fetch(`/api/proxy/geocoding?type=details&placeId=${encodeURIComponent(placeId)}`);
+    const res = await fetch(
+      `/api/proxy/geocoding?type=details&placeId=${encodeURIComponent(placeId)}`,
+      { cache: "no-store" }
+    );
     if (!res.ok) throw new Error("Failed to fetch location details");
     const data = await res.json();
     const feature = data.features?.[0];
@@ -182,3 +203,4 @@ export const getLocationDetails = async (placeId: string): Promise<LocationData 
     return null;
   }
 };
+
