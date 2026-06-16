@@ -212,10 +212,10 @@ export function LocationAutocomplete({
               {/* <MapPin className="mr-2 h-4 w-4 shrink-0 opacity-50" /> */}
               <div className="flex flex-col overflow-hidden">
                   <span className="truncate font-medium">
-                      {suggestion.city || suggestion.formatted.split(",")[0]}
+                      {suggestion.city || suggestion.address_line1 || suggestion.formatted.split(",")[0]}
                   </span>
                   <span className="truncate text-xs text-muted-foreground">
-                      {suggestion.formatted}
+                      {[suggestion.state, suggestion.country].filter(Boolean).join(", ") || suggestion.formatted}
                   </span>
               </div>
             </div>

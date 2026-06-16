@@ -27,8 +27,13 @@ export interface GeoapifyResult {
  * Searches for locations using Geoapify Autocomplete API directly.
  * SERVER-ONLY: Uses GEOAPIFY_API_KEY from environment.
  */
-export const searchLocationDirect = async (query: string): Promise<GeoapifyResult[]> => {
-  const apiKey = process.env.GEOAPIFY_API_KEY || process.env.NEXT_PUBLIC_GEOAPIFY_API_KEY;
+export const searchLocationDirect = async (
+  query: string
+): Promise<GeoapifyResult[]> => {
+  const apiKey =
+    process.env.GEOAPIFY_API_KEY ||
+    process.env.NEXT_PUBLIC_GEOAPIFY_API_KEY;
+
   if (!apiKey) {
     console.error("Geoapify API key not configured");
     return [];
@@ -37,8 +42,9 @@ export const searchLocationDirect = async (query: string): Promise<GeoapifyResul
   try {
     const url = new URL("https://api.geoapify.com/v1/geocode/autocomplete");
     url.searchParams.append("text", query);
-    url.searchParams.append("type", "city");
-    url.searchParams.append("limit", "5");
+    
+    // REMOVED: type=city
+    url.searchParams.append("limit", "7");
     url.searchParams.append("lang", "en");
     url.searchParams.append("apiKey", apiKey);
 
@@ -48,11 +54,18 @@ export const searchLocationDirect = async (query: string): Promise<GeoapifyResul
       return [];
     }
     const data = await res.json();
-    
+
     return (data.features || []).map((feature: any) => ({
       place_id: feature.properties.place_id,
       formatted: feature.properties.formatted,
-      city: feature.properties.city || feature.properties.town || feature.properties.village || feature.properties.suburb,
+      city:
+        feature.properties.city ||
+        feature.properties.town ||
+        feature.properties.village ||
+        feature.properties.hamlet ||
+        feature.properties.suburb ||
+        feature.properties.county ||
+        feature.properties.state_district,
       state: feature.properties.state || feature.properties.county,
       country: feature.properties.country,
       lat: feature.properties.lat,

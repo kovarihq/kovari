@@ -1,7 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@clerk/nextjs/server";
 import { checkRateLimit } from "@kovari/api";
-import { searchLocationDirect, getLocationDetailsDirect } from "@kovari/utils";
 
 export async function GET(req: NextRequest) {
   try {
@@ -13,9 +11,9 @@ export async function GET(req: NextRequest) {
     const query = searchParams.get("q");
     const placeId = searchParams.get("placeId");
 
-    // Rate limit: 20 per minute
+    // Rate limit: 30 per minute
     const ip = req.headers.get("x-forwarded-for") || "127.0.0.1";
-    const ratelimit = await checkRateLimit(`rate_limit:proxy:geoapify:${ip}`, 20, 60);
+    const ratelimit = await checkRateLimit(`rate_limit:proxy:geoapify:${ip}`, 30, 60);
     if (!ratelimit.success) {
       return NextResponse.json({ error: "Too many requests" }, { status: 429 });
     }
@@ -26,8 +24,7 @@ export async function GET(req: NextRequest) {
       const apiKey = process.env.GEOAPIFY_API_KEY || process.env.NEXT_PUBLIC_GEOAPIFY_API_KEY;
       const url = new URL("https://api.geoapify.com/v1/geocode/autocomplete");
       url.searchParams.append("text", query);
-      url.searchParams.append("type", "city");
-      url.searchParams.append("limit", "5");
+      url.searchParams.append("limit", "7");
       url.searchParams.append("lang", "en");
       url.searchParams.append("apiKey", apiKey!);
       
