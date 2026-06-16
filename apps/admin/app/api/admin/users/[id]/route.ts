@@ -53,7 +53,10 @@ export async function GET(req: NextRequest, { params }: Params) {
         users!profiles_user_id_fkey(
           banned,
           ban_reason,
-          ban_expires_at
+          ban_expires_at,
+          beta_status,
+          invite_date,
+          activation_date
         )
       `
       )
@@ -70,6 +73,16 @@ export async function GET(req: NextRequest, { params }: Params) {
 
     if (!profile) {
       return NextResponse.json({ error: "User not found" }, { status: 404 });
+    }
+
+    // Fetch feedback count for the user
+    let feedbackCount = 0;
+    if (profile.user_id) {
+      const { count } = await supabaseAdmin
+        .from("feedback")
+        .select("*", { count: "exact", head: true })
+        .eq("user_id", profile.user_id);
+      feedbackCount = count || 0;
     }
 
     // Fetch flags
@@ -132,6 +145,7 @@ export async function GET(req: NextRequest, { params }: Params) {
       profile,
       flags: flags ?? [],
       sessions,
+      feedback_count: feedbackCount,
     });
   } catch (error) {
     await incrementErrorCounter();

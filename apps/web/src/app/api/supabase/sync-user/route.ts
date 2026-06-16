@@ -84,6 +84,19 @@ export async function POST() {
       return NextResponse.json({ error: "Failed to verify synced identity" }, { status: 500 });
     }
 
+    if (process.env.LAUNCH_WAITLIST_MODE === "true") {
+      const { error: userUpdateError } = await supabase
+        .from("users")
+        .update({
+          beta_status: "activated",
+          activation_date: new Date().toISOString()
+        })
+        .eq("id", userIdFromRpc);
+      if (userUpdateError) {
+        console.error("[SYNC-USER] Failed to update user beta status:", userUpdateError);
+      }
+    }
+
     if (user.isDeleted === true) {
       return NextResponse.json({ error: "Account has been deleted" }, { status: 403 });
     }
@@ -156,7 +169,10 @@ async function provisionBetaAccessIfApproved(
     // 4. Update waitlist status to beta_active
     await supabase
       .from("waitlist")
-      .update({ status: "beta_active" })
+      .update({ 
+        status: "beta_active",
+        activated_at: new Date().toISOString()
+      })
       .eq("id", waitlistEntry.id);
 
     console.log(`[BETA-GATE] ✅ Beta access provisioned for: ${maskEmail(email)} (${clerkUserId})`);

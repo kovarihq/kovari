@@ -5,9 +5,10 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Loader2, Send, CheckCircle2, XCircle, AlertCircle } from "lucide-react";
+import { Loader2, Send, Hash, Users, Mail, Compass, Check, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { GroupContainer } from "@/components/ui/ios/GroupContainer";
+import { ListRow } from "@/components/ui/ios/ListRow";
 
 type InviteMode = "batch" | "specific";
 
@@ -67,90 +68,103 @@ export function BetaInvitePanel() {
   }
 
   return (
-    <GroupContainer className="w-full">
+    <GroupContainer className="w-full shadow-none">
       {/* Row 1: Mode Selector */}
-      <div className="flex w-full min-h-[52px] items-center px-4 py-3 gap-3 bg-card">
-        <div className="flex flex-col flex-1 min-w-0">
-          <span className="text-sm font-medium leading-tight truncate text-foreground">
-            Invite Mode
-          </span>
-          <div className="text-sm text-muted-foreground leading-tight truncate">
-            How to select users for beta
+      <ListRow
+        icon={<Compass className="text-primary h-4 w-4" />}
+        label="Invite Mode"
+        secondary="Select method of targeting beta invitees"
+        showChevron={false}
+        trailing={
+          <div className="flex items-center p-0.5 bg-secondary/85 border border-border/40 rounded-lg shrink-0">
+            <button
+              onClick={() => setMode("batch")}
+              className={cn(
+                "px-3 py-1 text-sm font-medium rounded-md transition-colors",
+                mode === "batch"
+                  ? "bg-background text-foreground shadow-sm ring-1 ring-border/20"
+                  : "text-muted-foreground hover:text-foreground"
+              )}
+            >
+              Batch
+            </button>
+            <button
+              onClick={() => setMode("specific")}
+              className={cn(
+                "px-3 py-1 text-sm font-medium rounded-md transition-colors",
+                mode === "specific"
+                  ? "bg-background text-foreground shadow-sm ring-1 ring-border/20"
+                  : "text-muted-foreground hover:text-foreground"
+              )}
+            >
+              Specific
+            </button>
           </div>
-        </div>
-        <div className="flex items-center p-0.5 bg-secondary rounded-lg shrink-0">
-          <button
-            onClick={() => setMode("batch")}
-            className={cn(
-              "px-3 py-1.5 text-sm font-medium rounded-md transition-colors",
-              mode === "batch"
-                ? "bg-background text-foreground shadow-sm ring-1 ring-border/20"
-                : "text-muted-foreground hover:text-foreground"
-            )}
-          >
-            Batch
-          </button>
-          <button
-            onClick={() => setMode("specific")}
-            className={cn(
-              "px-3 py-1.5 text-sm font-medium rounded-md transition-colors",
-              mode === "specific"
-                ? "bg-background text-foreground shadow-sm ring-1 ring-border/20"
-                : "text-muted-foreground hover:text-foreground"
-            )}
-          >
-            Specific
-          </button>
-        </div>
-      </div>
+        }
+      />
 
       {/* Row 2: Configuration */}
-      <div className="flex w-full items-start px-4 py-4 gap-4 bg-card">
-        {mode === "batch" ? (
-          <div className="w-full space-y-3">
-            <div className="flex items-center justify-between">
-              <span className="text-sm font-medium leading-tight text-foreground">Batch Size</span>
-              <span className="text-sm text-muted-foreground flex items-center gap-1.5">
-                Targeting status: <span className="text-xs bg-secondary px-1.5 py-0.5 rounded-md text-foreground">new</span>
-              </span>
-            </div>
-            <div className="flex items-center gap-3">
+      {mode === "batch" ? (
+        <>
+          <ListRow
+            icon={<Hash className="text-primary h-4 w-4" />}
+            label="Batch Size"
+            secondary="Selects oldest waitlist signups first"
+            showChevron={false}
+            trailing={
               <Input
                 type="number"
                 min={1}
                 max={500}
                 value={batchSize}
                 onChange={(e) => setBatchSize(e.target.value ? Number(e.target.value) : "")}
-                className="w-24 h-10 text-sm font-medium"
+                className="w-20 h-9 text-right text-sm font-medium border-border/80 focus-visible:ring-primary/30 focus-visible:border-primary pr-2.5 rounded-lg"
               />
-              <span className="text-sm text-muted-foreground flex-1">
-                Selects oldest waitlist signups first
+            }
+          />
+
+          <ListRow
+            icon={<Users className="text-primary h-4 w-4" />}
+            label="Target Status"
+            secondary="Targeting only new unregistered leads"
+            showChevron={false}
+            trailing={
+              <span className="text-sm text-primary font-semibold">
+                New Signups
               </span>
-            </div>
-          </div>
-        ) : (
-          <div className="w-full space-y-3">
-            <div className="flex items-center justify-between">
+            }
+          />
+        </>
+      ) : (
+        <div className="flex w-full flex-col px-4 py-3 gap-3 bg-card">
+          <div className="flex items-center gap-3">
+            <Mail className="text-primary h-4 w-4 shrink-0" />
+            <div className="flex flex-col flex-1 min-w-0">
               <span className="text-sm font-medium leading-tight text-foreground">Email Addresses</span>
-              <span className="text-sm text-muted-foreground">One per line</span>
+              <span className="text-sm text-muted-foreground leading-tight mt-0.5">Enter one email per line</span>
             </div>
-            <Textarea
-              rows={4}
-              value={specificEmails}
-              onChange={(e) => setSpecificEmails(e.target.value)}
-              placeholder="alice@example.com&#10;bob@example.com"
-              className="w-full text-sm resize-none h-auto bg-background"
-            />
           </div>
-        )}
-      </div>
+          <Textarea
+            rows={4}
+            value={specificEmails}
+            onChange={(e) => setSpecificEmails(e.target.value)}
+            placeholder="alice@example.com"
+            className="w-full text-sm font-medium resize-none h-auto bg-background/50 border-border/80 focus-visible:ring-primary/30 focus-visible:border-primary p-3 rounded-lg leading-relaxed"
+          />
+        </div>
+      )}
 
       {/* Row 3: Action */}
-      <div className="flex w-full min-h-[52px] items-center justify-between px-4 py-3 gap-3 bg-card">
-        <div className="text-sm text-muted-foreground">
-          {mode === "batch"
-            ? `Will send up to ${batchSize || 0} invites`
-            : `Will send to specific emails`}
+      <div className="flex w-full min-h-[52px] items-center px-4 py-3 gap-3 bg-card">
+        <div className="flex flex-col flex-1 min-w-0">
+          <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+            Action Summary
+          </span>
+          <span className="text-sm font-medium leading-tight text-foreground mt-0.5">
+            {mode === "batch"
+              ? `Send up to ${batchSize || 0} invitation emails`
+              : `Send to list of target emails`}
+          </span>
         </div>
         <Button
           onClick={handleSendInvites}
@@ -159,12 +173,12 @@ export function BetaInvitePanel() {
             (mode === "specific" && !specificEmails.trim()) ||
             (mode === "batch" && !batchSize)
           }
-          className="h-9 px-4 text-sm font-medium shadow-sm gap-2 shrink-0"
+          className="h-9 px-4 text-sm font-semibold rounded-lg shadow-none gap-2 transition-all duration-150 shrink-0 bg-primary hover:bg-primary/95 text-primary-foreground"
         >
           {loading ? (
             <Loader2 className="w-4 h-4 animate-spin" />
           ) : (
-            <Send className="w-4 h-4" />
+            <Send className="w-3.5 h-3.5" />
           )}
           Send Invites
         </Button>
@@ -172,39 +186,45 @@ export function BetaInvitePanel() {
 
       {/* Row 4: Results (Conditional) */}
       {result && (
-        <div className="flex w-full flex-col px-4 py-4 gap-3 bg-card border-t border-border/50 animate-in fade-in slide-in-from-top-1">
-          <div className="flex items-center gap-6">
-            <div className="flex items-center gap-2 text-sm font-medium text-green-600">
-              <CheckCircle2 className="w-4 h-4" />
-              <span>{result.sent} sent</span>
-            </div>
-            {result.failed.length > 0 && (
-              <div className="flex items-center gap-2 text-sm font-medium text-red-500">
-                <XCircle className="w-4 h-4" />
-                <span>{result.failed.length} failed</span>
-              </div>
-            )}
-            {result.already_invited.length > 0 && (
-              <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
-                <AlertCircle className="w-4 h-4" />
-                <span>{result.already_invited.length} already active</span>
-              </div>
-            )}
-          </div>
-
-          {result.failed.length > 0 && (
-            <div className="mt-1">
-              <span className="text-xs font-semibold text-red-500/80 uppercase tracking-wider block mb-1">
-                Failed Deliveries
-              </span>
-              <ul className="text-xs text-muted-foreground space-y-1">
-                {result.failed.map((email, i) => (
-                  <li key={i}>• {email}</li>
-                ))}
-              </ul>
-            </div>
+        <>
+          <ListRow
+            icon={<Check className="text-green-500 h-4 w-4" />}
+            label="Successfully Sent"
+            secondary="Beta invitations delivered"
+            showChevron={false}
+            trailing={<span className="text-green-600 font-semibold text-sm">{result.sent}</span>}
+          />
+          {result.already_invited.length > 0 && (
+            <ListRow
+              icon={<X className="text-muted-foreground h-4 w-4" />}
+              label="Already Active / Invited"
+              secondary="Users who already have access"
+              showChevron={false}
+              trailing={<span className="text-muted-foreground font-semibold text-sm">{result.already_invited.length}</span>}
+            />
           )}
-        </div>
+          {result.failed.length > 0 && (
+            <>
+              <ListRow
+                icon={<X className="text-red-500 h-4 w-4" />}
+                label="Failed Deliveries"
+                secondary="Could not process invitation"
+                showChevron={false}
+                trailing={<span className="text-red-500 font-semibold text-sm">{result.failed.length}</span>}
+              />
+              {result.failed.map((email, i) => (
+                <ListRow
+                  key={i}
+                  icon={<span className="w-1.5 h-1.5 rounded-full bg-red-500/80 ml-1.5" />}
+                  label={email}
+                  secondary="Delivery rejected"
+                  showChevron={false}
+                  className="bg-red-500/[0.015]"
+                />
+              ))}
+            </>
+          )}
+        </>
       )}
     </GroupContainer>
   );

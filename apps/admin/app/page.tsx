@@ -8,6 +8,7 @@ import {
   TrendingUp,
   Power,
   PowerOff,
+  MessageSquare,
 } from 'lucide-react';
 import { GroupContainer } from '@/components/ui/ios/GroupContainer';
 import { ListRow } from '@/components/ui/ios/ListRow';
@@ -19,6 +20,13 @@ interface Metrics {
   sessionsActive: number;
   pendingFlags: number;
   matches24h: number;
+}
+
+interface BetaMetrics {
+  invitedUsers: number;
+  activatedUsers: number;
+  activationRate: number;
+  feedbackSubmitted: number;
 }
 
 interface Settings {
@@ -66,9 +74,15 @@ async function getMetrics(): Promise<Metrics> {
       await redis.connect();
     }
     try {
-      const indexCount = await redis.sCard('sessions:index');
-      if (indexCount > 0) {
-        activeSessions = indexCount;
+      const keys = await redis.sMembers('sessions:index');
+      if (keys && keys.length > 0) {
+        let count = 0;
+        for (const rawKey of keys) {
+          const key = rawKey.startsWith("session:") ? rawKey : `session:${rawKey}`;
+          const exists = await redis.exists(key);
+          if (exists) count++;
+        }
+        activeSessions = count;
       } else {
         const sessionKeys = await redis.keys('session:*');
         activeSessions = sessionKeys.length;
@@ -80,15 +94,62 @@ async function getMetrics(): Promise<Metrics> {
       } catch (e2) {}
     }
     try {
-      const count = await redis.get('metrics:matches:daily');
-      matches24h = count ? parseInt(count, 10) : 0;
-    } catch (e) {}
+      const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+      const { count: dbMatchesCount } = await supabaseAdmin
+        .from('match_interests')
+        .select('*', { count: 'exact', head: true })
+        .eq('status', 'accepted')
+        .gte('created_at', oneDayAgo);
+      matches24h = dbMatchesCount ?? 0;
+    } catch (e) {
+      console.error('Error fetching database matches count:', e);
+    }
   } catch (error) {}
 
   return {
     sessionsActive: activeSessions,
     pendingFlags: pendingFlags,
     matches24h: matches24h,
+  };
+}
+
+async function getBetaMetrics(): Promise<BetaMetrics> {
+  let invitedUsers = 0;
+  let activatedUsers = 0;
+  let feedbackSubmitted = 0;
+
+  try {
+    const { count: invitedCount } = await supabaseAdmin
+      .from('waitlist')
+      .select('*', { count: 'exact', head: true })
+      .in('status', ['beta_invited', 'beta_active']);
+    invitedUsers = invitedCount ?? 0;
+
+    const { count: activatedCount } = await supabaseAdmin
+      .from('waitlist')
+      .select('*', { count: 'exact', head: true })
+      .eq('status', 'beta_active');
+    activatedUsers = activatedCount ?? 0;
+
+    const { data: feedbackData } = await supabaseAdmin
+      .from('feedback')
+      .select('user_id');
+    
+    if (feedbackData) {
+      const uniqueUsers = new Set((feedbackData as any[]).map((f: any) => f.user_id).filter(Boolean));
+      feedbackSubmitted = uniqueUsers.size;
+    }
+  } catch (error) {
+    console.error('Error fetching beta metrics:', error);
+  }
+
+  const activationRate = invitedUsers > 0 ? Math.round((activatedUsers / invitedUsers) * 100) : 0;
+
+  return {
+    invitedUsers,
+    activatedUsers,
+    activationRate,
+    feedbackSubmitted,
   };
 }
 
@@ -147,11 +208,12 @@ async function getRecentActions(): Promise<AdminAction[]> {
 export default async function DashboardPage() {
   await requireAdminPage();
 
-  const [metrics, totalUsers, settings, recentActions] = await Promise.all([
+  const [metrics, totalUsers, settings, recentActions, betaMetrics] = await Promise.all([
     getMetrics(),
     getTotalUsers(),
     getSettings(),
     getRecentActions(),
+    getBetaMetrics(),
   ]);
 
   return (
@@ -201,6 +263,70 @@ export default async function DashboardPage() {
               showChevron={false}
               className="gap-4"
             />
+          </GroupContainer>
+        </section>
+
+        {/* Closed Beta Analytics */}
+        <section>
+          <SectionHeader>Closed Beta Analytics</SectionHeader>
+          <GroupContainer>
+            <ListRow
+              icon={<Users className="text-primary h-4 w-4" />}
+              label="Invited Users"
+              secondary="Total beta invitations sent out"
+              trailing={<span className="text-foreground">{betaMetrics.invitedUsers}</span>}
+              showChevron={false}
+              className="gap-4"
+            />
+            <ListRow
+              icon={<Users className="text-primary h-4 w-4" />}
+              label="Activated Users"
+              secondary="Users who joined the platform"
+              trailing={<span className="text-foreground">{betaMetrics.activatedUsers}</span>}
+              showChevron={false}
+              className="gap-4"
+            />
+            <ListRow
+              icon={<TrendingUp className="text-primary h-4 w-4" />}
+              label="Activation Rate"
+              secondary="Percentage of invites activated"
+              trailing={<span className="text-foreground">{betaMetrics.activationRate}%</span>}
+              showChevron={false}
+              className="gap-4"
+            />
+            <ListRow
+              icon={<MessageSquare className="text-primary h-4 w-4" />}
+              label="Feedback Submitted"
+              secondary="Users who submitted platform feedback"
+              trailing={<span className="text-foreground">{betaMetrics.feedbackSubmitted}</span>}
+              showChevron={false}
+              className="gap-4"
+            />
+          </GroupContainer>
+        </section>
+
+        {/* Invite -> Activation Funnel */}
+        <section>
+          <SectionHeader>Invite ➔ Activation Funnel</SectionHeader>
+          <GroupContainer className="p-6 space-y-6">
+            <div className="space-y-2">
+              <div className="flex justify-between text-sm font-semibold">
+                <span>Invited Users</span>
+                <span>{betaMetrics.invitedUsers}</span>
+              </div>
+              <div className="w-full bg-secondary h-3 rounded-full overflow-hidden">
+                <div className="bg-primary h-full rounded-full" style={{ width: '100%' }} />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <div className="flex justify-between text-sm font-semibold">
+                <span>Activated Users</span>
+                <span>{betaMetrics.activatedUsers} ({betaMetrics.activationRate}%)</span>
+              </div>
+              <div className="w-full bg-secondary h-3 rounded-full overflow-hidden">
+                <div className="bg-green-500 h-full rounded-full transition-all duration-500" style={{ width: `${betaMetrics.activationRate}%` }} />
+              </div>
+            </div>
           </GroupContainer>
         </section>
 

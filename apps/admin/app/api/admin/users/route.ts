@@ -48,7 +48,10 @@ export async function GET(req: NextRequest) {
         users${status && status !== 'deleted' ? '!inner' : ''}!profiles_user_id_fkey(
           banned,
           ban_reason,
-          ban_expires_at
+          ban_expires_at,
+          beta_status,
+          invite_date,
+          activation_date
         )
       `
     );
@@ -65,6 +68,12 @@ export async function GET(req: NextRequest) {
       base = base.filter("users.banned", "eq", true).filter("users.ban_expires_at", "is", null);
     } else if (status === "suspended") {
       base = base.filter("users.banned", "eq", true).filter("users.ban_expires_at", "gt", new Date().toISOString());
+    } else if (status === "invited") {
+      base = base.filter("users.beta_status", "eq", "invited");
+    } else if (status === "activated") {
+      base = base.filter("users.beta_status", "eq", "activated");
+    } else if (status === "not_invited" || status === "non_beta" || status === "non-beta") {
+      base = base.filter("users.beta_status", "eq", "not_invited");
     }
 
     const { data, error } = await base.range(from, to);

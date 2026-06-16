@@ -58,6 +58,7 @@ async function getUserDetail(id: string): Promise<{
   profile: UserProfile;
   flags: Flag[];
   sessions: Array<{ key: string; data: unknown }>;
+  feedbackCount: number;
 } | null> {
   const profileId = id;
 
@@ -92,7 +93,10 @@ async function getUserDetail(id: string): Promise<{
       users!profiles_user_id_fkey(
         banned,
         ban_reason,
-        ban_expires_at
+        ban_expires_at,
+        beta_status,
+        invite_date,
+        activation_date
       )
     `
     )
@@ -161,6 +165,16 @@ async function getUserDetail(id: string): Promise<{
     await revokeExpiredSuspensionForUser(profile.user_id);
   }
 
+  // Fetch feedback count
+  let feedbackCount = 0;
+  if (profile.user_id) {
+    const { count } = await supabaseAdmin
+      .from("feedback")
+      .select("*", { count: "exact", head: true })
+      .eq("user_id", profile.user_id);
+    feedbackCount = count || 0;
+  }
+
   // Transform users relationship from array to object
   // Supabase returns foreign key relationships as arrays
   let usersData = undefined;
@@ -175,7 +189,7 @@ async function getUserDetail(id: string): Promise<{
   if (!usersData && profile.user_id) {
     const { data: userRow } = await supabaseAdmin
       .from("users")
-      .select("banned, ban_reason, ban_expires_at")
+      .select("banned, ban_reason, ban_expires_at, beta_status, invite_date, activation_date")
       .eq("id", profile.user_id)
       .maybeSingle();
 
@@ -184,6 +198,9 @@ async function getUserDetail(id: string): Promise<{
         banned: userRow.banned ?? false,
         ban_reason: userRow.ban_reason ?? undefined,
         ban_expires_at: userRow.ban_expires_at ?? undefined,
+        beta_status: userRow.beta_status ?? undefined,
+        invite_date: userRow.invite_date ?? undefined,
+        activation_date: userRow.activation_date ?? undefined,
       };
     }
   }
@@ -195,7 +212,8 @@ async function getUserDetail(id: string): Promise<{
     },
     flags: flags ?? [],
     sessions,
-  };
+    feedbackCount,
+  } as any;
 }
 
 async function getAdminNotes(id: string): Promise<{ notes: AdminNote[] }> {
@@ -298,6 +316,7 @@ export default async function UserDetailPage({
         sessions={userData.sessions || []}
         notes={notesData.notes}
         flagId={flagId}
+        feedbackCount={userData.feedbackCount}
       />
     </div>
   );

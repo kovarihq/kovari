@@ -20,6 +20,8 @@ export function StatusBadge({ status, className, showDot = true }: StatusBadgePr
     actioned: { dot: "bg-green-500", text: "text-green-600" },
     dismissed: { dot: "bg-muted-foreground/50", text: "text-muted-foreground" },
     active: { dot: "bg-green-500", text: "text-green-600" },
+    invited: { dot: "bg-indigo-500", text: "text-indigo-600" },
+    activated: { dot: "bg-green-500", text: "text-green-600" },
     expired: { dot: "bg-muted-foreground/50", text: "text-muted-foreground" },
     suspended: { dot: "bg-red-500", text: "text-red-500" },
     banned: { dot: "bg-red-500", text: "text-red-500" },

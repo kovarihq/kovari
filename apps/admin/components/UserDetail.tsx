@@ -61,6 +61,9 @@ interface UserProfile {
     banned: boolean;
     ban_reason?: string;
     ban_expires_at?: string;
+    beta_status?: "not_invited" | "invited" | "activated";
+    invite_date?: string;
+    activation_date?: string;
   };
 }
 
@@ -87,6 +90,7 @@ interface UserDetailProps {
   sessions: Array<{ key: string; data: unknown }>;
   notes: AdminNote[];
   flagId?: string;
+  feedbackCount?: number;
 }
 
 export function UserDetail({
@@ -95,6 +99,7 @@ export function UserDetail({
   sessions: initialSessions,
   notes: initialNotes,
   flagId: propFlagId,
+  feedbackCount = 0,
 }: UserDetailProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -340,6 +345,42 @@ export function UserDetail({
           <div className="lg:col-span-12 space-y-10">
 
             <div className="grid grid-cols-1 gap-10">
+              {/* Closed Beta Operations */}
+              <section>
+                <SectionHeader>Closed Beta Operations</SectionHeader>
+                <GroupContainer>
+                  <ListRow 
+                    label="Beta Status" 
+                    trailing={
+                      <StatusBadge status={
+                        profile.users?.beta_status === "activated" ? "Activated" : 
+                        profile.users?.beta_status === "invited" ? "Invited" : "Not Invited"
+                      } />
+                    } 
+                    showChevron={false} 
+                  />
+                  {profile.users?.invite_date && (
+                    <ListRow 
+                      label="Invited On" 
+                      trailing={<span className="font-medium text-sm text-muted-foreground">{new Date(profile.users.invite_date).toLocaleString()}</span>} 
+                      showChevron={false} 
+                    />
+                  )}
+                  {profile.users?.activation_date && (
+                    <ListRow 
+                      label="Activated On" 
+                      trailing={<span className="font-medium text-sm text-muted-foreground">{new Date(profile.users.activation_date).toLocaleString()}</span>} 
+                      showChevron={false} 
+                    />
+                  )}
+                  <ListRow 
+                    label="Feedback Submitted" 
+                    trailing={<span className="font-medium text-sm text-muted-foreground">{feedbackCount}</span>} 
+                    showChevron={false} 
+                  />
+                </GroupContainer>
+              </section>
+
               {/* Profile Details */}
               <section>
                 <SectionHeader>Personal Details</SectionHeader>

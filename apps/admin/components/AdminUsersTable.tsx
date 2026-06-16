@@ -35,6 +35,9 @@ interface User {
     banned: boolean;
     ban_reason?: string;
     ban_expires_at?: string;
+    beta_status?: "not_invited" | "invited" | "activated";
+    invite_date?: string;
+    activation_date?: string;
   };
 }
 
@@ -132,6 +135,9 @@ export function AdminUsersTable({
                   <SelectItem value="deleted">Deleted</SelectItem>
                   <SelectItem value="banned">Banned</SelectItem>
                   <SelectItem value="suspended">Suspended</SelectItem>
+                  <SelectItem value="invited">Invited (Beta)</SelectItem>
+                  <SelectItem value="activated">Activated (Beta)</SelectItem>
+                  <SelectItem value="not_invited">Non-Beta</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -158,6 +164,11 @@ export function AdminUsersTable({
                 } else {
                   statusElements.push("Active");
                 }
+
+                const betaStatus = user.users?.beta_status || "not_invited";
+                let betaLabel = "Not Invited";
+                if (betaStatus === "invited") betaLabel = "Invited";
+                if (betaStatus === "activated") betaLabel = "Activated";
 
                 return (
                   <ListRow
@@ -191,6 +202,9 @@ export function AdminUsersTable({
                     trailing={
                       <div className="flex items-center gap-6">
                         <div className="flex flex-row items-center gap-4">
+                          {betaStatus !== "not_invited" && (
+                            <StatusBadge status={betaLabel} />
+                          )}
                           <StatusBadge status={statusElements[0] || "Active"} />
                         </div>
                       </div>

@@ -17,6 +17,7 @@ import {
   PanelLeft,
   MoreVertical,
   Loader2,
+  MessageSquare,
 } from "lucide-react";
 import {
   Sidebar,
@@ -69,6 +70,11 @@ const menuItems = [
     url: "/flags",
     icon: Flag,
     badge: "pendingFlags",
+  },
+  {
+    title: "Feedback",
+    url: "/feedback",
+    icon: MessageSquare,
   },
   {
     title: "Sessions",

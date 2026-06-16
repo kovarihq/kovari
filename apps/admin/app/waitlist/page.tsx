@@ -5,7 +5,7 @@ import {
   Users, 
   Mail, 
   TrendingUp,
-  RefreshCcw,
+  RefreshCwIcon,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -75,7 +75,7 @@ export default function WaitlistDashboard() {
           disabled={isRefreshing}
           className="bg-card border-border disabled:opacity-100 rounded-lg h-9 gap-2.5 shadow-none"
         >
-          <RefreshCcw className={cn("h-4 w-4 text-primary", isRefreshing && "animate-spin")} />
+          <RefreshCwIcon className={cn("h-4 w-4 text-primary", isRefreshing && "animate-spin")} />
           <span className="font-medium">{isRefreshing ? "Refreshing" : "Refresh"}</span>
         </Button>
       </div>
@@ -110,7 +110,7 @@ export default function WaitlistDashboard() {
               className="gap-4"
             />
             <ListRow
-              icon={<div className="rounded-xl"><RefreshCcw className="h-4 w-4 text-primary" /></div>}
+              icon={<div className="rounded-xl"><RefreshCwIcon className="h-4 w-4 text-primary" /></div>}
               label="Avg. Pipeline Delay"
               secondary="Creation to delivery time"
               trailing={<span className="text-foreground">{data.avgEmailDelayMinutes}m</span>}

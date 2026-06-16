@@ -106,7 +106,10 @@ export async function POST(req: NextRequest) {
     if (entry.status !== "beta_invited") {
       const { error: updateError } = await supabase
         .from("waitlist")
-        .update({ status: "beta_invited" })
+        .update({ 
+          status: "beta_invited",
+          invite_sent_at: new Date().toISOString()
+        })
         .eq("id", entry.id);
 
       if (updateError) {
@@ -120,11 +123,31 @@ export async function POST(req: NextRequest) {
 
     if (emailResult.success) {
       results.sent++;
+
+      // Update the user table if a row already exists for this email
+      const { data: userRow } = await supabase
+        .from("users")
+        .select("id")
+        .eq("email", email)
+        .maybeSingle();
+
+      if (userRow) {
+        await supabase
+          .from("users")
+          .update({
+            beta_status: "invited",
+            invite_date: new Date().toISOString()
+          })
+          .eq("id", userRow.id);
+      }
     } else {
       // Rollback status if email failed
       await supabase
         .from("waitlist")
-        .update({ status: "new" })
+        .update({ 
+          status: "new",
+          invite_sent_at: null
+        })
         .eq("id", entry.id);
       results.failed.push(`${email} (email send failed)`);
     }
