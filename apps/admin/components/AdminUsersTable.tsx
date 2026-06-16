@@ -38,6 +38,8 @@ interface User {
     beta_status?: "not_invited" | "invited" | "activated";
     invite_date?: string;
     activation_date?: string;
+    beta_batch?: string;
+    last_seen_at?: string;
   };
 }
 
@@ -170,6 +172,22 @@ export function AdminUsersTable({
                 if (betaStatus === "invited") betaLabel = "Invited";
                 if (betaStatus === "activated") betaLabel = "Activated";
 
+                const cohort = user.users?.beta_batch
+                  ? user.users.beta_batch.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
+                  : null;
+
+                // Compute activity status from last_seen_at
+                let activityStatus: string | null = null;
+                if (user.users?.last_seen_at) {
+                  const lastSeen = new Date(user.users.last_seen_at);
+                  const now = Date.now();
+                  const diffMs = now - lastSeen.getTime();
+                  const diffDays = diffMs / (1000 * 60 * 60 * 24);
+                  if (diffDays < 1) activityStatus = "Active Today";
+                  else if (diffDays < 7) activityStatus = "Active This Week";
+                  else activityStatus = "Inactive";
+                }
+
                 return (
                   <ListRow
                     key={user.id}
@@ -200,13 +218,17 @@ export function AdminUsersTable({
                     label={user.name || "Unknown User"}
                     secondary={user.email}
                     trailing={
-                      <div className="flex items-center gap-6">
-                        <div className="flex flex-row items-center gap-4">
-                          {betaStatus !== "not_invited" && (
-                            <StatusBadge status={betaLabel} />
-                          )}
-                          <StatusBadge status={statusElements[0] || "Active"} />
-                        </div>
+                      <div className="flex items-center gap-3">
+                        {activityStatus && (
+                          <StatusBadge status={activityStatus} />
+                        )}
+                        {cohort && (
+                          <StatusBadge status={cohort} />
+                        )}
+                        {betaStatus !== "not_invited" && (
+                          <StatusBadge status={betaLabel} />
+                        )}
+                        <StatusBadge status={statusElements[0] || "Active"} />
                       </div>
                     }
                     showChevron={false}

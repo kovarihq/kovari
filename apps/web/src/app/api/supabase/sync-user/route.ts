@@ -97,6 +97,12 @@ export async function POST() {
       }
     }
 
+    // Always update last_seen_at to track user activity
+    await supabase
+      .from("users")
+      .update({ last_seen_at: new Date().toISOString() })
+      .eq("id", userIdFromRpc);
+
     if (user.isDeleted === true) {
       return NextResponse.json({ error: "Account has been deleted" }, { status: 403 });
     }
@@ -138,7 +144,7 @@ async function provisionBetaAccessIfApproved(
     // 2. Check if email is approved in waitlist
     const { data: waitlistEntry } = await supabase
       .from("waitlist")
-      .select("id, status, email")
+      .select("id, status, email, beta_batch")
       .eq("email", email.toLowerCase().trim())
       .maybeSingle();
 
@@ -174,6 +180,21 @@ async function provisionBetaAccessIfApproved(
         activated_at: new Date().toISOString()
       })
       .eq("id", waitlistEntry.id);
+
+    // 5. Propagate beta_batch from waitlist to users
+    if (waitlistEntry.beta_batch) {
+      const { data: userByEmail } = await supabase
+        .from("users")
+        .select("id")
+        .eq("email", email.toLowerCase().trim())
+        .maybeSingle();
+      if (userByEmail) {
+        await supabase
+          .from("users")
+          .update({ beta_batch: waitlistEntry.beta_batch })
+          .eq("id", userByEmail.id);
+      }
+    }
 
     console.log(`[BETA-GATE] ✅ Beta access provisioned for: ${maskEmail(email)} (${clerkUserId})`);
     return true;

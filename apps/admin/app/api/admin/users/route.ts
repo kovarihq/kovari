@@ -51,7 +51,9 @@ export async function GET(req: NextRequest) {
           ban_expires_at,
           beta_status,
           invite_date,
-          activation_date
+          activation_date,
+          beta_batch,
+          last_seen_at
         )
       `
     );

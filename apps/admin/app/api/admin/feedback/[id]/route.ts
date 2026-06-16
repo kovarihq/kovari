@@ -40,6 +40,10 @@ export async function GET(req: NextRequest, { params }: Params) {
         users (
           email,
           name,
+          beta_status,
+          invite_date,
+          activation_date,
+          beta_batch,
           profiles (
             username
           )
@@ -82,9 +86,20 @@ export async function GET(req: NextRequest, { params }: Params) {
       console.error("Error fetching feedback notes:", notesError);
     }
 
+    // Fetch total feedback count for this user (for context panel)
+    let feedbackCount = 0;
+    if ((feedback as any).user_id) {
+      const { count } = await supabaseAdmin
+        .from("feedback")
+        .select("*", { count: "exact", head: true })
+        .eq("user_id", (feedback as any).user_id);
+      feedbackCount = count ?? 0;
+    }
+
     return NextResponse.json({
       feedback,
       notes: notes || [],
+      feedbackCount,
     });
   } catch (error) {
     await incrementErrorCounter();

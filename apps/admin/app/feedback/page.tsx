@@ -37,6 +37,10 @@ interface FeedbackItem {
   users?: {
     email: string;
     name: string | null;
+    beta_status?: string;
+    invite_date?: string;
+    activation_date?: string;
+    beta_batch?: string;
   };
 }
 
@@ -64,6 +68,7 @@ export default function FeedbackPage() {
   const [selectedId, setSelectedId] = React.useState<string | null>(null);
   const [selectedItem, setSelectedItem] = React.useState<FeedbackItem | null>(null);
   const [notes, setNotes] = React.useState<Note[]>([]);
+  const [feedbackCount, setFeedbackCount] = React.useState<number>(0);
   const [newNote, setNewNote] = React.useState("");
   const [isSubmittingNote, setIsSubmittingNote] = React.useState(false);
   const [isUpdatingStatus, setIsUpdatingStatus] = React.useState(false);
@@ -129,6 +134,7 @@ export default function FeedbackPage() {
       const data = await res.json();
       setSelectedItem(data.feedback);
       setNotes(data.notes || []);
+      setFeedbackCount(data.feedbackCount ?? 0);
       setSelectedId(id);
     } catch {
       toast.error("Failed to fetch details");
@@ -319,7 +325,54 @@ export default function FeedbackPage() {
               </SheetHeader>
 
               <div className="flex-1 overflow-y-auto p-6 space-y-6">
-                {/* Meta details */}
+                  {/* User Context */}
+                  {selectedItem.users && (
+                    <div className="bg-secondary/40 p-4 rounded-xl space-y-3">
+                      <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">User Context</span>
+                      <div className="space-y-2">
+                        <div className="flex justify-between items-center">
+                          <span className="text-xs text-muted-foreground">Name</span>
+                          <span className="text-xs font-semibold">{selectedItem.users.name || "—"}</span>
+                        </div>
+                        <div className="flex justify-between items-center">
+                          <span className="text-xs text-muted-foreground">Email</span>
+                          <span className="text-xs font-mono text-foreground/80">{selectedItem.users.email}</span>
+                        </div>
+                        {selectedItem.users.beta_batch && (
+                          <div className="flex justify-between items-center">
+                            <span className="text-xs text-muted-foreground">Cohort</span>
+                            <span className="text-xs font-semibold text-primary">
+                              {selectedItem.users.beta_batch.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}
+                            </span>
+                          </div>
+                        )}
+                        {selectedItem.users.beta_status && (
+                          <div className="flex justify-between items-center">
+                            <span className="text-xs text-muted-foreground">Beta Status</span>
+                            <StatusBadge status={selectedItem.users.beta_status} />
+                          </div>
+                        )}
+                        {selectedItem.users.invite_date && (
+                          <div className="flex justify-between items-center">
+                            <span className="text-xs text-muted-foreground">Invited</span>
+                            <span className="text-xs text-foreground/70">{new Date(selectedItem.users.invite_date).toLocaleDateString()}</span>
+                          </div>
+                        )}
+                        {selectedItem.users.activation_date && (
+                          <div className="flex justify-between items-center">
+                            <span className="text-xs text-muted-foreground">Activated</span>
+                            <span className="text-xs text-foreground/70">{new Date(selectedItem.users.activation_date).toLocaleDateString()}</span>
+                          </div>
+                        )}
+                        <div className="flex justify-between items-center">
+                          <span className="text-xs text-muted-foreground">Feedback Submitted</span>
+                          <span className="text-xs font-semibold">{feedbackCount} {feedbackCount === 1 ? 'report' : 'reports'}</span>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Meta details */}
                 <div className="space-y-4">
                   <div className="grid grid-cols-2 gap-4">
                     <div className="bg-secondary/40 p-3 rounded-xl">

@@ -48,9 +48,10 @@ export async function POST(req: NextRequest) {
   // Support two modes:
   // { emails: ["a@x.com", "b@x.com"] } — specific emails
   // { batch_size: 20 } — auto-pick next N 'new' signups from waitlist
-  const { emails, batch_size } = body as {
+  const { emails, batch_size, beta_batch } = body as {
     emails?: string[];
     batch_size?: number;
+    beta_batch?: string;
   };
 
   let targetEmails: string[] = [];
@@ -104,18 +105,27 @@ export async function POST(req: NextRequest) {
 
     // Mark as invited if not already
     if (entry.status !== "beta_invited") {
+      const updatePayload: Record<string, unknown> = { 
+        status: "beta_invited",
+        invite_sent_at: new Date().toISOString()
+      };
+      if (beta_batch) updatePayload.beta_batch = beta_batch;
+
       const { error: updateError } = await supabase
         .from("waitlist")
-        .update({ 
-          status: "beta_invited",
-          invite_sent_at: new Date().toISOString()
-        })
+        .update(updatePayload)
         .eq("id", entry.id);
 
       if (updateError) {
         results.failed.push(`${email} (db update failed)`);
         continue;
       }
+    } else if (beta_batch) {
+      // Already invited — still update batch if provided
+      await supabase
+        .from("waitlist")
+        .update({ beta_batch })
+        .eq("id", entry.id);
     }
 
     // Send invite email using robust utility
@@ -132,12 +142,15 @@ export async function POST(req: NextRequest) {
         .maybeSingle();
 
       if (userRow) {
+        const userUpdatePayload: Record<string, unknown> = {
+          beta_status: "invited",
+          invite_date: new Date().toISOString()
+        };
+        if (beta_batch) userUpdatePayload.beta_batch = beta_batch;
+
         await supabase
           .from("users")
-          .update({
-            beta_status: "invited",
-            invite_date: new Date().toISOString()
-          })
+          .update(userUpdatePayload)
           .eq("id", userRow.id);
       }
     } else {

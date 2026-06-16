@@ -22,6 +22,7 @@ interface InviteResult {
 export function BetaInvitePanel() {
   const [mode, setMode] = useState<InviteMode>("batch");
   const [batchSize, setBatchSize] = useState<number | "">(10);
+  const [betaBatch, setBetaBatch] = useState("batch_1");
   const [specificEmails, setSpecificEmails] = useState("");
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<InviteResult | null>(null);
@@ -33,12 +34,13 @@ export function BetaInvitePanel() {
     try {
       const body =
         mode === "batch"
-          ? { batch_size: Number(batchSize) || 1 }
+          ? { batch_size: Number(batchSize) || 1, beta_batch: betaBatch.trim() || undefined }
           : {
               emails: specificEmails
                 .split("\n")
                 .map((e) => e.trim())
                 .filter(Boolean),
+              beta_batch: betaBatch.trim() || undefined,
             };
 
       const res = await fetch("/api/admin/send-beta-invites", {
@@ -100,6 +102,24 @@ export function BetaInvitePanel() {
               Specific
             </button>
           </div>
+        }
+      />
+
+      
+      {/* Shared: Beta Batch (shown in both modes) */}
+      <ListRow
+        icon={<Users className="text-primary h-4 w-4" />}
+        label="Beta Batch"
+        secondary="Cohort label for this invite wave"
+        showChevron={false}
+        trailing={
+          <Input
+            type="text"
+            value={betaBatch}
+            onChange={(e) => setBetaBatch(e.target.value)}
+            placeholder="batch_1"
+            className="w-28 h-9 text-right text-sm font-medium border-border/80 focus-visible:ring-primary/30 focus-visible:border-primary pr-2.5 rounded-lg"
+          />
         }
       />
 

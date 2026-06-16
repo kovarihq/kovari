@@ -9,6 +9,7 @@ import {
   Power,
   PowerOff,
   MessageSquare,
+  Layers,
 } from 'lucide-react';
 import { GroupContainer } from '@/components/ui/ios/GroupContainer';
 import { ListRow } from '@/components/ui/ios/ListRow';
@@ -153,6 +154,35 @@ async function getBetaMetrics(): Promise<BetaMetrics> {
   };
 }
 
+interface BatchStat {
+  batch: string;
+  count: number;
+}
+
+async function getBatchBreakdown(): Promise<BatchStat[]> {
+  try {
+    const { data } = await supabaseAdmin
+      .from('waitlist')
+      .select('beta_batch')
+      .not('beta_batch', 'is', null)
+      .in('status', ['beta_invited', 'beta_active']);
+
+    if (!data) return [];
+
+    const counts: Record<string, number> = {};
+    for (const row of data as any[]) {
+      const b = row.beta_batch as string;
+      counts[b] = (counts[b] || 0) + 1;
+    }
+
+    return Object.entries(counts)
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([batch, count]) => ({ batch, count }));
+  } catch {
+    return [];
+  }
+}
+
 async function getTotalUsers(): Promise<number> {
   try {
     const { count, error } = await supabaseAdmin
@@ -208,12 +238,13 @@ async function getRecentActions(): Promise<AdminAction[]> {
 export default async function DashboardPage() {
   await requireAdminPage();
 
-  const [metrics, totalUsers, settings, recentActions, betaMetrics] = await Promise.all([
+  const [metrics, totalUsers, settings, recentActions, betaMetrics, batchBreakdown] = await Promise.all([
     getMetrics(),
     getTotalUsers(),
     getSettings(),
     getRecentActions(),
     getBetaMetrics(),
+    getBatchBreakdown(),
   ]);
 
   return (
@@ -329,6 +360,42 @@ export default async function DashboardPage() {
             </div>
           </GroupContainer>
         </section>
+
+        {/* Beta Cohort Breakdown */}
+        {batchBreakdown.length > 0 && (
+          <section>
+            <SectionHeader>Beta Cohort Breakdown</SectionHeader>
+            <GroupContainer>
+              {batchBreakdown.map(({ batch, count }) => {
+                const maxCount = Math.max(...batchBreakdown.map(b => b.count), 1);
+                const pct = Math.round((count / maxCount) * 100);
+                const label = batch
+                  .replace(/_/g, ' ')
+                  .replace(/\b\w/g, (c) => c.toUpperCase());
+                return (
+                  <ListRow
+                    key={batch}
+                    icon={<Layers className="text-primary h-4 w-4" />}
+                    label={label}
+                    secondary={
+                      <div className="flex items-center gap-2 mt-1 w-full">
+                        <div className="flex-1 h-1.5 bg-secondary rounded-full overflow-hidden">
+                          <div
+                            className="h-full bg-primary rounded-full transition-all duration-500"
+                            style={{ width: `${pct}%` }}
+                          />
+                        </div>
+                      </div>
+                    }
+                    trailing={<span className="text-foreground font-semibold tabular-nums">{count}</span>}
+                    showChevron={false}
+                    className="gap-4"
+                  />
+                );
+              })}
+            </GroupContainer>
+          </section>
+        )}
 
         <section>
           <SectionHeader>Quick Actions</SectionHeader>
