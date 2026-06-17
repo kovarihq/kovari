@@ -139,36 +139,36 @@ function SidebarProvider({
 
   // if (!hasMounted) return null;
 
-  // On mobile, do not render the sidebar wrapper, just the children (main content and mobile sidebar/Sheet)
-  if (isMobile) {
-    return (
-      <SidebarContext.Provider value={contextValue}>
-        <TooltipProvider delayDuration={0}>{children}</TooltipProvider>
-      </SidebarContext.Provider>
-    );
-  }
-
-  // On desktop, render the sidebar wrapper with sidebar and main content as flex row
+  // Always render the same tree structure regardless of isMobile.
+  // Previously, mobile and desktop returned different JSX trees (one had an extra <div> wrapper),
+  // which caused React to unmount+remount all children when crossing the 768px breakpoint —
+  // resetting any state (e.g. onboarding step) held by child components.
   return (
     <SidebarContext.Provider value={contextValue}>
       <TooltipProvider delayDuration={0}>
-        <div
-          data-slot="sidebar-wrapper"
-          style={
-            {
-              "--sidebar-width": SIDEBAR_WIDTH,
-              "--sidebar-width-icon": SIDEBAR_WIDTH_ICON,
-              ...style,
-            } as React.CSSProperties
-          }
-          className={cn(
-            "group/sidebar-wrapper has-data-[variant=inset]:bg-sidebar flex min-h-svh w-full",
-            className
-          )}
-          {...props}
-        >
-          {children}
-        </div>
+        {isMobile ? (
+          // On mobile: no wrapper div — render children directly so layout stays flat
+          <>{children}</>
+        ) : (
+          // On desktop: render the flex-row sidebar wrapper
+          <div
+            data-slot="sidebar-wrapper"
+            style={
+              {
+                "--sidebar-width": SIDEBAR_WIDTH,
+                "--sidebar-width-icon": SIDEBAR_WIDTH_ICON,
+                ...style,
+              } as React.CSSProperties
+            }
+            className={cn(
+              "group/sidebar-wrapper has-data-[variant=inset]:bg-sidebar flex min-h-svh w-full",
+              className
+            )}
+            {...props}
+          >
+            {children}
+          </div>
+        )}
       </TooltipProvider>
     </SidebarContext.Provider>
   );

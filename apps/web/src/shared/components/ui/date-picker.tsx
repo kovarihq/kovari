@@ -113,7 +113,12 @@ export function DatePicker({
           )}
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-auto p-0" align="start">
+      <PopoverContent
+        className="w-auto max-w-[calc(100vw-2rem)] p-0"
+        align="center"
+        avoidCollisions
+        sideOffset={4}
+      >
         <div className="flex items-center justify-between p-4 pb-0 gap-2">
           <Select
             onValueChange={handleMonthChange}
@@ -154,17 +159,19 @@ export function DatePicker({
             </SelectContent>
           </Select>
         </div>
-        <Calendar
-          mode="single"
-          selected={date}
-          onSelect={handleDateChange}
-          initialFocus
-          month={month}
-          onMonthChange={setMonthInCalendar}
-          fromYear={startYear}
-          toYear={endYear}
-          disabled={disabled}
-        />
+        <div className="overflow-auto">
+          <Calendar
+            mode="single"
+            selected={date}
+            onSelect={handleDateChange}
+            initialFocus
+            month={month}
+            onMonthChange={setMonthInCalendar}
+            fromYear={startYear}
+            toYear={endYear}
+            disabled={disabled}
+          />
+        </div>
       </PopoverContent>
     </Popover>
   );
