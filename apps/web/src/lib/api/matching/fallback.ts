@@ -284,7 +284,39 @@ export async function performSoloDbMatchingFallback(
     };
   });
 
-  return mappedResults.filter(Boolean).sort((a: any, b: any) => 
+  const validMappedResults = mappedResults.filter(Boolean);
+  const filteredResults = validMappedResults.filter((res: any) => {
+    // Hard filters
+    if (filters.smoking && filters.smoking !== "No" && filters.smoking !== "Any" && res.user?.smoking !== filters.smoking) return false;
+    if (filters.drinking && filters.drinking !== "No" && filters.drinking !== "Any" && res.user?.drinking !== filters.drinking) return false;
+    if (filters.personality && filters.personality !== "Any" && res.user?.personality !== filters.personality) return false;
+    if (filters.nationality && filters.nationality !== "Any" && res.user?.nationality !== filters.nationality) return false;
+    
+    if (filters.languages && filters.languages.length > 0) {
+      const targetLangs = Array.isArray(filters.languages) ? filters.languages : filters.languages.split(",");
+      const userLangs = res.user?.languages || [];
+      if (!targetLangs.some((l: string) => userLangs.includes(l))) return false;
+    }
+
+    if (filters.interests && filters.interests.length > 0) {
+      const targetInterests = Array.isArray(filters.interests) ? filters.interests : filters.interests.split(",");
+      const userInterests = res.user?.interests || [];
+      if (!targetInterests.some((i: string) => userInterests.includes(i))) return false;
+    }
+
+    if (filters.budgetRange) {
+      const [min, max] = filters.budgetRange.split("-").map(Number);
+      const userBudget = Number(res.budget) || 0;
+      if (userBudget < min || userBudget > max) return false;
+    }
+
+    return true;
+  });
+
+  // If hard filters result in very few matches, fallback to ignoring them
+  const finalResults = filteredResults.length >= 3 ? filteredResults : validMappedResults;
+
+  return finalResults.sort((a: any, b: any) => 
     (b.compatibility_score || 0) - (a.compatibility_score || 0)
   );
 }
@@ -399,5 +431,17 @@ export async function performGroupDbMatchingFallback(
     };
   });
 
-  return results.sort((a: any, b: any) => (b.score || 0) - (a.score || 0));
+  const filteredResults = results.filter((res: any) => {
+    if (filters.budgetRange) {
+      const [min, max] = filters.budgetRange.split("-").map(Number);
+      const groupBudget = Number(res.budget) || 0;
+      if (groupBudget < min || groupBudget > max) return false;
+    }
+    return true;
+  });
+
+  // If hard filters result in very few matches, fallback to ignoring them
+  const finalResults = filteredResults.length >= 3 ? filteredResults : results;
+
+  return finalResults.sort((a: any, b: any) => (b.score || 0) - (a.score || 0));
 }

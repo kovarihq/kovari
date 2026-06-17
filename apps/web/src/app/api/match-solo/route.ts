@@ -84,6 +84,7 @@ export async function GET(request: NextRequest) {
             "Content-Type": "application/json",
             ...internalHeaders
           },
+          body: JSON.stringify({ userId: clerkId || userId, context: params }),
           timeout: 30000,
         });
 
@@ -163,6 +164,7 @@ async function triggerBackgroundRefresh(userId: string, clerkId: string | undefi
           "Content-Type": "application/json",
           ...internalHeaders
         },
+        body: JSON.stringify({ userId: clerkId || userId, context: params }),
       });
 
       const rawData = await goResponse.json();

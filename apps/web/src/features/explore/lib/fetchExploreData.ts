@@ -77,6 +77,11 @@ export const fetchSoloTravelers = async (
     if (filters.ageMin) queryParams.append("ageMin", filters.ageMin.toString());
     if (filters.ageMax) queryParams.append("ageMax", filters.ageMax.toString());
     if (filters.interests?.length) queryParams.append("interests", filters.interests.join(","));
+    if (filters.languages?.length) queryParams.append("languages", filters.languages.join(","));
+    if (filters.personality && filters.personality !== "Any") queryParams.append("personality", filters.personality);
+    if (filters.smoking && filters.smoking !== "No") queryParams.append("smoking", filters.smoking);
+    if (filters.drinking && filters.drinking !== "No") queryParams.append("drinking", filters.drinking);
+    if (filters.budgetRange) queryParams.append("budgetRange", filters.budgetRange);
     if (cursor) queryParams.append("cursor", cursor);
     queryParams.append("limit", limit.toString());
 

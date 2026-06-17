@@ -491,10 +491,6 @@ export default function ExplorePage() {
             setLastSearchData(fullSearchData);
             setLastFilters(activeFilters);
           }
-        } else if (soloMeta?.degraded) {
-          if (isStillCurrent()) {
-            setSearchError("Matching service is currently degraded. Showing limited results.");
-          }
         }
       } else {
         // GROUP TRAVEL MODE - Use centralized helper

@@ -80,6 +80,7 @@ export async function POST(request: NextRequest) {
       try {
         const goPayload = {
           userId: clerkId || userId,
+          context: payloadContext,
           candidates: rawCandidates.map((g: any) => ({
             groupId: g.id,
             name: g.name,
