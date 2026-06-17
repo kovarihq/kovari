@@ -43,13 +43,22 @@ export function BottomNav() {
       ? profilePhotoUrl
       : user?.imageUrl || undefined;
 
-  // Define exception routes where the bottom nav should be hidden
-  const isHidden =
-    (pathname.startsWith("/chat/") && pathname !== "/chat") ||
-    (pathname.startsWith("/groups/") && pathname.includes("/chat")) ||
-    pathname.startsWith("/onboarding");
+  // Only show the bottom nav on the 5 main tab routes.
+  // Using an allowlist is more robust than a blocklist — new pages won't
+  // accidentally inherit the bottom nav.
+  const isMainTab =
+    pathname === "/dashboard" ||
+    pathname.startsWith("/explore") ||
+    pathname.startsWith("/chat") ||
+    pathname.startsWith("/groups") ||
+    pathname.startsWith("/profile");
 
-  if (isHidden) return null;
+  // Exception: hide inside individual chat threads and group chats
+  const isInsideThread =
+    (pathname.startsWith("/chat/") && pathname !== "/chat") ||
+    (pathname.startsWith("/groups/") && pathname.includes("/chat"));
+
+  if (!isMainTab || isInsideThread) return null;
 
   const tabs = [
     {

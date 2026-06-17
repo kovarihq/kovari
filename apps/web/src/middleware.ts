@@ -164,11 +164,18 @@ const clerk = clerkMiddleware(async (auth, req: NextRequest) => {
   const authObj = await auth();
   const { userId, sessionId } = authObj;
 
-  // If user is signed in and trying to access sign-in or sign-up, redirect to root
+  // If user is signed in and trying to access sign-in or sign-up, redirect to dashboard
   if (userId && isAuthPage(req)) {
     const url = req.nextUrl.clone();
-    url.pathname = "/";
+    url.pathname = "/dashboard";
     return NextResponse.redirect(url);
+  }
+
+  // If user is signed in and lands on /, send them straight to /dashboard
+  if (userId && url.pathname === "/") {
+    const redirectUrl = req.nextUrl.clone();
+    redirectUrl.pathname = "/dashboard";
+    return NextResponse.redirect(redirectUrl);
   }
 
   // 3. Absolute Priority: Ban & Deletion Checks

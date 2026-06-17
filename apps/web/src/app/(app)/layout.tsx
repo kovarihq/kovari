@@ -13,12 +13,19 @@ import { PolicyGate } from "@/shared/components/policy-gate";
 export default function Layout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
 
-  // Logic to hide bottom nav padding on specific routes (must match BottomNav logic)
-  const isBottomNavHidden =
+  // Must mirror the allowlist in BottomNav so padding is only applied when the nav is visible.
+  const isMainTab =
+    pathname === "/dashboard" ||
+    pathname.startsWith("/explore") ||
+    pathname.startsWith("/chat") ||
+    pathname.startsWith("/groups") ||
+    pathname.startsWith("/profile");
+
+  const isInsideThread =
     (pathname.startsWith("/chat/") && pathname !== "/chat") ||
-    pathname === "/create-group" ||
-    (pathname.startsWith("/groups/") && pathname.includes("/chat")) ||
-    pathname.startsWith("/onboarding");
+    (pathname.startsWith("/groups/") && pathname.includes("/chat"));
+
+  const isBottomNavVisible = isMainTab && !isInsideThread;
 
   return (
     <>
@@ -29,7 +36,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           <PolicyGate>
             <main
               className={`flex-1 min-h-0 flex flex-col ${
-                isBottomNavHidden ? "pb-0" : "pb-16 md:pb-0"
+                isBottomNavVisible ? "pb-16 md:pb-0" : "pb-0"
               }`}
             >
               {children}
