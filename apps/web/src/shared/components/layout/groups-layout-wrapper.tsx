@@ -17,6 +17,8 @@ import Link from "next/link";
 import { cn } from "@kovari/utils";
 import { buttonVariants } from "@/shared/components/ui/button";
 
+import { MobileBackNav } from "@/shared/components/layout/mobile-back-nav";
+
 const TABS = [
   { label: "Overview", href: "home" },
   { label: "Chats", href: "chat" },
@@ -109,13 +111,18 @@ export default function LayoutWrapper({ children }: LayoutWrapperProps) {
   );
 
   return (
-    <div className="flex bg-background text-foreground px-2 py-0 sm:px-4 pb-4">
-      {/* Sidebar can go here */}
-      <div className="flex-1 flex flex-col">
-        <header className="flex sticky top-0 z-50 bg-background py-4">
-          <div className="flex gap-2 flex-shrink-0">{tabButtons}</div>
-        </header>
-        <main className="flex-1 pt-0">{children}</main>
+    <div className="flex flex-col bg-background text-foreground w-full">
+      {/* Mobile back nav */}
+      <MobileBackNav title="Groups" forceHref="/groups" titleClassName="text-xs" />
+
+      <div className="flex bg-background text-foreground px-2 py-0 sm:px-4 pb-4">
+        {/* Sidebar can go here */}
+        <div className="flex-1 flex flex-col">
+          <header className="flex sticky top-0 z-50 bg-background py-4">
+            <div className="flex gap-2 flex-shrink-0">{tabButtons}</div>
+          </header>
+          <main className="flex-1 pt-0">{children}</main>
+        </div>
       </div>
     </div>
   );

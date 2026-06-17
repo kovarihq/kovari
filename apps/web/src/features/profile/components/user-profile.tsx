@@ -40,6 +40,7 @@ import { ReportDialog } from "@/shared/components/ReportDialog";
 import { cn } from "@kovari/utils";
 import { FeedbackDialog } from "@/features/feedback/components/FeedbackDialog";
 import { useFeedback } from "@/features/feedback/hooks/useFeedback";
+import { MobileBackNav } from "@/shared/components/layout/mobile-back-nav";
 
 export interface UserProfile {
   name: string;
@@ -246,6 +247,9 @@ export const UserProfile: React.FC<UserProfileProps> = ({ profile }) => {
   // Mobile/Tablet Layout Component
   const MobileLayout = () => (
     <div className="min-h-screen bg-transparent md:hidden">
+      {!profile.isOwnProfile && (
+        <MobileBackNav title={`@${profile.username}`} fallbackHref="/dashboard" />
+      )}
       <Card className="w-full h-full mx-auto bg-transparent border-none rounded-none gap-3 shadow-none p-3">
         {/* Mobile Profile Header */}
         <Card className="rounded-none border-none shadow-none bg-transparent p-0">

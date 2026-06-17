@@ -2,18 +2,14 @@
 
 import { useState } from "react";
 import {
-  Search,
   Bell,
   ChevronRight,
-  ChevronLeft,
   Check,
   UserPlus,
-  User,
   Users,
   CheckCheck,
 } from "lucide-react";
 import { Button } from "@/shared/components/ui/button";
-import { Input } from "@/shared/components/ui/input";
 import {
   Avatar,
   AvatarImage,
@@ -31,6 +27,7 @@ import {
 import { formatNotificationTime } from "@kovari/utils";
 import { Skeleton } from "@heroui/react";
 import InboxChatListSkeleton from "@/shared/components/layout/inbox-chat-list-skeleton";
+import { MobileBackNav } from "@/shared/components/layout/mobile-back-nav";
 
 export default function NotificationsPage() {
   const [searchQuery, setSearchQuery] = useState("");
@@ -64,35 +61,11 @@ export default function NotificationsPage() {
 
   return (
     <div className="h-screen w-full bg-card flex flex-col">
-      {/* Search Bar */}
-      {/* <div className="p-4 border-b border-border flex-shrink-0">
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-          <Input
-            type="text"
-            placeholder="Search Lines"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-9 w-full"
-          />
-        </div>
-      </div> */}
-
-      {/* Header */}
-      <div className="p-4 py-3 border-b border-border flex-shrink-0">
-        <div className="flex items-center justify-between gap-2">
-          <div className="flex items-center gap-2 min-w-0">
-            <Link
-              href="/dashboard"
-              className="md:hidden flex-shrink-0 p-1 -ml-1 text-foreground focus-visible:ring-0 focus-visible:ring-offset-0 focus-visible:outline-none"
-              aria-label="Back to dashboard"
-            >
-              <ChevronLeft className="w-5 h-5" />
-            </Link>
-            <h1 className="text-sm font-semibold text-foreground truncate">
-              Notifications
-            </h1>
-          </div>
+      {/* Mobile back nav */}
+      <MobileBackNav
+        title="Notifications"
+        forceHref="/dashboard"
+        rightSlot={
           <Button
             variant="ghost"
             onClick={handleMarkAllAsRead}
@@ -101,8 +74,8 @@ export default function NotificationsPage() {
           >
             Mark all as read
           </Button>
-        </div>
-      </div>
+        }
+      />
 
       {/* Notifications List */}
       <div className="flex-1 overflow-y-auto scrollbar-hide">
@@ -201,4 +174,3 @@ export default function NotificationsPage() {
     </div>
   );
 }
-

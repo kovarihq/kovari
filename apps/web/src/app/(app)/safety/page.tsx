@@ -39,6 +39,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Input } from "@/shared/components/ui/input";
 import { Avatar, AvatarFallback, AvatarImage } from "@/shared/components/ui/avatar";
 import { UserAvatarFallback } from "@/shared/components/UserAvatarFallback";
+import { MobileBackNav } from "@/shared/components/layout/mobile-back-nav";
 
 interface Target {
   id: string;
@@ -160,6 +161,8 @@ export default function SafetyPage() {
 
   return (
     <div className="min-h-screen bg-background pb-10 font-sans">
+      {/* Mobile back nav */}
+      <MobileBackNav title="Safety & Trust" fallbackHref="/dashboard" />
       
       <div className="max-w-full mx-auto px-5 sm:px-5 relative z-20">
         <AnimatePresence mode="wait" initial={false}>

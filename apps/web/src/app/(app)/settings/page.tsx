@@ -1,10 +1,7 @@
 "use client";
 
 import React, { useState, useCallback } from "react";
-import Link from "next/link";
-import { ArrowLeft, ChevronLeft } from "lucide-react";
 import { useIsMobile } from "@/shared/hooks/use-mobile";
-import { Button } from "@/shared/components/ui/button";
 import {
   SettingsSidebar,
   AccountSection,
@@ -13,6 +10,7 @@ import {
   LegalSection,
   AppearanceSection,
 } from "@/shared/components/settings";
+import { MobileBackNav } from "@/shared/components/layout/mobile-back-nav";
 
 export default function SettingsPage() {
   const [activeTab, setActiveTab] = useState("email");
@@ -33,15 +31,8 @@ export default function SettingsPage() {
 
   return (
     <div className="flex flex-col min-h-screen h-full bg-background text-foreground border-none rounded-none font-sans">
-      {/* Breadcrumb — match profile edit */}
-      <div className="px-1 py-2 md:px-4">
-        <Link href="/profile">
-          <Button className="inline-flex items-center gap-1 text-sm bg-transparent font-medium text-primary transition-colors">
-            <ChevronLeft className="md:h-4 md:w-4 h-3 w-3" />
-            Settings
-          </Button>
-        </Link>
-      </div>
+      {/* Mobile back nav */}
+      <MobileBackNav title="Settings" fallbackHref="/profile" />
 
       {/* Main Content — match profile edit container/sidebar/content */}
       <div className={`flex flex-col md:flex-row min-h-[90vh] h-full text-foreground rounded-3xl border mx-3 mb-6 md:mx-6 ${!isMobile?"bg-card border-border": "border border-none"}`}>

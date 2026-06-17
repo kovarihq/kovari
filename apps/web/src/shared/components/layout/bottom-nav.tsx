@@ -53,10 +53,12 @@ export function BottomNav() {
     pathname.startsWith("/groups") ||
     pathname.startsWith("/profile");
 
-  // Exception: hide inside individual chat threads and group chats
+  // Exception: hide inside individual chat threads, group chats, and group detail pages (/groups/id/*)
+  const isGroupDetailPage = pathname.startsWith("/groups/") && pathname !== "/groups";
   const isInsideThread =
     (pathname.startsWith("/chat/") && pathname !== "/chat") ||
-    (pathname.startsWith("/groups/") && pathname.includes("/chat"));
+    (pathname.startsWith("/groups/") && pathname.includes("/chat")) ||
+    isGroupDetailPage;
 
   if (!isMainTab || isInsideThread) return null;
 

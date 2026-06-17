@@ -12,8 +12,8 @@ import { useAuth } from "@clerk/nextjs";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Loader2 } from "lucide-react";
 import InvitationCardSkeleton from "@/features/invitations/components/InvitationCardSkeleton";
-
 import { toast } from "sonner";
+import { MobileBackNav } from "@/shared/components/layout/mobile-back-nav";
 
 const REQUEST_TABS = [
   { label: "Interests", value: "interests" },
@@ -318,6 +318,9 @@ export default function RequestsPage() {
 
   return (
     <div className="flex flex-col w-full min-h-screen">
+      {/* Mobile back nav */}
+      <MobileBackNav title="Requests" fallbackHref="/dashboard" titleClassName="text-xs" />
+
       {/* Tabs Header */}
       <div className="w-full flex flex-row items-center gap-2 px-4 py-4 sticky top-0 z-50 bg-background">
         {tabButtons}

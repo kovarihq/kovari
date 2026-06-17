@@ -21,9 +21,11 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     pathname.startsWith("/groups") ||
     pathname.startsWith("/profile");
 
+  const isGroupDetailPage = pathname.startsWith("/groups/") && pathname !== "/groups";
   const isInsideThread =
     (pathname.startsWith("/chat/") && pathname !== "/chat") ||
-    (pathname.startsWith("/groups/") && pathname.includes("/chat"));
+    (pathname.startsWith("/groups/") && pathname.includes("/chat")) ||
+    isGroupDetailPage;
 
   const isBottomNavVisible = isMainTab && !isInsideThread;
 

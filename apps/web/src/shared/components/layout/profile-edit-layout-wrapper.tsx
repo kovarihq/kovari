@@ -13,11 +13,9 @@ import GeneralSection from "@/app/(app)/profile/edit/general/section";
 import ProfessionalSection from "@/app/(app)/profile/edit/professional/section";
 import PersonalSection from "@/app/(app)/profile/edit/personal/section";
 import TravelSection from "@/app/(app)/profile/edit/travel/section";
-import { ChevronLeft } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { Button } from "../ui/button";
-import Link from "next/link";
 import { useIsMobile } from "@/shared/hooks/use-mobile";
+import { MobileBackNav } from "@/shared/components/layout/mobile-back-nav";
 
 const DEFAULT_VALUES: ProfileEditForm = {
   avatar: "",
@@ -178,18 +176,8 @@ export default function ProfileEditLayoutWrapper() {
 
   return (
     <div className="flex flex-col min-h-screen h-full bg-background text-foreground border-none rounded-none">
-      {/* Breadcrumb */}
-      <div className="px-1 py-2 md:px-4">
-        <Link href={"/profile"}>
-          <Button
-            // onClick={handleBackToProfile}
-            className="inline-flex items-center gap-1 text-xs md:text-sm bg-transparent text-foreground transition-colors"
-          >
-            <ChevronLeft className="md:h-4 md:w-4 h-3 w-3" />
-            Back to Profile
-          </Button>
-        </Link>
-      </div>
+      {/* Mobile back nav */}
+      <MobileBackNav title="Back to Profile" forceHref="/profile" />
 
       {/* Main Content */}
       <div className={`flex flex-col md:flex-row min-h-[90vh] h-full bg-card text-foreground border-1 border-border rounded-3xl mx-3 mb-6 md:mx-6 ${isMobile ? "border-none" : ""}`}>

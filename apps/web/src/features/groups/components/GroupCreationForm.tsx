@@ -20,6 +20,7 @@ import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 import { Switch } from "@/shared/components/ui/switch";
 import { ImageUpload } from "@/shared/components/image-upload";
+import { MobileBackNav } from "@/shared/components/layout/mobile-back-nav";
 
 const formSchema = z
   .object({
@@ -222,7 +223,11 @@ export function GroupCreationForm() {
   };
 
   return (
-    <div className="min-h-screen bg-background flex items-center justify-center p-3 pb-16 md:p-6">
+    <div className="min-h-screen bg-background flex flex-col">
+      {/* Mobile back nav */}
+      <MobileBackNav title="Create Group" fallbackHref="/groups" />
+
+      <div className="flex-1 flex items-center justify-center p-3 pb-16 md:p-6">
       <Card className="w-full max-w-4xl bg-card shadow-none border-border py-2">
         <CardContent className="p-4 md:p-6">
           <div className="text-center mb-8">
@@ -518,6 +523,7 @@ export function GroupCreationForm() {
           </form>
         </CardContent>
       </Card>
+      </div>
     </div>
   );
 }
