@@ -9,13 +9,38 @@ import {
   ProfileEditForm,
 } from "@/features/profile/lib/types";
 import { useProfileData } from "@/features/profile/hooks/use-profile-data";
-import GeneralSection from "@/app/(app)/profile/edit/general/section";
-import ProfessionalSection from "@/app/(app)/profile/edit/professional/section";
-import PersonalSection from "@/app/(app)/profile/edit/personal/section";
-import TravelSection from "@/app/(app)/profile/edit/travel/section";
 import { useRouter } from "next/navigation";
 import { useIsMobile } from "@/shared/hooks/use-mobile";
 import { MobileBackNav } from "@/shared/components/layout/mobile-back-nav";
+import dynamic from "next/dynamic";
+
+const SectionSkeleton = () => (
+  <div className="space-y-4 p-4">
+    {[1, 2, 3, 4].map((i) => (
+      <div
+        key={i}
+        className="h-12 bg-muted rounded-lg animate-pulse"
+      />
+    ))}
+  </div>
+);
+
+const GeneralSection = dynamic(
+  () => import("@/app/(app)/profile/edit/general/section"),
+  { loading: () => <SectionSkeleton />, ssr: false }
+);
+const ProfessionalSection = dynamic(
+  () => import("@/app/(app)/profile/edit/professional/section"),
+  { loading: () => <SectionSkeleton />, ssr: false }
+);
+const PersonalSection = dynamic(
+  () => import("@/app/(app)/profile/edit/personal/section"),
+  { loading: () => <SectionSkeleton />, ssr: false }
+);
+const TravelSection = dynamic(
+  () => import("@/app/(app)/profile/edit/travel/section"),
+  { loading: () => <SectionSkeleton />, ssr: false }
+);
 
 const DEFAULT_VALUES: ProfileEditForm = {
   avatar: "",
@@ -194,38 +219,38 @@ export default function ProfileEditLayoutWrapper() {
         <div className={`flex-1 flex flex-col md:p-3 md:px-6 gap-2 ${isMobile ? "bg-background rounded-3xl p-2 py-4" : ""}`}>
           {isMobile ? (
             <div className="flex flex-col gap-6">
-              <GeneralSection
+              {activeTab === 'general' && <GeneralSection
                 form={form}
                 isSubmitting={isSubmitting}
                 onSubmit={handleSubmit}
                 profileData={profileData}
                 isLoading={isLoading}
                 updateProfileField={updateProfileField}
-              />
-              <ProfessionalSection
+              />}
+              {activeTab === 'professional' && <ProfessionalSection
                 form={form}
                 isSubmitting={isSubmitting}
                 onSubmit={handleSubmit}
                 profileData={profileData}
                 isLoading={isLoading}
                 updateProfileField={updateProfileField}
-              />
-              <PersonalSection
+              />}
+              {activeTab === 'personal' && <PersonalSection
                 form={form}
                 isSubmitting={isSubmitting}
                 onSubmit={handleSubmit}
                 profileData={profileData}
                 isLoading={isLoading}
                 updateProfileField={updateProfileField}
-              />
-              <TravelSection
+              />}
+              {activeTab === 'travel' && <TravelSection
                 form={form}
                 isSubmitting={isSubmitting}
                 onSubmit={handleSubmit}
                 profileData={profileData}
                 isLoading={isLoading}
                 updateProfileField={updateProfileField}
-              />
+              />}
             </div>
           ) : (
             <SectionContent

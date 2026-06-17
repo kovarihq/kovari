@@ -7,6 +7,7 @@ const __dirname = path.dirname(__filename);
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  compress: true,
   compiler: {
     removeConsole: process.env.NODE_ENV === "production",
   },
@@ -41,10 +42,10 @@ const nextConfig = {
         value: [
           "default-src 'self'",
           "script-src 'self' 'unsafe-eval' 'unsafe-inline' https://clerk.kovari.in https://*.clerk.accounts.dev https://va.vercel-scripts.com",
-          "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://api.fontshare.com",
+          "style-src 'self' 'unsafe-inline' https://api.fontshare.com",
           "img-src 'self' data: blob: https://res.cloudinary.com https://*.supabase.co https://utfs.io https://randomuser.me https://*.onrender.com https://img.clerk.com https://*.clerk.com",
           "media-src 'self' data: blob: https://res.cloudinary.com https://*.onrender.com",
-          "font-src 'self' https://fonts.gstatic.com https://api.fontshare.com",
+          "font-src 'self' https://api.fontshare.com",
           "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://api.clerk.dev wss://kovari.in https://socket.kovari.in wss://socket.kovari.in http://localhost:3005 ws://localhost:3005 https://vitals.vercel-insights.com https://api.cloudinary.com https://*.onrender.com wss://*.onrender.com",
           "frame-ancestors 'none'",
           "base-uri 'self'",
@@ -141,6 +142,8 @@ const nextConfig = {
     return config;
   },
   images: {
+    formats: ['image/avif', 'image/webp'],
+    minimumCacheTTL: 86400,
     remotePatterns: [
       {
         protocol: "https",
@@ -166,6 +169,23 @@ const nextConfig = {
         protocol: "https",
         hostname: "res.cloudinary.com",
       },
+      {
+        protocol: "https",
+        hostname: "img.clerk.com",
+      },
+      {
+        protocol: "https",
+        hostname: "images.clerk.dev",
+      },
+    ],
+  },
+  experimental: {
+    optimizePackageImports: [
+      'lucide-react',
+      '@heroui/react',
+      'framer-motion',
+      'date-fns',
+      '@sentry/nextjs',
     ],
   },
   serverExternalPackages: ["bad-words"],

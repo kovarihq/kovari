@@ -1,12 +1,9 @@
 "use client";
 
 import React, { useCallback } from "react";
-import * as Sentry from "@sentry/nextjs";
 import { Button } from "@heroui/react";
-import { Icon } from "@iconify/react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { motion } from "framer-motion";
 
 const BUTTON_WIDTH = "w-[170px]";
 const BUTTON_HEIGHT = "h-12";
@@ -31,83 +28,39 @@ export default function Hero({ onJoinWaitlist }: HeroProps) {
   const router = useRouter();
 
   const handleJoinWaitlist = useCallback(() => {
-    Sentry.startSpan(
-      {
-        op: "ui.click",
-        name: "Join the Waitlist Button Click",
-      },
-      (span) => {
-        span.setAttribute("button_location", "hero");
-        span.setAttribute("action", "open_waitlist_modal");
-
-        if (onJoinWaitlist) {
-          onJoinWaitlist();
-        } else {
-          router.push("/sign-up");
-        }
-      }
-    );
+    if (onJoinWaitlist) {
+      onJoinWaitlist();
+    } else {
+      router.push("/sign-up");
+    }
   }, [onJoinWaitlist, router]);
-
-  const containerVariants = {
-    hidden: { opacity: 1 },
-    visible: {
-      opacity: 1,
-      transition: {
-        staggerChildren: 0.1,
-        delayChildren: 0.2,
-      },
-    },
-  };
-
-  const itemVariants = {
-    hidden: { opacity: 0, y: 15 },
-    visible: {
-      opacity: 1,
-      y: 0,
-      transition: { duration: 0.6, ease: "easeOut" as const },
-    },
-  };
-
-  const mockupVariants = {
-    hidden: { opacity: 0, y: 20 },
-    visible: {
-      opacity: 1,
-      y: 0,
-      transition: { duration: 0.6, delay: 0.6, ease: "easeOut" as const },
-    },
-  };
 
   return (
     <section 
       className="relative w-full sm:flex sm:flex-col sm:overflow-hidden overflow-x-hidden pt-32 pb-32 md:pt-40 md:pb-48"
     >
       <div className="container mx-auto px-6 md:px-8 relative z-10">
-        <motion.div 
+        <div 
           className={HERO_SECTION_CLASSES}
-          variants={containerVariants}
-          initial="hidden"
-          whileInView="visible"
-          viewport={{ once: true }}
         >
-          <motion.div variants={itemVariants} className="flex flex-col items-center">
+          <div className="flex flex-col items-center animate-fade-in-up [animation-delay:0ms]">
             <span className="text-[10px] tracking-[0.12em] sm:tracking-[0.25em] text-muted-foreground/80 uppercase mb-3 font-mono text-center">
               Plan Trips. Find People. Travel Together.
             </span>
-          </motion.div>
+          </div>
 
-          <motion.div variants={itemVariants} className="text-center">
+          <div className="text-center animate-fade-in-up [animation-delay:100ms]">
             <h1 className="text-3xl sm:text-4xl lg:text-5xl font-bold text-foreground tracking-tight leading-tight mb-4 max-w-4xl mx-auto">
               You planned the trip.<br />
               <span className="text-primary">Nobody</span> bought the ticket.
             </h1>
-          </motion.div>
+          </div>
 
-          <motion.p variants={itemVariants} className="text-muted-foreground text-sm sm:text-base md:text-lg font-light max-w-[90vw] sm:max-w-xl mx-auto leading-relaxed mb-12 text-center">
+          <p className="text-muted-foreground text-sm sm:text-base md:text-lg font-light max-w-[90vw] sm:max-w-xl mx-auto leading-relaxed mb-12 text-center animate-fade-in-up [animation-delay:200ms]">
             {HERO_DESCRIPTION}
-          </motion.p>
+          </p>
           
-          <motion.div variants={itemVariants} className="flex flex-col items-center justify-center gap-4 mt-1">
+          <div className="flex flex-col items-center justify-center gap-4 mt-1 animate-fade-in-up [animation-delay:300ms]">
             <Button
               className="h-12 sm:h-14 bg-primary text-primary-foreground hover:bg-primary-hover shadow-lg px-12 py-5 sm:py-6 text-sm sm:text-base font-semibold leading-5"
               radius="full"
@@ -123,8 +76,8 @@ export default function Hero({ onJoinWaitlist }: HeroProps) {
             >
               Already in Closed Beta? Log In
             </Link>
-          </motion.div>
-        </motion.div>
+          </div>
+        </div>
       </div>
     </section>
   );

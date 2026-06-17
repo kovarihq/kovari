@@ -14,13 +14,20 @@ import { SpeedInsights } from "@vercel/speed-insights/next";
 
 import "@/styles/globals.css";
 
-import { Poppins, Inter } from "next/font/google";
+import { Poppins, Inter, Manrope } from "next/font/google";
 import { Toaster } from "@/shared/components/ui/sonner";
+
+const manrope = Manrope({
+  subsets: ["latin"],
+  variable: "--font-manrope",
+  display: "swap",
+  preload: true,
+  weight: ["200", "300", "400", "500", "600", "700", "800"],
+});
 import { HeroUIProvider } from "@heroui/react";
 import { AuthProvider } from "@/shared/components/auth-provider";
 import { ThemeProvider } from "@/shared/components/providers/theme-provider";
 
-export const dynamic = "force-dynamic";
 
 const poppins = Poppins({
   subsets: ["latin"],
@@ -145,17 +152,14 @@ export default async function RootLayout({
               `,
             }}
           />
+          <link rel="preconnect" href="https://api.fontshare.com" />
           <link
             href="https://api.fontshare.com/v2/css?f[]=clash-display@200,300,400,500,600,700&display=swap"
             rel="stylesheet"
           />
-          <link
-            href="https://fonts.googleapis.com/css2?family=Manrope:wght@200;300;400;500;600;700;800&display=swap"
-            rel="stylesheet"
-          />
         </head>
         <body
-          className={`${inter.variable} ${poppins.variable} font-sans`}
+          className={`${inter.variable} ${poppins.variable} ${manrope.variable} font-sans`}
         >
           <WebAppJsonLd />
           <OrganizationJsonLd />
