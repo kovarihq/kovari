@@ -107,7 +107,7 @@ export default function Hero({ onJoinWaitlist }: HeroProps) {
             {HERO_DESCRIPTION}
           </motion.p>
           
-          <motion.div variants={itemVariants} className="flex flex-col items-center justify-center gap-6 sm:flex-row mt-1">
+          <motion.div variants={itemVariants} className="flex flex-col items-center justify-center gap-4 mt-1">
             <Button
               className="h-12 sm:h-14 bg-primary text-primary-foreground hover:bg-primary-hover shadow-lg px-12 py-5 sm:py-6 text-sm sm:text-base font-semibold leading-5"
               radius="full"
@@ -117,6 +117,12 @@ export default function Hero({ onJoinWaitlist }: HeroProps) {
             >
               Join the waitlist
             </Button>
+            <Link
+              href="/sign-in"
+              className="text-xs sm:text-sm text-muted-foreground hover:text-foreground transition-colors font-medium underline underline-offset-4"
+            >
+              Already in Closed Beta? Log In
+            </Link>
           </motion.div>
         </motion.div>
       </div>

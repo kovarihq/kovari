@@ -317,6 +317,13 @@ export default function App({
             {/* Waitlist launch: Join Waitlist CTA instead of Log In / Avatar */}
             {showWaitlistNavbar ? (
               <>
+                <Link href="/sign-in" className="hidden sm:flex">
+                  <Button
+                    className="px-4 h-9 rounded-full font-medium text-foreground hover:text-foreground bg-transparent hover:bg-transparent"
+                  >
+                    Log In
+                  </Button>
+                </Link>
                 <Button
                   variant="default"
                   className="hidden sm:flex px-4 h-9 rounded-full"

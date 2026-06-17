@@ -95,8 +95,7 @@ const MobileMenuOverlay: React.FC<MobileMenuOverlayProps> = ({
             </div>
 
             {/* Bottom CTA */}
-            <div className="px-8 pb-12 pt-6 w-full max-w-sm mx-auto flex flex-col items-center gap-4">
-             
+            <div className="px-8 pb-12 pt-6 w-full max-w-sm mx-auto flex flex-col items-center gap-3">
               <Button
                 className="w-full h-12 rounded-3xl text-md font-semibold bg-primary text-primary-foreground shadow-md transition-transform active:scale-[0.98]"
                 onClick={() => {
@@ -106,6 +105,13 @@ const MobileMenuOverlay: React.FC<MobileMenuOverlayProps> = ({
               >
                 Join the waitlist
               </Button>
+              <Link href="/sign-in" className="w-full" onClick={onClose}>
+                <Button
+                  className="w-full h-12 rounded-3xl text-md font-semibold text-foreground bg-transparent hover:bg-transparent hover:text-foreground"
+                >
+                  Log In
+                </Button>
+              </Link>
             </div>
           </div>
         </motion.div>
