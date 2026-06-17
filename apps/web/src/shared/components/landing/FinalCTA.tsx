@@ -46,7 +46,7 @@ export default function FinalCTA({ onJoinWaitlist }: FinalCTAProps) {
 
           {/* Subtext */}
           <p className="text-muted-foreground text-sm sm:text-base md:text-lg font-light mb-8 max-w-xl mx-auto leading-relaxed">
-            First invitations go out this week. Join the waitlist.
+            Batch 1 is live. Batch 2 coming soon &mdash; join the waitlist to get early access.
           </p>
 
           {/* Primary CTA */}
@@ -54,10 +54,10 @@ export default function FinalCTA({ onJoinWaitlist }: FinalCTAProps) {
             className="h-12 sm:h-14 bg-primary text-primary-foreground hover:bg-primary-hover shadow-lg px-12 sm:px-12 py-5 sm:py-6 text-sm sm:text-base font-semibold leading-5 animate-pulse-subtle"
             radius="full"
             variant="solid"
-            aria-label="Join the Waitlist"
+            aria-label="Request Early Access"
             onPress={handleJoinWaitlistClick}
           >
-            Join the waitlist
+            Request early access
           </Button>
         </motion.div>
       </div>
