@@ -4,6 +4,7 @@ import './globals.css';
 import { ClerkProvider } from '@clerk/nextjs';
 import { AdminLayoutWrapper } from '@/components/AdminLayoutWrapper';
 import { Toaster } from '@/components/ui/sonner';
+import { SpeedInsights } from '@vercel/speed-insights/next';
 
 const manrope = Manrope({
   subsets: ['latin'],
@@ -43,6 +44,7 @@ export default function RootLayout({
           children
         )}
         <Toaster />
+        <SpeedInsights />
       </body>
     </html>
   );
