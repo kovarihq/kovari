@@ -6,6 +6,7 @@ import { createClient } from "@kovari/api/client";
 import { Notification } from "@kovari/types";
 import { getSocket } from "@/lib/socket";
 import { registerServiceWorker, subscribeUserToPush } from "@kovari/utils";
+import { diagLog } from "@/lib/observability/performance";
 
 interface UseNotificationsOptions {
   limit?: number;
@@ -45,17 +46,25 @@ export function useNotifications(options: UseNotificationsOptions = {}) {
     return `${type}-${entityType}-${eId}`;
   };
 
-  const fetchNotifications = useCallback(async () => {
+  useEffect(() => {
+    diagLog("useNotifications mounted");
+  }, []);
+
+  const fetchNotifications = useCallback(async (reason: string = "unknown") => {
     if (!user) return;
 
     try {
       setLoading(true);
+      diagLog("Notifications fetch triggered");
+      const start = performance.now();
       const params = new URLSearchParams({
         limit: limit.toString(),
         ...(unreadOnly && { unreadOnly: "true" }),
+        reason,
       });
 
       const response = await fetch(`/api/notifications?${params}`);
+      diagLog(`Notifications fetch completed in ${Math.round(performance.now() - start)}ms`);
       if (!response.ok) {
         throw new Error("Failed to fetch notifications");
       }
@@ -82,7 +91,10 @@ export function useNotifications(options: UseNotificationsOptions = {}) {
     if (!user) return;
 
     try {
+      diagLog("UnreadCount fetch triggered");
+      const start = performance.now();
       const response = await fetch("/api/notifications/unread-count");
+      diagLog(`UnreadCount fetch completed in ${Math.round(performance.now() - start)}ms`);
       if (!response.ok) {
         throw new Error("Failed to fetch unread count");
       }
@@ -301,7 +313,7 @@ export function useNotifications(options: UseNotificationsOptions = {}) {
 
   // Initial fetch
   useEffect(() => {
-    fetchNotifications();
+    fetchNotifications("mount");
     fetchUnreadCount();
   }, [fetchNotifications, fetchUnreadCount]);
 
@@ -312,7 +324,7 @@ export function useNotifications(options: UseNotificationsOptions = {}) {
     unreadCount,
     markAsRead,
     markAllAsRead,
-    refetch: fetchNotifications,
+    refetch: () => fetchNotifications("manual_refresh"),
   };
 }
 

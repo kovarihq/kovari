@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 import { useUser } from "@clerk/nextjs";
+import { diagLog } from "@/lib/observability/performance";
 import {
   TERMS_VERSION,
   PRIVACY_VERSION,
@@ -38,17 +39,21 @@ export function PolicyGate({ children }: { children: React.ReactNode }) {
   const [manuallyAccepted, setManuallyAccepted] = useState(false);
 
   useEffect(() => {
+    diagLog("PolicyGate mounted");
     let mounted = true;
     if (!isLoaded || !isSignedIn) {
       if (mounted) setLoading(false);
       return;
     }
     const check = async () => {
+      diagLog("Policy Check Fetch Triggered");
+      const start = performance.now();
       try {
         const res = await fetch("/api/settings/accept-policies", { 
           cache: "no-store", 
           headers: { 'Cache-Control': 'no-cache' } 
         });
+        diagLog(`Policy Check Fetch completed in ${Math.round(performance.now() - start)}ms`);
         if (!res.ok) { 
           if (mounted) setLoading(false);
           return; 
@@ -67,6 +72,7 @@ export function PolicyGate({ children }: { children: React.ReactNode }) {
           setNeedsAcceptance(outdated);
         }
       } catch {
+        diagLog(`Policy Check Fetch failed in ${Math.round(performance.now() - start)}ms`);
         // fail open
       } finally {
         if (mounted) setLoading(false);

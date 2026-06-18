@@ -5,6 +5,8 @@ import {
 } from "@clerk/nextjs/server";
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { logPerformanceMetric } from "@/lib/observability/performance";
+import { generateRequestId } from "@/lib/api/requestId";
 
 const isBannedPage = createRouteMatcher(["/banned"]);
 const isAuthPage = createRouteMatcher(["/sign-in(.*)", "/sign-up(.*)"]);
@@ -161,8 +163,12 @@ const clerk = clerkMiddleware(async (auth, req: NextRequest) => {
     return nextResponseWithHeaders(req);
   }
 
+  const authStart = performance.now();
   const authObj = await auth();
   const { userId, sessionId } = authObj;
+  const authDuration = performance.now() - authStart;
+  const mwRequestId = req.headers.get("x-request-id") || generateRequestId().slice(0, 8);
+  logPerformanceMetric("middleware_auth_ms", authDuration, { userId, requestId: mwRequestId });
 
   // If user is signed in and trying to access sign-in or sign-up, redirect to dashboard
   if (userId && isAuthPage(req)) {
@@ -203,11 +209,15 @@ const clerk = clerkMiddleware(async (auth, req: NextRequest) => {
           });
         }
 
+        const dbStart = performance.now();
         const { data: user, error } = await supabase
           .from("users")
           .select('banned, ban_expires_at, "isDeleted"')
           .eq("clerk_user_id", userId)
           .maybeSingle();
+        
+        const dbDuration = performance.now() - dbStart;
+        logPerformanceMetric("middleware_db_ms", dbDuration, { userId, requestId: mwRequestId });
 
         if (error) {
           console.error("Middleware Supabase error:", error);
@@ -337,6 +347,9 @@ const ALLOWED_ORIGINS = [
 ].filter(Boolean) as string[];
 
 export default async function middleware(req: NextRequest, evt: any) {
+  const mwStart = performance.now();
+  const mwRequestId = req.headers.get("x-request-id") || generateRequestId().slice(0, 8);
+  req.headers.set("x-request-id", mwRequestId);
   const host = req.headers.get("host");
   if (host === "www.kovari.in") {
     const url = req.nextUrl.clone();
@@ -434,6 +447,22 @@ export default async function middleware(req: NextRequest, evt: any) {
     res.headers.set("X-Content-Type-Options", "nosniff");
     res.headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
     res.headers.set("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
+  }
+
+  const mwDuration = performance.now() - mwStart;
+  logPerformanceMetric("middleware_total_ms", mwDuration, { path: pathname, requestId: mwRequestId });
+
+  // Sample homepage traffic at 10% to capture bot signals without log spam
+  if (pathname === "/" && Math.random() < 0.1) {
+    const authHeader = req.headers.get("authorization");
+    const hasAuth = !!authHeader || req.cookies.has("__session");
+    logPerformanceMetric("homepage_traffic", mwDuration, {
+      path: pathname,
+      userAgent: req.headers.get("user-agent"),
+      referer: req.headers.get("referer"),
+      authenticated: hasAuth,
+      requestId: mwRequestId
+    });
   }
 
   return res;

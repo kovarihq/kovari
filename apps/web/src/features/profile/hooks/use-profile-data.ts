@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { ProfileEditForm } from "@/features/profile/lib/types";
 import { useToast } from "@/shared/hooks/use-toast";
+import { diagLog } from "@/lib/observability/performance";
 
 export const useProfileData = () => {
   const [profileData, setProfileData] = useState<ProfileEditForm | null>(null);
@@ -10,8 +11,11 @@ export const useProfileData = () => {
 
   const fetchProfileData = async () => {
     try {
+      diagLog("Profile fetch triggered");
+      const start = performance.now();
       setIsLoading(true);
       const response = await fetch("/api/profile/current");
+      diagLog(`Profile fetch completed in ${Math.round(performance.now() - start)}ms`);
       if (response.ok) {
         const resJson = await response.json();
         const profile = resJson.data || resJson;
@@ -86,6 +90,7 @@ export const useProfileData = () => {
   };
 
   useEffect(() => {
+    diagLog("useProfileData hook mounted");
     fetchProfileData();
   }, []);
 

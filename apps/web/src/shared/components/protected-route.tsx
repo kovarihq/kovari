@@ -5,6 +5,7 @@ import { useRouter, usePathname } from "next/navigation";
 import { useEffect, useState, useRef } from "react";
 import { Spinner } from "@heroui/react";
 import { useSyncUserToSupabase } from "@kovari/api/client";
+import { diagLog } from "@/lib/observability/performance";
 
 const ONBOARDING_PATH_PREFIX = "/onboarding";
 
@@ -40,12 +41,16 @@ export default function ProtectedRoute({
   const checkDoneThisCycleRef = useRef(false);
 
   // 1. Unauthenticated state is strictly handled by middleware.ts
+  useEffect(() => {
+    diagLog("ProtectedRoute mounted");
+  }, []);
 
   // 2. One-time sync user to Supabase
   useEffect(() => {
     if (!isLoaded || !isSignedIn || syncedRef.current) return;
     syncedRef.current = true;
     setPhase("sync");
+    diagLog("Syncing User Triggered");
     // if (debug) console.log("[ProtectedRoute] Syncing user to Supabase…");
     syncUser()
       .then((ok) => {
@@ -82,6 +87,8 @@ export default function ProtectedRoute({
     checkDoneThisCycleRef.current = true;
 
     const runProfileCheck = () => {
+      diagLog("ProtectedRoute fetchProfile triggered");
+      const start = performance.now();
       // Use cache: 'no-store' to ensure we never get a stale onboarding status
       fetch("/api/profile/current", {
         method: "GET",
@@ -89,6 +96,7 @@ export default function ProtectedRoute({
         cache: "no-store",
       })
         .then(async (res) => {
+          diagLog(`ProtectedRoute fetchProfile completed in ${Math.round(performance.now() - start)}ms`);
           if (res.ok) {
             const json = await res.json();
             // Kovari API v1 wraps the response in a 'data' field.
@@ -109,6 +117,7 @@ export default function ProtectedRoute({
           }
         })
         .catch((err) => {
+          diagLog(`ProtectedRoute fetchProfile failed in ${Math.round(performance.now() - start)}ms`);
           setPhase("redirect");
           router.replace(ONBOARDING_PATH_PREFIX);
         });

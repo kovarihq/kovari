@@ -6,6 +6,8 @@ import {
   formatErrorResponse,
 } from "@/lib/api/responseHelpers";
 import { ApiErrorCode } from "@/types/api";
+import { logPerformanceMetric, logInvocation } from "@/lib/observability/performance";
+import { generateRequestId } from "@/lib/api/requestId";
 
 /**
  * GET /api/notifications
@@ -16,8 +18,8 @@ import { ApiErrorCode } from "@/types/api";
  * - unreadOnly: boolean (default: false)
  */
 export async function GET(request: NextRequest) {
-  const start = Date.now();
-  const requestId = "fetch-notifs";
+  const start = performance.now();
+  const requestId = generateRequestId();
   try {
     const authUser = await getAuthenticatedUser(request);
 
@@ -36,6 +38,9 @@ export async function GET(request: NextRequest) {
     const limit = parseInt(searchParams.get("limit") || "50", 10);
     const offset = parseInt(searchParams.get("offset") || "0", 10);
     const unreadOnly = searchParams.get("unreadOnly") === "true";
+    const reason = searchParams.get("reason") || "unknown";
+
+    logInvocation("notifications_invocation", { requestId, reason });
 
     // Build query
     let query = supabase
@@ -49,7 +54,9 @@ export async function GET(request: NextRequest) {
       query = query.eq("is_read", false);
     }
 
+    const queryStart = performance.now();
     const { data: notificationsData, error } = await query;
+    logPerformanceMetric("notifications_query_ms", performance.now() - queryStart, { requestId, reason });
 
     if (error) {
       console.error("Error fetching notifications:", error);
@@ -115,7 +122,6 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    // Attach images
     const enrichedNotifications = notifications.map((n) => {
       let image_url;
       if (n.entity_type === "match" || n.entity_type === "chat") {
@@ -126,10 +132,12 @@ export async function GET(request: NextRequest) {
       return { ...n, image_url };
     });
 
+    logPerformanceMetric("notifications_total_ms", performance.now() - start, { requestId, reason });
+
     return formatStandardResponse(
       { notifications: enrichedNotifications },
       {},
-      { requestId, latencyMs: Date.now() - start }
+      { requestId, latencyMs: Math.round(performance.now() - start) }
     );
   } catch (error: any) {
     console.error("Exception in GET /api/notifications:", error);

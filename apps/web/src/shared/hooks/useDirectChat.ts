@@ -5,6 +5,7 @@ import { encryptMessage, decryptMessage } from "@kovari/utils";
 import { v4 as uuidv4 } from "uuid";
 import { getSocket } from "@/lib/socket";
 import {} from "@kovari/utils";
+import { diagLog } from "@/lib/observability/performance";
 
 export interface DirectChatMessage {
   id: string;
@@ -102,6 +103,8 @@ export const useDirectChat = (
         setLoadingMore(true);
       }
 
+      diagLog("useDirectChat fetchMessages triggered");
+      const start = performance.now();
 
       try {
         const queryParams = new URLSearchParams({
@@ -116,6 +119,7 @@ export const useDirectChat = (
           `/api/direct-chat/messages?${queryParams.toString()}`,
           { method: "GET", credentials: "include" },
         );
+        diagLog(`useDirectChat fetchMessages completed in ${Math.round(performance.now() - start)}ms`);
         if (!response.ok) {
           const errorBody = await response.json().catch(() => ({}));
           setError(errorBody?.error || "Failed to fetch messages");
@@ -400,6 +404,7 @@ export const useDirectChat = (
 
   // Initial fetch
   useEffect(() => {
+    diagLog("useDirectChat mounted");
     setLoading(true);
     fetchMessages();
     // eslint-disable-next-line react-hooks/exhaustive-deps

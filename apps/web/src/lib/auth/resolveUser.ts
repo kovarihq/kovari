@@ -6,6 +6,7 @@ import { AuthResult, ResolveUserOptions, AuthFailureReason } from "@/types/auth"
 import { generateRequestId } from "../api/requestId";
 import { logger } from "../api/logger";
 import { detectClient } from "../api/clientDetection";
+import { logPerformanceMetric, logInvocation } from "../observability/performance";
 
 /**
  * 🛰️ Unified Identity Resolver
@@ -14,6 +15,26 @@ import { detectClient } from "../api/clientDetection";
 export async function resolveUser(
   req: NextRequest,
   options: ResolveUserOptions = { mode: 'protected' }
+): Promise<AuthResult> {
+  const start = performance.now();
+  const resolveRequestId = (typeof crypto !== "undefined" && crypto.randomUUID) ? crypto.randomUUID().slice(0, 8) : Math.random().toString(36).slice(2, 10);
+  logInvocation("resolveUser_invocation", { mode: options.mode, requestId: resolveRequestId });
+  try {
+    const result = await _resolveUser(req, options, resolveRequestId);
+    const duration = performance.now() - start;
+    logPerformanceMetric("resolveUser_total_ms", duration, { ok: result.ok, mode: options.mode, requestId: resolveRequestId });
+    return result;
+  } catch (error) {
+    const duration = performance.now() - start;
+    logPerformanceMetric("resolveUser_total_ms", duration, { ok: false, error: true, requestId: resolveRequestId });
+    throw error;
+  }
+}
+
+async function _resolveUser(
+  req: NextRequest,
+  options: ResolveUserOptions = { mode: 'protected' },
+  resolveRequestId: string
 ): Promise<AuthResult> {
   const requestId = req.headers.get("x-request-id") || generateRequestId();
   const { client } = detectClient(req);
@@ -37,8 +58,10 @@ export async function resolveUser(
     // A. Priority: Mobile JWT
     const authHeader = req.headers.get("authorization");
     if (authHeader?.startsWith("Bearer ")) {
+      const jwtStart = performance.now();
       const token = authHeader.substring(7);
       const payload = verifyAccessToken(token);
+      logPerformanceMetric("resolveUser_jwt_lookup_ms", performance.now() - jwtStart, { requestId: resolveRequestId });
       if (payload) {
         identity = { id: payload.sub, email: payload.email, provider: 'jwt', dbUuid: payload.sub };
       } else {
@@ -71,11 +94,13 @@ export async function resolveUser(
         }
 
         // Fast-path 2: DB-First Lookup (Checks if already mapped locally, bypassing Clerk API)
+        const dbStart = performance.now();
         const { data: dbUser } = await supabase
           .from("users")
           .select("id, email")
           .eq("clerk_user_id", clerkUserId)
           .maybeSingle();
+        logPerformanceMetric("resolveUser_db_lookup_ms", performance.now() - dbStart, { requestId: resolveRequestId });
 
         if (dbUser) {
           return {
@@ -92,8 +117,10 @@ export async function resolveUser(
 
         // Fallback: Clerk API request (Only on first login before sync is finalized)
         try {
+          const clerkStart = performance.now();
           const clerk = await clerkClient();
           const clerkUser = await clerk.users.getUser(clerkUserId);
+          logPerformanceMetric("resolveUser_clerk_lookup_ms", performance.now() - clerkStart, { requestId: resolveRequestId });
           const primaryEmailObj = clerkUser.emailAddresses.find(e => e.id === clerkUser.primaryEmailAddressId);
           const isPrimaryVerified = primaryEmailObj?.verification?.status === "verified";
           
@@ -160,6 +187,7 @@ export async function resolveUser(
     }
 
     const canonicalEmail = identity.email.toLowerCase().trim();
+    const rpcStart = performance.now();
     const { data: userId, error: syncError } = await supabase.rpc("sync_user_identity", {
       p_email: canonicalEmail,
       p_name: identity.provider === 'clerk' ? 'Clerk User' : 'Mobile User',
@@ -167,6 +195,7 @@ export async function resolveUser(
       p_google_id: null,
       p_password_hash: null,
     });
+    logPerformanceMetric("resolveUser_rpc_ms", performance.now() - rpcStart, { requestId: resolveRequestId });
 
     if (syncError || !userId) {
       logger.error(requestId, "Atomic identity sync failed", syncError);

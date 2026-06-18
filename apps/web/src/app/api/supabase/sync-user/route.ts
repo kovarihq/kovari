@@ -2,6 +2,7 @@ import { auth } from "@clerk/nextjs/server";
 import { createClient } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";
 import * as Sentry from "@sentry/nextjs";
+import { logPerformanceMetric, logInvocation } from "@/lib/observability/performance";
 
 function maskEmail(email: string): string {
   if (!email) return "";
@@ -13,6 +14,20 @@ function maskEmail(email: string): string {
 }
 
 export async function POST() {
+  const start = performance.now();
+  try {
+    const res = await _POST();
+    logPerformanceMetric("sync_user_total_ms", performance.now() - start);
+    return res;
+  } catch (err) {
+    logPerformanceMetric("sync_user_total_ms", performance.now() - start, { error: true });
+    throw err;
+  }
+}
+
+async function _POST() {
+  const syncRequestId = crypto.randomUUID().slice(0, 8);
+  logInvocation("sync_user_invocation", { requestId: syncRequestId });
   const { userId } = await auth();
   if (!userId) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -31,9 +46,11 @@ export async function POST() {
   });
 
   try {
+    const clerkStart = performance.now();
     const { clerkClient } = await import("@clerk/nextjs/server");
     const clerk = await clerkClient();
     const clerkUser = await clerk.users.getUser(userId);
+    logPerformanceMetric("sync_user_clerk_ms", performance.now() - clerkStart, { requestId: syncRequestId });
     const email =
       clerkUser.primaryEmailAddress?.emailAddress ||
       clerkUser.emailAddresses[0]?.emailAddress;
@@ -57,6 +74,7 @@ export async function POST() {
     // ─────────────────────────────────────────────────────────────────────────
 
     // Atomic identity sync (unchanged from your existing logic)
+    const rpcStart = performance.now();
     const { data: userIdFromRpc, error: syncError } = await supabase.rpc(
       "sync_user_identity",
       {
@@ -67,17 +85,20 @@ export async function POST() {
         p_password_hash: null,
       }
     );
+    logPerformanceMetric("sync_user_rpc_ms", performance.now() - rpcStart, { requestId: syncRequestId });
 
     if (syncError) {
       console.error("[api/supabase/sync-user] Identity sync failed:", syncError);
       return NextResponse.json({ error: "Identity resolution failed" }, { status: 500 });
     }
 
+    const dbStart = performance.now();
     const { data: user, error: fetchError } = await supabase
       .from("users")
       .select('id, "isDeleted"')
       .eq("id", userIdFromRpc)
       .single();
+    logPerformanceMetric("sync_user_db_ms", performance.now() - dbStart, { requestId: syncRequestId });
 
     if (fetchError || !user) {
       console.error("[api/supabase/sync-user] Post-sync verification failed", fetchError);

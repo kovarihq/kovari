@@ -7,11 +7,15 @@ import { formatStandardResponse, formatErrorResponse } from "@/lib/api/responseH
 import { ApiErrorCode } from "@/types/api";
 import { logger } from "@/lib/api/logger";
 import { profileMapper } from "@/lib/mappers/profileMapper";
+import { logPerformanceMetric, logInvocation } from "@/lib/observability/performance";
 
 export async function GET(request: NextRequest) {
-  const start = Date.now();
+  const start = performance.now();
   const requestId = generateRequestId();
+  logInvocation("profile_current_invocation", { requestId });
+  const authStart = performance.now();
   const authUser = await getAuthenticatedUser(request);
+  logPerformanceMetric("profile_auth_ms", performance.now() - authStart, { requestId });
   if (!authUser) {
     return formatErrorResponse("Unauthorized", ApiErrorCode.UNAUTHORIZED, requestId, 401);
   }
@@ -23,11 +27,13 @@ export async function GET(request: NextRequest) {
 
   try {
     // 1. Unified Fetch: users + profiles (LEFT JOIN)
+    const queryStart = performance.now();
     const { data: dbUser, error: dbError } = await supabase
       .from("users")
       .select("*, profiles(*)")
       .eq("id", internalUserId)
       .single();
+    logPerformanceMetric("profile_user_query_ms", performance.now() - queryStart, { requestId });
 
     if (dbError || !dbUser) {
       logger.error(requestId, "Core identity not found", dbError);
@@ -42,6 +48,7 @@ export async function GET(request: NextRequest) {
     const hasCompletedOnboarding = Boolean(dbUser.onboarding_completed ?? false);
 
     // Counts are optimized to use single PostgREST count queries with joins filtering deleted users
+    const countStart = performance.now();
     const { count: followersCount } = await supabase
       .from("user_follows")
       .select("follower_id!inner(isDeleted)", { count: "exact", head: true })
@@ -53,6 +60,7 @@ export async function GET(request: NextRequest) {
       .select("following_id!inner(isDeleted)", { count: "exact", head: true })
       .eq("follower_id", internalUserId)
       .eq("following_id.isDeleted", false);
+    logPerformanceMetric("profile_count_query_ms", performance.now() - countStart, { requestId });
 
     // ✅ Map to ProfileResponse (Final Contract)
     const profileData: ProfileResponse = {
@@ -64,12 +72,15 @@ export async function GET(request: NextRequest) {
     };
 
 
+    const serialStart = performance.now();
     const parsed = ProfileResponseSchema.parse(profileData);
+    logPerformanceMetric("profile_serialization_ms", performance.now() - serialStart, { requestId });
+    logPerformanceMetric("profile_total_ms", performance.now() - start, { requestId });
     
     return formatStandardResponse(
       parsed,
       { contractState: 'clean', degraded: false },
-      { requestId, latencyMs: Date.now() - start }
+      { requestId, latencyMs: Math.round(performance.now() - start) }
     );
   } catch (error) {
     logger.error(requestId, "Error in profile fetch", error);

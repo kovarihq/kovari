@@ -2,6 +2,7 @@
 import { Search, Bell, Heart, ChevronRight, CheckCheck } from "lucide-react";
 import { useEffect, useState, useMemo, useCallback } from "react";
 import { useUser } from "@clerk/nextjs";
+import { diagLog } from "@/lib/observability/performance";
 import { useAuthStore } from "@/shared/stores/useAuthStore";
 import {
   Popover,
@@ -178,6 +179,7 @@ export default function Dashboard() {
   } = useNotifications({ limit: 5, unreadOnly: false, realtime: true });
 
   useEffect(() => {
+    diagLog("Dashboard mounted");
     if (isSignedIn && user) setUser(user);
   }, [isSignedIn, user]);
 
@@ -190,12 +192,16 @@ export default function Dashboard() {
   // Fetch profile impressions
   const fetchProfileImpressions = useCallback(async () => {
     if (isSignedIn && user) {
+      diagLog("fetchProfileImpressions triggered");
+      const start = performance.now();
       setImpressionsLoading(true);
       try {
         const res = await fetch("/api/profile-impressions");
         const data = await res.json();
+        diagLog(`fetchProfileImpressions completed in ${Math.round(performance.now() - start)}ms`);
         setProfileImpressions(data.impressions || 0);
       } catch (err) {
+        diagLog(`fetchProfileImpressions failed in ${Math.round(performance.now() - start)}ms`);
         console.error("Error fetching profile impressions:", err);
         setProfileImpressions(0);
       } finally {
