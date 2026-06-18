@@ -92,8 +92,8 @@ const step1Schema = z
       .string()
       .min(3, { message: "Username must be at least 3 characters" })
       .max(32, { message: "Username must be less than 32 characters" })
-      .regex(/^[a-zA-Z0-9_]+$/, {
-        message: "Username can only contain letters, numbers, and underscores",
+      .regex(/^[a-z0-9_]+$/, {
+        message: "Username can only contain lowercase letters, numbers, and underscores",
       }),
     gender: z.string().min(1, { message: "Please select your gender" }),
     birthday: z.date({
@@ -370,12 +370,12 @@ export default function ProfileSetupForm() {
       if (!step1Form.getValues("username")) {
         let suggestedUsername = "";
         if (user.username && !user.username.startsWith("user_")) {
-          suggestedUsername = user.username;
+          suggestedUsername = user.username.toLowerCase();
         } else if (user.firstName) {
-          suggestedUsername = `${user.firstName.toLowerCase().replace(/[^a-z0-9]/g, "")}${Math.floor(10 + Math.random() * 90)}`;
+          suggestedUsername = `${user.firstName.toLowerCase().replace(/[^a-z0-9_]/g, "")}${Math.floor(10 + Math.random() * 90)}`;
         } else if (user.primaryEmailAddress?.emailAddress) {
           const emailPrefix = user.primaryEmailAddress.emailAddress.split("@")[0];
-          suggestedUsername = `${emailPrefix.toLowerCase().replace(/[^a-z0-9]/g, "")}${Math.floor(10 + Math.random() * 90)}`;
+          suggestedUsername = `${emailPrefix.toLowerCase().replace(/[^a-z0-9_]/g, "")}${Math.floor(10 + Math.random() * 90)}`;
         }
         if (suggestedUsername) {
           step1Form.setValue("username", suggestedUsername, { shouldValidate: true });
@@ -1025,6 +1025,7 @@ export default function ProfileSetupForm() {
                       )}
                       autoComplete="username"
                       {...field}
+                      onChange={(e) => field.onChange(e.target.value.toLowerCase())}
                     />
                     <div className="absolute right-2.5 top-2.5 select-none pointer-events-none">
                      {usernameCheckLoading ? (

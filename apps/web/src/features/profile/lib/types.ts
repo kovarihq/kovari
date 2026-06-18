@@ -15,8 +15,8 @@ export const profileEditSchema = z.object({
     .string()
     .min(3, { message: "Username must be at least 3 characters" })
     .max(32, { message: "Username must be less than 32 characters" })
-    .regex(/^[a-zA-Z0-9_]+$/, {
-      message: "Username can only contain letters, numbers, and underscores",
+    .regex(/^[a-z0-9_]+$/, {
+      message: "Username can only contain lowercase letters, numbers, and underscores",
     }),
   age: z
     .number()

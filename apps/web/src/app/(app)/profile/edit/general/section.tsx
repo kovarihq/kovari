@@ -438,7 +438,7 @@ const GeneralSection: React.FC<GeneralSectionProps> = ({
           <SectionRow
             label="Username"
             value={form.watch("username") || "Not set"}
-            onSave={(value) => handleSaveField("username", value as string)}
+            onSave={(value) => handleSaveField("username", (value as string).toLowerCase())}
             fieldType="text"
             error={fieldErrors.username}
             isChecking={usernameCheckLoading}
