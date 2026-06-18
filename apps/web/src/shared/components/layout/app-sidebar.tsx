@@ -168,37 +168,37 @@ export function AppSidebar() {
   const router = useRouter();
   const pathname = usePathname();
   const { state } = useSidebar();
-  const [profilePhotoUrl, setProfilePhotoUrl] = useState<string | null>(null);
+  const [profileData, setProfileData] = useState<any>(null);
   const { open: feedbackOpen, setOpen: setFeedbackOpen } = useFeedback();
 
   useEffect(() => {
-    const fetchProfilePhoto = async () => {
+    const fetchProfileData = async () => {
       if (!user?.id) {
-        setProfilePhotoUrl(null);
+        setProfileData(null);
         return;
       }
       try {
         const res = await fetch("/api/profile/current");
         if (!res.ok) {
-          setProfilePhotoUrl(null);
+          setProfileData(null);
           return;
         }
         const json = await res.json();
-        const avatarUrl = json?.data?.avatar;
-        setProfilePhotoUrl(
-          avatarUrl && avatarUrl.trim() !== "" ? avatarUrl : null,
-        );
+        setProfileData(json?.data || null);
       } catch {
-        setProfilePhotoUrl(null);
+        setProfileData(null);
       }
     };
-    fetchProfilePhoto();
+    fetchProfileData();
   }, [user?.id]);
 
   const avatarSrc =
-    profilePhotoUrl && profilePhotoUrl.trim() !== ""
-      ? profilePhotoUrl
-      : user?.imageUrl || "";
+    profileData?.avatar && profileData.avatar.trim() !== ""
+      ? profileData.avatar
+      : "";
+
+  const displayName = profileData?.name || "Loading...";
+  const displaySubtitle = profileData?.username ? `@${profileData.username}` : "";
 
   const menuItems = [
     // {
@@ -388,16 +388,15 @@ export function AppSidebar() {
                 >
                   <Avatar
                     src={avatarSrc}
-                    alt={user?.fullName || "User"}
+                    alt={displayName}
                     className="h-6 w-6 rounded-full bg-gray-200 aspect-square shrink-0 focus:outline-none"
                   />
                   <div className="grid flex-1 text-left text-sm leading-tight group-data-[collapsible=icon]:hidden">
                     <span className="truncate font-semibold text-xs">
-                      {user?.fullName || "User Name"}
+                      {displayName}
                     </span>
                     <span className="truncate text-xs text-muted-foreground">
-                      {user?.emailAddresses?.[0]?.emailAddress ||
-                        "user@example.com"}
+                      {displaySubtitle}
                     </span>
                   </div>
                   <MoreVertical className="ml-auto size-4 group-data-[collapsible=icon]:hidden" />
