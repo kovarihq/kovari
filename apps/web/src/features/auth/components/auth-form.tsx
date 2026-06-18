@@ -7,7 +7,7 @@ import { Button } from "@/shared/components/ui/button";
 import { Input } from "@/shared/components/ui/input";
 import { Label } from "@/shared/components/ui/label";
 import { Checkbox } from "@/shared/components/ui/checkbox";
-import { Loader2 } from "lucide-react";
+import { Loader2, ArrowLeft } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { Spinner } from "@heroui/react";
 import Image from "next/image";
@@ -395,6 +395,18 @@ export default function AuthForm({ mode }: AuthFormProps) {
           {isSignUp ? "Log in" : "Create one for free"}
         </button>
       </div>
+    </div>
+
+    {/* Back to home — outside the card, inside outer wrapper */}
+    <div className="pt-5 flex justify-center">
+      <button
+        onClick={() => router.push("/")}
+        className="inline-flex items-center gap-1 text-xs text-muted-foreground/70 hover:text-muted-foreground transition-colors duration-200"
+        disabled={isLoading}
+      >
+        <ArrowLeft className="w-3 h-3" />
+        Back to kovari.in
+      </button>
     </div>
     </div>
   );
