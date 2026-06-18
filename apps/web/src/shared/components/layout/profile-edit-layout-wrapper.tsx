@@ -15,13 +15,47 @@ import { MobileBackNav } from "@/shared/components/layout/mobile-back-nav";
 import dynamic from "next/dynamic";
 
 const SectionSkeleton = () => (
-  <div className="space-y-4 p-4">
-    {[1, 2, 3, 4].map((i) => (
-      <div
-        key={i}
-        className="h-12 bg-muted rounded-lg animate-pulse"
-      />
-    ))}
+  <div className="flex flex-col gap-6 p-4 w-full animate-pulse">
+    {/* Title & Description Skeleton */}
+    <div className="flex flex-col gap-2">
+      <div className="h-7 w-48 bg-muted rounded-md" />
+      <div className="h-4 w-72 bg-muted rounded-md" />
+    </div>
+    
+    {/* Separator */}
+    <div className="w-full h-[1px] bg-border my-2" />
+
+    {/* Form Fields Skeleton */}
+    <div className="flex flex-col gap-6">
+      {/* Short input row */}
+      <div className="flex flex-col sm:flex-row gap-4 w-full">
+        <div className="flex flex-col gap-2 flex-1">
+          <div className="h-4 w-20 bg-muted rounded-md" />
+          <div className="h-12 w-full bg-muted rounded-xl" />
+        </div>
+        <div className="flex flex-col gap-2 flex-1">
+          <div className="h-4 w-28 bg-muted rounded-md" />
+          <div className="h-12 w-full bg-muted rounded-xl" />
+        </div>
+      </div>
+      
+      {/* Full width input */}
+      <div className="flex flex-col gap-2 w-full">
+        <div className="h-4 w-24 bg-muted rounded-md" />
+        <div className="h-12 w-full bg-muted rounded-xl" />
+      </div>
+
+      {/* Textarea input */}
+      <div className="flex flex-col gap-2 w-full">
+        <div className="h-4 w-16 bg-muted rounded-md" />
+        <div className="h-28 w-full bg-muted rounded-xl" />
+      </div>
+    </div>
+
+    {/* Save Button Skeleton */}
+    <div className="mt-4 flex justify-end">
+      <div className="h-10 w-28 bg-primary rounded-full" />
+    </div>
   </div>
 );
 
@@ -205,7 +239,7 @@ export default function ProfileEditLayoutWrapper() {
       <MobileBackNav title="Back to Profile" forceHref="/profile" />
 
       {/* Main Content */}
-      <div className={`flex flex-col md:flex-row min-h-[90vh] h-full bg-card text-foreground border-1 border-border rounded-3xl mx-3 mb-6 md:mx-6 ${isMobile ? "border-none" : ""}`}>
+      <div className={`flex flex-col md:flex-row min-h-[90vh] h-full bg-card text-foreground border-1 border-border rounded-3xl mx-3 mb-6 md:mx-6 md:mt-6 ${isMobile ? "border-none" : ""}`}>
         {/* Sidebar (hide on mobile) */}
         {!isMobile && (
           <div className="w-full md:w-1/4 lg:w-1/5 md:border-r-1 border-border h-full flex flex-col self-stretch">
@@ -219,38 +253,38 @@ export default function ProfileEditLayoutWrapper() {
         <div className={`flex-1 flex flex-col md:p-3 md:px-6 gap-2 ${isMobile ? "bg-background rounded-3xl p-2 py-4" : ""}`}>
           {isMobile ? (
             <div className="flex flex-col gap-6">
-              {activeTab === 'general' && <GeneralSection
+              <GeneralSection
                 form={form}
                 isSubmitting={isSubmitting}
                 onSubmit={handleSubmit}
                 profileData={profileData}
                 isLoading={isLoading}
                 updateProfileField={updateProfileField}
-              />}
-              {activeTab === 'professional' && <ProfessionalSection
+              />
+              <ProfessionalSection
                 form={form}
                 isSubmitting={isSubmitting}
                 onSubmit={handleSubmit}
                 profileData={profileData}
                 isLoading={isLoading}
                 updateProfileField={updateProfileField}
-              />}
-              {activeTab === 'personal' && <PersonalSection
+              />
+              <PersonalSection
                 form={form}
                 isSubmitting={isSubmitting}
                 onSubmit={handleSubmit}
                 profileData={profileData}
                 isLoading={isLoading}
                 updateProfileField={updateProfileField}
-              />}
-              {activeTab === 'travel' && <TravelSection
+              />
+              <TravelSection
                 form={form}
                 isSubmitting={isSubmitting}
                 onSubmit={handleSubmit}
                 profileData={profileData}
                 isLoading={isLoading}
                 updateProfileField={updateProfileField}
-              />}
+              />
             </div>
           ) : (
             <SectionContent
