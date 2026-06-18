@@ -1,15 +1,12 @@
-export const dynamic = "force-dynamic";
-export const revalidate = 0;
-export const fetchCache = "force-no-store";
+"use client";
 
+import React, { useEffect, useState } from "react";
 import { UserProfile } from "@/features/profile/components/user-profile";
 import type { UserProfile as UserProfileType } from "@/features/profile/components/user-profile";
-import { createAdminSupabaseClient } from "@kovari/api";
-import { redirect } from "next/navigation";
-import { auth } from "@clerk/nextjs/server";
-import { Suspense } from "react";
+import { useUser } from "@clerk/nextjs";
 import { CardContent } from "@/shared/components/ui/card";
 import { Card, Skeleton } from "@heroui/react";
+import { Button } from "@/shared/components/ui/button";
 
 // Loading component specific to profile page
 const ProfileLoading = () => {
@@ -119,164 +116,89 @@ const ProfileLoading = () => {
   );
 };
 
-// Fetch current user's profile directly from Supabase (SSR)
-const fetchCurrentUserProfile = async (): Promise<UserProfileType | null> => {
-  try {
-    const { userId: clerkUserId } = await auth();
-    if (!clerkUserId) {
-      redirect("/sign-in");
+export default function ProfilePage() {
+  const { isLoaded, isSignedIn } = useUser();
+  const [profile, setProfile] = useState<UserProfileType | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const fetchProfile = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const res = await fetch("/api/profile/current");
+      if (!res.ok) {
+        throw new Error("Failed to load profile from server.");
+      }
+      const json = await res.json();
+      const data = json?.data;
+      if (!data) {
+        throw new Error("Profile data not found in response.");
+      }
+
+      // Map to UserProfileType expected by UserProfile component
+      const mappedProfile: UserProfileType = {
+        name: data.name || "",
+        username: data.username || "",
+        age: data.age ? String(data.age) : "",
+        gender: data.gender || "",
+        nationality: data.nationality || "",
+        profession: data.profession || "",
+        interests: Array.isArray(data.interests) ? data.interests : [],
+        languages: Array.isArray(data.languages) ? data.languages : [],
+        bio: data.bio || "",
+        followers: String(data.followers ?? 0),
+        following: String(data.following ?? 0),
+        likes: "0",
+        coverImage: "",
+        profileImage: data.avatar || "",
+        posts: [],
+        isFollowing: false,
+        isOwnProfile: true,
+        location: data.location || "Surat",
+        religion: data.religion || "Hindu",
+        smoking: data.smoking || "No",
+        drinking: data.drinking || "No",
+        personality: data.personality || "Ambivert",
+        foodPreference: data.foodPreference || "Veg",
+        userId: data.id,
+      };
+
+      setProfile(mappedProfile);
+    } catch (err: any) {
+      console.error("[ERROR] ProfilePage fetch:", err);
+      setError(err?.message || "Unable to load your profile. Please try again.");
+    } finally {
+      setLoading(false);
     }
+  };
 
-    const supabase = createAdminSupabaseClient();
-
-    // Get user UUID from Clerk userId
-    const { data: userRow, error: userError } = await supabase
-      .from("users")
-      .select("id")
-      .eq("clerk_user_id", clerkUserId)
-      .maybeSingle();
-
-    if (userError) {
-      console.error(
-        "Error finding user:",
-        JSON.stringify(userError, null, 2)
-      );
-      return null;
-    } else if (!userRow) {
-      console.warn("Current user not found in database (sync issue?)");
-      return null;
+  useEffect(() => {
+    if (isLoaded && isSignedIn) {
+      fetchProfile();
     }
+  }, [isLoaded, isSignedIn]);
 
-    const userId = userRow.id;
-
-    // 1. Fetch profile (include interests from profiles)
-    const { data: profileData, error: profileError } = await supabase
-      .from("profiles")
-      .select(
-        `name, username, age, gender, nationality, bio, languages, profile_photo, job, interests, location, religion, smoking, drinking, personality, food_preference, birthday, verified`
-      )
-      .eq("user_id", userId)
-      .single();
-
-    if (profileError || !profileData) {
-      console.error("Error fetching profile:", profileError);
-      return null;
-    }
-
-    const interests = profileData?.interests || [];
-
-    // 2. Fetch posts from user_posts
-    // const { data: postsData } = await supabase
-    //   .from("user_posts")
-    //   .select("id, image_url")
-    //   .eq("user_id", userId)
-    //   .order("created_at", { ascending: false });
-
-    // const posts = Array.isArray(postsData) ? postsData : [];
-    const posts: any[] = [];
-
-
-    // 3. Count followers/following (exclude soft-deleted users)
-    // We keep follow rows for history/analytics, so counts must filter deleted accounts.
-    // Optimized follow counts using inner joins to filter deleted users directly in the database
-    const [{ count: followersCount, error: followerErr }, { count: followingCount, error: followingErr }] =
-      await Promise.all([
-        supabase
-          .from("user_follows")
-          .select("follower_id!inner(isDeleted)", { count: "exact", head: true })
-          .eq("following_id", userId)
-          .eq("follower_id.isDeleted", false),
-        supabase
-          .from("user_follows")
-          .select("following_id!inner(isDeleted)", { count: "exact", head: true })
-          .eq("follower_id", userId)
-          .eq("following_id.isDeleted", false)
-      ]);
-
-    if (followerErr || followingErr) {
-      console.error("Error fetching follow counts:", { followerErr, followingErr });
-      return null;
-    }
-
-    // 5. Count posts and sum likes
-    // const { count: postsCount, data: postsLikesData } = await supabase
-    //   .from("user_posts")
-    //   .select("likes", { count: "exact" })
-    //   .eq("user_id", userId);
-
-    const likesSum = 0;
-    //   postsLikesData?.reduce((acc, post) => acc + (post.likes || 0), 0) || 0;
-
-
-    // 6. Map to UserProfileType
-    return {
-      name: profileData.name || "",
-      username: profileData.username || "",
-      age: profileData.age ? String(profileData.age) : "",
-      gender: profileData.gender || "",
-      nationality: profileData.nationality || "",
-      profession: profileData.job || "",
-      interests: Array.isArray(interests) ? interests : [],
-      languages: Array.isArray(profileData.languages)
-        ? profileData.languages
-        : [],
-      bio: profileData.bio || "",
-      followers: String(followersCount ?? 0),
-      following: String(followingCount ?? 0),
-      likes: String(likesSum),
-      coverImage: "", // Not in DB, leave blank
-      profileImage: profileData.profile_photo || "",
-      posts,
-      isFollowing: false, // Always false for own profile
-      isOwnProfile: true, // Always true for own profile
-      location: profileData.location || "Surat",
-      religion: profileData.religion || "Hindu",
-      smoking: profileData.smoking || "No",
-      drinking: profileData.drinking || "No",
-      personality: profileData.personality || "Ambivert",
-      foodPreference: profileData.food_preference || "Veg",
-      userId,
-    };
-  } catch (error) {
-    console.error("Error fetching profile:", error);
-    return null;
+  if (!isLoaded || loading) {
+    return <ProfileLoading />;
   }
-};
 
-export default async function ProfilePage() {
-  return (
-    <Suspense fallback={<ProfileLoading />}>
-      <ProfileContent />
-    </Suspense>
-  );
-}
-
-// Separate component for the actual profile content
-async function ProfileContent() {
-  const profile = await fetchCurrentUserProfile();
-
-  if (!profile) {
+  if (error || !profile) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-[60vh] text-center">
+      <div className="flex flex-col items-center justify-center min-h-[60vh] text-center p-4">
         <h2 className="text-2xl font-semibold mb-2">Profile Not Found</h2>
-        <p className="text-muted-foreground">
-          Unable to load your profile. Please try again.
+        <p className="text-muted-foreground mb-6 max-w-sm">
+          {error || "Unable to load your profile. Please try again."}
         </p>
+        <Button 
+          onClick={fetchProfile}
+          className="bg-primary text-primary-foreground font-semibold px-6 py-2 rounded-lg"
+        >
+          Try Again
+        </Button>
       </div>
     );
   }
 
-  // Add userId to the profile object (we need to get it from the API response)
-  const profileWithUserId = {
-    ...profile,
-    userId: profile.userId || "", // This will be set by the API
-    isOwnProfile: true, // Force true for own profile page
-  };
-
-  // Debug log
-  console.log("[DEBUG] ProfilePage - profileWithUserId:", profileWithUserId);
-
-  return <UserProfile profile={profileWithUserId} />;
+  return <UserProfile profile={profile} />;
 }
-
-

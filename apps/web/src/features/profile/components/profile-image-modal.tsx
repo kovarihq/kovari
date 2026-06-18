@@ -48,7 +48,7 @@ const ProfileImageModal: React.FC<ProfileImageModalProps> = ({
   return (
     <motion.div
       ref={overlayRef}
-      className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 backdrop-blur-md transition-all duration-200"
+      className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 backdrop-blur-md"
       onClick={handleOverlayClick}
       aria-modal="true"
       role="dialog"

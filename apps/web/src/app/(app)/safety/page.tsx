@@ -87,8 +87,8 @@ export default function SafetyPage() {
         const res = await fetch("/api/profile/current");
         if (res.ok) {
           const data = await res.json();
-          // Assuming the API returns a 'verified' field in the profile data
-          setIsVerified(!!data.verified);
+          // Assuming the API returns a 'verified' field in the profile data wrapper
+          setIsVerified(!!data.data?.verified);
         }
       } catch (err) {
         console.error("Failed to fetch profile status:", err);
