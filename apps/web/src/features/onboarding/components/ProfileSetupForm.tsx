@@ -367,20 +367,6 @@ export default function ProfileSetupForm() {
       if (user.lastName && !step1Form.getValues("lastName")) {
         step1Form.setValue("lastName", user.lastName, { shouldValidate: true });
       }
-      if (!step1Form.getValues("username")) {
-        let suggestedUsername = "";
-        if (user.username && !user.username.startsWith("user_")) {
-          suggestedUsername = user.username.toLowerCase();
-        } else if (user.firstName) {
-          suggestedUsername = `${user.firstName.toLowerCase().replace(/[^a-z0-9_]/g, "")}${Math.floor(10 + Math.random() * 90)}`;
-        } else if (user.primaryEmailAddress?.emailAddress) {
-          const emailPrefix = user.primaryEmailAddress.emailAddress.split("@")[0];
-          suggestedUsername = `${emailPrefix.toLowerCase().replace(/[^a-z0-9_]/g, "")}${Math.floor(10 + Math.random() * 90)}`;
-        }
-        if (suggestedUsername) {
-          step1Form.setValue("username", suggestedUsername, { shouldValidate: true });
-        }
-      }
     }
   }, [user, step1Form]);
 
