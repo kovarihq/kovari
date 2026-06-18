@@ -42,6 +42,7 @@ import {
   useSidebar,
   SidebarTrigger,
 } from "@/shared/components/ui/sidebar";
+import { Skeleton } from "@/shared/components/ui/skeleton";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -169,24 +170,30 @@ export function AppSidebar() {
   const pathname = usePathname();
   const { state } = useSidebar();
   const [profileData, setProfileData] = useState<any>(null);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
   const { open: feedbackOpen, setOpen: setFeedbackOpen } = useFeedback();
 
   useEffect(() => {
     const fetchProfileData = async () => {
+      setIsLoading(true);
       if (!user?.id) {
         setProfileData(null);
+        setIsLoading(false);
         return;
       }
       try {
         const res = await fetch("/api/profile/current");
         if (!res.ok) {
           setProfileData(null);
+          setIsLoading(false);
           return;
         }
         const json = await res.json();
         setProfileData(json?.data || null);
       } catch {
         setProfileData(null);
+      } finally {
+        setIsLoading(false);
       }
     };
     fetchProfileData();
@@ -197,7 +204,7 @@ export function AppSidebar() {
       ? profileData.avatar
       : "";
 
-  const displayName = profileData?.name || "Loading...";
+  const displayName = profileData?.name || "User";
   const displaySubtitle = profileData?.username ? `@${profileData.username}` : "";
 
   const menuItems = [
@@ -386,20 +393,33 @@ export function AppSidebar() {
                   size="lg"
                   className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground group-data-[collapsible=icon]:!p-0 group-data-[collapsible=icon]:!size-8 group-data-[collapsible=icon]:justify-center focus:ring-0 focus:outline-none focus-visible:ring-0 focus-visible:outline-none active:outline-none"
                 >
-                  <Avatar
-                    src={avatarSrc}
-                    alt={displayName}
-                    className="h-6 w-6 rounded-full bg-gray-200 aspect-square shrink-0 focus:outline-none"
-                  />
-                  <div className="grid flex-1 text-left text-sm leading-tight group-data-[collapsible=icon]:hidden">
-                    <span className="truncate font-semibold text-xs">
-                      {displayName}
-                    </span>
-                    <span className="truncate text-xs text-muted-foreground">
-                      {displaySubtitle}
-                    </span>
-                  </div>
-                  <MoreVertical className="ml-auto size-4 group-data-[collapsible=icon]:hidden" />
+                  {isLoading ? (
+                    <>
+                      <Skeleton className="h-6 w-6 rounded-full shrink-0 bg-muted" />
+                      <div className="grid flex-1 gap-1 text-left text-sm leading-tight group-data-[collapsible=icon]:hidden">
+                        <Skeleton className="h-2 w-20 bg-muted" />
+                        <Skeleton className="h-2 w-16 bg-muted" />
+                      </div>
+                      <MoreVertical className="ml-auto size-4 group-data-[collapsible=icon]:hidden opacity-50" />
+                    </>
+                  ) : (
+                    <>
+                      <Avatar
+                        src={avatarSrc}
+                        alt={displayName}
+                        className="h-6 w-6 rounded-full bg-gray-200 aspect-square shrink-0 focus:outline-none"
+                      />
+                      <div className="grid flex-1 text-left text-sm leading-tight group-data-[collapsible=icon]:hidden">
+                        <span className="truncate font-semibold text-xs">
+                          {displayName}
+                        </span>
+                        <span className="truncate text-xs text-muted-foreground">
+                          {displaySubtitle}
+                        </span>
+                      </div>
+                      <MoreVertical className="ml-auto size-4 group-data-[collapsible=icon]:hidden" />
+                    </>
+                  )}
                 </SidebarMenuButton>
               </DropdownMenuTrigger>
               <DropdownMenuContent
