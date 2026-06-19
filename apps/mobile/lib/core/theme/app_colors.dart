@@ -7,30 +7,31 @@ class AppColors {
   static const Color primaryLight = Color(0xFFE4EAFF);
   static const Color primaryForeground = Colors.white;
 
-  static const Color secondary = Color(0xFFF1F5F9);
+  static const Color secondary = Color(0xFFf2f2f7);
   static const Color secondaryForeground = Color(0xFF0F172A);
 
   static const Color accent = Color(0xFF34C759);
   static const Color destructive = Color(0xFFF31260);
 
   // --- Theme Specific (Light) ---
-  static const Color background = Color(0xFFF8F9FC);
-  static const Color card = Colors.white;
-  static const Color elevated = Colors.white;
-  static const Color foreground = Color(0xFF0F172A);
-  static const Color muted = Color(0xFFF1F5F9);
-  static const Color mutedForeground = Color(0xFF64748B);
-  static const Color border = Color(0xFFE2E8F0);
-  static const Color input = Color(0xFFF1F5F9);
+  static const Color background = Color(0xFFF9FAFB);
+  static const Color card = Color(0xFFFFFFFF);
+  static const Color elevated = Color(0xFFFFFFFF);
+  static const Color foreground = Color(0xFF1C1C1E);
+  static const Color muted = Color(0xFFD1D5DB);
+  static const Color mutedForeground = Color(0xFF4B5563);
+  static const Color border = Color(0xFFE5E7EB);
+  static const Color input = Color(0xFFD1D5DB);
 
   // --- Theme Specific (Dark) ---
   static const Color backgroundDark = Color(0xFF000000);
-  static const Color cardDark = Color.fromARGB(255, 10, 10, 13);
-  static const Color elevatedDark = Color.fromARGB(255, 10, 10, 13);
+  static const Color secondaryDark = Color(0xFF11151C);
+  static const Color cardDark = Color(0xFF0A0A0D);
+  static const Color elevatedDark = Color(0xFF0A0A0D);
   static const Color foregroundDark = Color(0xFFF8FAFC);
-  static const Color mutedDark = Color.fromARGB(255, 17, 21, 28);
-  static const Color mutedForegroundDark = Color.fromARGB(255, 158, 170, 188);
-  static const Color borderDark = Color.fromARGB(255, 17, 21, 28);
+  static const Color mutedDark = Color(0xFF11151C);
+  static const Color mutedForegroundDark = Color(0xFF9EAABC);
+  static const Color borderDark = Color(0xFF11151C);
   static const Color inputDark = Color(0xFF0F172A);
 
   // --- Dynamic Resolution (Context-Aware) ---
@@ -39,7 +40,8 @@ class AppColors {
       Theme.of(context).brightness == Brightness.dark;
 
   /// Returns the appropriate background color based on the context theme.
-  static Color backgroundColor(BuildContext context) => isDark(context) ? backgroundDark : background;
+  static Color backgroundColor(BuildContext context) =>
+      isDark(context) ? backgroundDark : background;
 
   /// Returns the appropriate surface color based on the context theme.
   static Color surface(BuildContext context, {int level = 0}) {
@@ -59,10 +61,20 @@ class AppColors {
   }
 
   /// Returns the standard border color for the current theme.
-  static Color borderColor(BuildContext context) => Theme.of(context).colorScheme.outline;
+  static Color borderColor(BuildContext context) =>
+      Theme.of(context).colorScheme.outline;
 
   /// Returns the muted background color for the current theme.
-  static Color mutedColor(BuildContext context) => isDark(context) ? mutedDark : AppColors.muted;
+  static Color mutedColor(BuildContext context) =>
+      isDark(context) ? mutedDark : AppColors.muted;
+
+  /// Returns the muted foreground color for the current theme.
+  static Color mutedForegroundColor(BuildContext context) =>
+      isDark(context) ? mutedForegroundDark : AppColors.mutedForeground;
+
+  /// Returns the secondary color for the current theme.
+  static Color secondaryColor(BuildContext context) =>
+      isDark(context) ? secondaryDark : AppColors.secondary;
 
   /// Returns the input background color for the current theme.
   static Color inputColor(BuildContext context) {
@@ -70,7 +82,9 @@ class AppColors {
     return dark ? inputDark : AppColors.input;
   }
 
-  static Color cardColor(BuildContext context) => isDark(context) ? cardDark : card;
+  static Color cardColor(BuildContext context) =>
+      isDark(context) ? cardDark : card;
 
-  static Color elevatedColor(BuildContext context) => isDark(context) ? elevatedDark : elevated;
+  static Color elevatedColor(BuildContext context) =>
+      isDark(context) ? elevatedDark : elevated;
 }

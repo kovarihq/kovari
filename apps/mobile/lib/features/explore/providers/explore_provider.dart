@@ -10,9 +10,35 @@ import 'package:mobile/shared/models/kovari_user.dart';
 
 class ExploreNotifier extends Notifier<ExploreState> {
   @override
-  ExploreState build() => ExploreState.initial();
+  ExploreState build() {
+    final cache = ref.read(localCacheProvider);
+    final initialSearch = SearchData(
+      destination: '',
+      budget: 20000,
+      startDate: DateTime.now(),
+      endDate: DateTime.now().add(const Duration(days: 4)),
+      travelMode: TravelMode.solo,
+    );
+    final initialFilters = ExploreFilters.initial();
 
+    final cacheKey =
+        'matches_${initialSearch.travelMode.name}_${initialSearch.destination}';
+    List<dynamic>? cachedMatches;
+    try {
+      cachedMatches = cache.getEntities(cacheKey);
+    } catch (_) {}
 
+    return ExploreState(
+      searchData: initialSearch,
+      filters: initialFilters,
+      matches: cachedMatches ?? [],
+      currentIndex: 0,
+      isLoading: false,
+      hasSearched: cachedMatches != null && cachedMatches.isNotEmpty,
+      page: 1,
+      hasMore: true,
+    );
+  }
 
   ExploreService get _service => ref.read(exploreServiceProvider);
   MatchService get _matchService => ref.read(matchServiceProvider);
@@ -29,12 +55,50 @@ class ExploreNotifier extends Notifier<ExploreState> {
   }
 
   void setTravelMode(TravelMode mode) {
+    final cache = ref.read(localCacheProvider);
+    final cacheKey = 'matches_${mode.name}_${state.searchData.destination}';
+    List<dynamic>? cached;
+    try {
+      cached = cache.getEntities(cacheKey);
+    } catch (_) {}
+
     state = state.copyWith(
       searchData: state.searchData.copyWith(travelMode: mode),
-      hasSearched: false,
-      matches: [],
+      hasSearched: cached != null && cached.isNotEmpty,
+      matches: cached ?? [],
       currentIndex: 0,
+      page: 1,
+      hasMore: true,
     );
+
+    performSearch(isSilent: cached != null && cached.isNotEmpty);
+  }
+
+  void searchWithoutDestination() {
+    final defaultFilters = ExploreFilters.initial();
+    final updatedSearch = state.searchData.copyWith(
+      destination: '',
+      destinationDetails: null,
+    );
+
+    final cache = ref.read(localCacheProvider);
+    final cacheKey = 'matches_${updatedSearch.travelMode.name}_';
+    List<dynamic>? cached;
+    try {
+      cached = cache.getEntities(cacheKey);
+    } catch (_) {}
+
+    state = state.copyWith(
+      searchData: updatedSearch,
+      filters: defaultFilters,
+      matches: cached ?? [],
+      currentIndex: 0,
+      page: 1,
+      hasMore: true,
+      hasSearched: cached != null && cached.isNotEmpty,
+    );
+
+    performSearch(isSilent: cached != null && cached.isNotEmpty);
   }
 
   Future<void> performSearch({
@@ -202,4 +266,6 @@ class ExploreNotifier extends Notifier<ExploreState> {
   }
 }
 
-final exploreProvider = NotifierProvider<ExploreNotifier, ExploreState>(ExploreNotifier.new);
+final exploreProvider = NotifierProvider<ExploreNotifier, ExploreState>(
+  ExploreNotifier.new,
+);

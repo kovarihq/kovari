@@ -11,334 +11,585 @@ import 'package:mobile/shared/widgets/app_card.dart';
 import 'package:mobile/shared/widgets/primary_button.dart';
 import 'package:mobile/shared/widgets/secondary_button.dart';
 
-class SoloMatchCard extends ConsumerWidget {
-
+class SoloMatchCard extends ConsumerStatefulWidget {
   const SoloMatchCard({super.key, required this.match});
   final MatchUser match;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<SoloMatchCard> createState() => _SoloMatchCardState();
+}
+
+class _SoloMatchCardState extends ConsumerState<SoloMatchCard> {
+  String _activeTab = 'left';
+
+  bool _isPreferNotToSay(String? val) {
+    if (val == null) return false;
+    final clean = val.toLowerCase().replaceAll('_', ' ');
+    return clean == 'prefer not to say';
+  }
+
+  String _formatDateRange() {
+    if (widget.match.startDate == null || widget.match.endDate == null)
+      return '';
+    final start = DateFormat('MMM d').format(widget.match.startDate!);
+    final end = DateFormat('MMM d, yyyy').format(widget.match.endDate!);
+    return "$start - $end";
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final match = widget.match;
     final name = match.name;
     final age = match.age;
     final bio = match.bio;
 
-    final startDate = match.startDate;
-    final endDate = match.endDate;
+    final hasTripDetails =
+        match.destination.isNotEmpty &&
+        match.destination != 'Global' &&
+        match.destination != 'Any';
 
-    String? dateRange;
-    int? tripLength;
-    if (startDate != null && endDate != null) {
-      dateRange =
-          "${DateFormat('MMM d').format(startDate)} - ${DateFormat('MMM d, yyyy').format(endDate)}";
-      tripLength = endDate.difference(startDate).inDays + 1;
-    }
+    final locationDisplay = match.location.isNotEmpty
+        ? match.location.split(',')[0].trim()
+        : 'Unknown';
 
     return AppCard(
-      padding: EdgeInsets.zero,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       borderRadius: BorderRadius.circular(24),
       border: const Border(),
       boxShadow: const [],
-      child: Column(
-        children: [
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Mobile Header Section
-              Padding(
-                padding: const EdgeInsets.only(left: 20, right: 20, top: 12),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    AspectRatio(
-                      aspectRatio: 1 / 1,
-                      child: Container(
-                        decoration: BoxDecoration(
-                          color: AppColors.surface(context, level: 2),
-                          borderRadius: BorderRadius.circular(16),
-                        ),
-                        clipBehavior: Clip.antiAlias,
-                        child: match.image.isNotEmpty
-                            ? CachedNetworkImage(
-                                imageUrl: match.image,
-                                fit: BoxFit.cover,
-                                placeholder: (context, url) =>
-                                    const UserAvatarFallback(
-                                      shape: BoxShape.rectangle,
-                                      borderRadius: BorderRadius.all(
-                                        Radius.circular(16),
-                                      ),
-                                      size: 100,
-                                    ),
-                                errorWidget: (context, url, dynamic error) =>
-                                    UserAvatarFallback(
-                                      name: match.name,
-                                      backgroundColor: AppColors.primary
-                                          .withValues(alpha: 0.1),
-                                      iconColor: AppColors.primary,
-                                      shape: BoxShape.rectangle,
-                                      borderRadius: BorderRadius.circular(16),
-                                      fontSize: 64,
-                                    ),
-                              )
-                            : UserAvatarFallback(
-                                shape: BoxShape.rectangle,
+      child: GestureDetector(
+        onHorizontalDragEnd: (details) {
+          if (details.primaryVelocity == null) return;
+          if (details.primaryVelocity! < 0) {
+            if (_activeTab == 'left') {
+              setState(() => _activeTab = 'right');
+            }
+          } else if (details.primaryVelocity! > 0) {
+            if (_activeTab == 'right') {
+              setState(() => _activeTab = 'left');
+            }
+          }
+        },
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Story Indicators
+            Row(
+              children: [
+                Expanded(
+                  child: GestureDetector(
+                    onTap: () => setState(() => _activeTab = 'left'),
+                    child: Container(
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color: _activeTab == 'left'
+                            ? AppColors.mutedColor(context)
+                            : AppColors.secondaryColor(context),
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: GestureDetector(
+                    onTap: () => setState(() => _activeTab = 'right'),
+                    child: Container(
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color: _activeTab == 'right'
+                            ? AppColors.mutedColor(context)
+                            : AppColors.secondaryColor(context),
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+
+            // Name, Age, Location Header
+            Text(
+              name,
+              style: AppTextStyles.h3.copyWith(
+                fontWeight: FontWeight.w800,
+                color: AppColors.text(context),
+              ),
+            ),
+            Text(
+              age != null ? '$age, $locationDisplay' : locationDisplay,
+              style: AppTextStyles.bodyMedium.copyWith(
+                fontWeight: FontWeight.w500,
+                color: AppColors.text(context, isMuted: true),
+              ),
+            ),
+            const SizedBox(height: 12),
+
+            // Active Tab Content
+            Expanded(
+              child: SingleChildScrollView(
+                physics: const BouncingScrollPhysics(),
+                child: _activeTab == 'left'
+                    ? Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          // Avatar (Centered & Aspect Ratio 1:1)
+                          Center(
+                            child: Container(
+                              width: double.infinity,
+                              constraints: const BoxConstraints(maxHeight: 350),
+                              decoration: BoxDecoration(
+                                color: AppColors.surface(context, level: 2),
                                 borderRadius: BorderRadius.circular(16),
-                                size: 100,
+                                border: Border.all(
+                                  color: AppColors.borderColor(context),
+                                ),
                               ),
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    Text(
-                      age != null ? '$name, $age' : name,
-                      style: AppTextStyles.h3.copyWith(
-                        color: AppColors.text(context),
-                      ),
-                    ),
+                              clipBehavior: Clip.antiAlias,
+                              child: AspectRatio(
+                                aspectRatio: 1 / 1,
+                                child: match.image.isNotEmpty
+                                    ? CachedNetworkImage(
+                                        imageUrl: match.image,
+                                        fit: BoxFit.cover,
+                                        placeholder: (context, url) =>
+                                            const UserAvatarFallback(
+                                              shape: BoxShape.rectangle,
+                                              borderRadius: BorderRadius.all(
+                                                Radius.circular(16),
+                                              ),
+                                              size: 100,
+                                            ),
+                                        errorWidget:
+                                            (context, url, dynamic error) =>
+                                                UserAvatarFallback(
+                                                  name: match.name,
+                                                  backgroundColor: AppColors
+                                                      .primary
+                                                      .withValues(alpha: 0.1),
+                                                  iconColor: AppColors.primary,
+                                                  shape: BoxShape.rectangle,
+                                                  borderRadius:
+                                                      BorderRadius.circular(16),
+                                                  fontSize: 64,
+                                                ),
+                                      )
+                                    : UserAvatarFallback(
+                                        shape: BoxShape.rectangle,
+                                        borderRadius: BorderRadius.circular(16),
+                                        size: 100,
+                                      ),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 16),
 
-                    const SizedBox(height: 4),
-                    Text(
-                      (bio != null && bio.isNotEmpty)
-                          ? bio
-                          : 'No bio provided.',
-                      style: AppTextStyles.bodyMedium.copyWith(
-                        color: AppColors.text(context, isMuted: true),
-                        fontStyle: (bio != null && bio.isNotEmpty)
-                            ? FontStyle.normal
-                            : FontStyle.italic,
+                          // Match Percentage
+                          if (match.score != null) ...[
+                            Row(
+                              crossAxisAlignment: CrossAxisAlignment.baseline,
+                              textBaseline: TextBaseline.alphabetic,
+                              children: [
+                                Text(
+                                  '${(match.score! <= 1 ? match.score! * 100 : match.score!).round()}%',
+                                  style: AppTextStyles.h2.copyWith(
+                                    fontWeight: FontWeight.bold,
+                                    color: AppColors.text(context),
+                                  ),
+                                ),
+                                const SizedBox(width: 6),
+                                Text(
+                                  'similar',
+                                  style: AppTextStyles.bodyMedium.copyWith(
+                                    fontWeight: FontWeight.bold,
+                                    color: AppColors.text(context),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 12),
+                          ],
+
+                          // Interests (Wrapped Tags)
+                          Wrap(
+                            spacing: 8,
+                            runSpacing: 8,
+                            children: match.interests.take(4).map((interest) {
+                              return Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 14,
+                                  vertical: 6,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: AppColors.secondaryColor(context),
+                                  border: Border.all(
+                                    color: AppColors.borderColor(context),
+                                  ),
+                                  borderRadius: BorderRadius.circular(20),
+                                ),
+                                child: Text(
+                                  interest.isNotEmpty
+                                      ? interest[0].toUpperCase() +
+                                            interest.substring(1)
+                                      : interest,
+                                  style: AppTextStyles.bodySmall.copyWith(
+                                    fontWeight: FontWeight.w600,
+                                    color: AppColors.text(context),
+                                  ),
+                                ),
+                              );
+                            }).toList(),
+                          ),
+                        ],
+                      )
+                    : Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          // Wants to Visit (Travel Intentions)
+                          if (match.travelIntentions.isNotEmpty) ...[
+                            _buildGroupedSection(
+                              title: 'Wants to visit',
+                              content: Wrap(
+                                spacing: 8,
+                                runSpacing: 4,
+                                children: [
+                                  for (
+                                    var i = 0;
+                                    i < match.travelIntentions.length;
+                                    i++
+                                  ) ...[
+                                    if (i > 0)
+                                      Text(
+                                        '•',
+                                        style: AppTextStyles.bodyMedium
+                                            .copyWith(
+                                              color: AppColors.text(
+                                                context,
+                                                isMuted: true,
+                                              ),
+                                            ),
+                                      ),
+                                    Text(
+                                      match.travelIntentions[i]['destination']
+                                              ?.toString() ??
+                                          '',
+                                      style: AppTextStyles.bodyMedium.copyWith(
+                                        fontWeight: FontWeight.bold,
+                                        color: AppColors.text(context),
+                                      ),
+                                    ),
+                                  ],
+                                ],
+                              ),
+                            ),
+                            const SizedBox(height: 12),
+                          ],
+
+                          // Trip Details
+                          if (hasTripDetails) ...[
+                            _buildGroupedSection(
+                              title: 'Trip Details',
+                              content: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    "${match.destination.split(',')[0].trim()} • ₹${NumberFormat.decimalPattern('en_IN').format(match.budget ?? 0)}",
+                                    style: AppTextStyles.bodyMedium.copyWith(
+                                      fontWeight: FontWeight.bold,
+                                      color: AppColors.text(context),
+                                    ),
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    _formatDateRange(),
+                                    style: AppTextStyles.bodyMedium.copyWith(
+                                      fontWeight: FontWeight.bold,
+                                      color: AppColors.text(context),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(height: 12),
+                          ],
+
+                          // About Me
+                          _buildGroupedSection(
+                            title: 'About Me',
+                            content: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                if (match.gender != null &&
+                                    !_isPreferNotToSay(match.gender)) ...[
+                                  Text(
+                                    match.gender![0].toUpperCase() +
+                                        match.gender!.substring(1),
+                                    style: AppTextStyles.bodyMedium.copyWith(
+                                      fontWeight: FontWeight.bold,
+                                      color: AppColors.text(context),
+                                    ),
+                                  ),
+                                  const SizedBox(height: 4),
+                                ],
+                                (() {
+                                  final items =
+                                      [
+                                            if (match.profession != null &&
+                                                !_isPreferNotToSay(
+                                                  match.profession,
+                                                ))
+                                              match.profession!
+                                                  .replaceAll('_', ' ')
+                                                  .trim(),
+                                            if (match.religion != null &&
+                                                !_isPreferNotToSay(
+                                                  match.religion,
+                                                ))
+                                              match.religion!.trim(),
+                                            if (match.personality != null &&
+                                                !_isPreferNotToSay(
+                                                  match.personality,
+                                                ))
+                                              match.personality!.trim(),
+                                          ]
+                                          .map(
+                                            (item) =>
+                                                item[0].toUpperCase() +
+                                                item.substring(1),
+                                          )
+                                          .toList();
+
+                                  if (items.isEmpty)
+                                    return const SizedBox.shrink();
+
+                                  return Wrap(
+                                    spacing: 8,
+                                    runSpacing: 4,
+                                    children: [
+                                      for (
+                                        var i = 0;
+                                        i < items.length;
+                                        i++
+                                      ) ...[
+                                        if (i > 0)
+                                          Text(
+                                            '•',
+                                            style: AppTextStyles.bodyMedium
+                                                .copyWith(
+                                                  color: AppColors.text(
+                                                    context,
+                                                    isMuted: true,
+                                                  ),
+                                                ),
+                                          ),
+                                        Text(
+                                          items[i],
+                                          style: AppTextStyles.bodyMedium
+                                              .copyWith(
+                                                fontWeight: FontWeight.bold,
+                                                color: AppColors.text(context),
+                                              ),
+                                        ),
+                                      ],
+                                    ],
+                                  );
+                                })(),
+                                if (match.languages.isNotEmpty) ...[
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    match.languages.join(', '),
+                                    style: AppTextStyles.bodyMedium.copyWith(
+                                      fontWeight: FontWeight.bold,
+                                      color: AppColors.text(context),
+                                    ),
+                                  ),
+                                ],
+                                if (bio != null && bio.isNotEmpty) ...[
+                                  const SizedBox(height: 6),
+                                  Text(
+                                    bio,
+                                    style: AppTextStyles.bodyMedium.copyWith(
+                                      color: AppColors.text(
+                                        context,
+                                        isMuted: true,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+
+                          // My Interests
+                          if (match.interests.isNotEmpty) ...[
+                            _buildGroupedSection(
+                              title: 'My Interests',
+                              content: Wrap(
+                                spacing: 8,
+                                runSpacing: 4,
+                                children: [
+                                  for (
+                                    var i = 0;
+                                    i < match.interests.length;
+                                    i++
+                                  ) ...[
+                                    if (i > 0)
+                                      Text(
+                                        '•',
+                                        style: AppTextStyles.bodyMedium
+                                            .copyWith(
+                                              color: AppColors.text(
+                                                context,
+                                                isMuted: true,
+                                              ),
+                                            ),
+                                      ),
+                                    Text(
+                                      match.interests[i][0].toUpperCase() +
+                                          match.interests[i].substring(1),
+                                      style: AppTextStyles.bodyMedium.copyWith(
+                                        fontWeight: FontWeight.bold,
+                                        color: AppColors.text(context),
+                                      ),
+                                    ),
+                                  ],
+                                ],
+                              ),
+                            ),
+                            const SizedBox(height: 12),
+                          ],
+
+                          // Lifestyle
+                          if ((match.foodPreference != null &&
+                                  !_isPreferNotToSay(match.foodPreference)) ||
+                              (match.smoking != null &&
+                                  !_isPreferNotToSay(match.smoking)) ||
+                              (match.drinking != null &&
+                                  !_isPreferNotToSay(match.drinking))) ...[
+                            _buildGroupedSection(
+                              title: 'Lifestyle',
+                              content: (() {
+                                final foodText =
+                                    match.foodPreference != null &&
+                                        !_isPreferNotToSay(match.foodPreference)
+                                    ? match.foodPreference!.replaceAll('_', ' ')
+                                    : null;
+                                final smokingText =
+                                    match.smoking != null &&
+                                        !_isPreferNotToSay(match.smoking)
+                                    ? "Smoking: ${match.smoking}"
+                                    : null;
+                                final drinkingText =
+                                    match.drinking != null &&
+                                        !_isPreferNotToSay(match.drinking)
+                                    ? "Drinking: ${match.drinking}"
+                                    : null;
+
+                                final items =
+                                    [foodText, smokingText, drinkingText]
+                                        .whereType<String>()
+                                        .map(
+                                          (s) =>
+                                              s[0].toUpperCase() +
+                                              s.substring(1),
+                                        )
+                                        .toList();
+
+                                return Wrap(
+                                  spacing: 8,
+                                  runSpacing: 4,
+                                  children: [
+                                    for (var i = 0; i < items.length; i++) ...[
+                                      if (i > 0)
+                                        Text(
+                                          '•',
+                                          style: AppTextStyles.bodyMedium
+                                              .copyWith(
+                                                color: AppColors.text(
+                                                  context,
+                                                  isMuted: true,
+                                                ),
+                                              ),
+                                        ),
+                                      Text(
+                                        items[i],
+                                        style: AppTextStyles.bodyMedium
+                                            .copyWith(
+                                              fontWeight: FontWeight.bold,
+                                              color: AppColors.text(context),
+                                            ),
+                                      ),
+                                    ],
+                                  ],
+                                );
+                              })(),
+                            ),
+                          ],
+                        ],
                       ),
-                    ),
-                    const SizedBox(height: 8),
-                  ],
+              ),
+            ),
+
+            // Actions Row
+            const SizedBox(height: 14),
+            Row(
+              children: [
+                Expanded(
+                  child: PrimaryButton(
+                    text: 'Connect',
+                    height: 48,
+                    borderRadius: 16,
+                    onPressed: () => ref
+                        .read(exploreProvider.notifier)
+                        .handleInterested(match.id),
+                  ),
                 ),
-              ),
-              Divider(
-                indent: 20,
-                endIndent: 20,
-                color: AppColors.borderColor(context),
-              ),
-
-              // Content Sections
-              Padding(
-                padding: const EdgeInsets.all(20),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    _buildSectionTitle(context, 'Trip Details'),
-                    _buildPillList(context, [
-                      if (match.destination.isNotEmpty)
-                        _PillData(
-                          icon: Icons.location_on_outlined,
-                          label: match.destination.split(',')[0],
-                        ),
-                      if (dateRange != null)
-                        _PillData(
-                          icon: Icons.calendar_today_outlined,
-                          label: dateRange,
-                        ),
-                      if (tripLength != null)
-                        _PillData(
-                          icon: Icons.calendar_today_outlined,
-                          label: '$tripLength days',
-                        ),
-                      if (match.budget != null && match.budget! > 0)
-                        _PillData(
-                          icon: Icons.currency_rupee,
-                          label: NumberFormat.decimalPattern(
-                            'en_IN',
-                          ).format(match.budget),
-                        ),
-                    ]),
-
-                    const SizedBox(height: 24),
-
-                    _buildSectionTitle(context, 'About Me'),
-                    _buildPillList(context, [
-                      if (match.gender != null && match.gender!.isNotEmpty)
-                        _PillData(
-                          icon: Icons.account_circle_outlined,
-                          label:
-                              match.gender![0].toUpperCase() +
-                              match.gender!.substring(1),
-                        ),
-                      if (match.nationality != null &&
-                          match.nationality!.isNotEmpty)
-                        _PillData(
-                          icon: Icons.language,
-                          label: match.nationality ?? '',
-                        ),
-                      if (match.location.isNotEmpty)
-                        _PillData(
-                          icon: Icons.home_outlined,
-                          label: match.location,
-                        ),
-                      if (match.profession != null &&
-                          match.profession!.isNotEmpty)
-                        _PillData(
-                          icon:
-                              match.profession!.toLowerCase().contains(
-                                'student',
-                              )
-                              ? Icons.school_outlined
-                              : Icons.work_outline,
-                          label:
-                              match.profession![0].toUpperCase() +
-                              match.profession!.substring(1),
-                        ),
-                      if (match.personality != null &&
-                          match.personality!.isNotEmpty)
-                        _PillData(
-                          icon: Icons.menu_book_outlined,
-                          label: match.personality ?? '',
-                        ),
-                      if (match.religion != null && match.religion!.isNotEmpty)
-                        _PillData(
-                          icon: Icons.collections_bookmark_outlined,
-                          label: match.religion ?? '',
-                        ),
-
-                      ...match.languages.map(
-                        (lang) => _PillData(
-                          icon: Icons.chat_bubble_outline,
-                          label: lang,
-                        ),
-                      ),
-                    ]),
-
-                    const SizedBox(height: 24),
-
-                    if (match.interests.isNotEmpty) ...[
-                      _buildSectionTitle(context, 'My Interests'),
-
-                      _buildPillList(
-                        context,
-                        match.interests
-                            .map((i) => _PillData(label: i))
-                            .toList(),
-                      ),
-                      const SizedBox(height: 24),
-                    ],
-
-                    if ((match.foodPreference != null &&
-                            match.foodPreference!.isNotEmpty) ||
-                        (match.smoking != null && match.smoking!.isNotEmpty) ||
-                        (match.drinking != null &&
-                            match.drinking!.isNotEmpty)) ...[
-                      _buildSectionTitle(context, 'Lifestyle'),
-                      _buildPillList(context, [
-                        if (match.foodPreference != null &&
-                            match.foodPreference!.isNotEmpty)
-                          _PillData(
-                            icon: Icons.restaurant,
-                            label: match.foodPreference!,
-                          ),
-                        if (match.smoking != null && match.smoking!.isNotEmpty)
-                          _PillData(
-                            icon: Icons.smoking_rooms,
-                            label:
-                                match.smoking![0].toUpperCase() +
-                                match.smoking!.substring(1),
-                          ),
-                        if (match.drinking != null &&
-                            match.drinking!.isNotEmpty)
-                          _PillData(
-                            icon: Icons.local_bar,
-                            label:
-                                match.drinking![0].toUpperCase() +
-                                match.drinking!.substring(1),
-                          ),
-                      ]),
-                    ],
-                  ],
+                const SizedBox(width: 12),
+                Expanded(
+                  child: SecondaryButton(
+                    text: 'Skip',
+                    height: 48,
+                    borderRadius: 16,
+                    onPressed: () =>
+                        ref.read(exploreProvider.notifier).handlePass(match.id),
+                  ),
                 ),
-              ),
-              Divider(
-                indent: 20,
-                endIndent: 20,
-                color: AppColors.borderColor(context),
-              ),
-              _buildActions(ref, match.id),
-            ],
-          ),
-        ],
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }
 
-  Widget _buildSectionTitle(BuildContext context, String title) => Padding(
-      padding: const EdgeInsets.only(bottom: 16),
-      child: Text(
-        title.toUpperCase(),
-        style: AppTextStyles.bodySmall.copyWith(
-          fontWeight: FontWeight.bold,
-          color: AppColors.text(context, isMuted: true),
-          letterSpacing: 1.2,
-        ),
+  Widget _buildGroupedSection({
+    required String title,
+    required Widget content,
+  }) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: AppColors.secondaryColor(context),
+        borderRadius: BorderRadius.circular(16),
       ),
-    );
-
-  Widget _buildPillList(BuildContext context, List<_PillData> pills) => Wrap(
-      spacing: 6,
-      runSpacing: 8,
-      children: pills.map((pill) => _buildPill(context, pill)).toList(),
-    );
-
-  Widget _buildPill(BuildContext context, _PillData data) => AppCard(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      borderRadius: BorderRadius.circular(20),
-      backgroundColor: AppColors.mutedColor(context),
-      boxShadow: const [],
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          if (data.icon != null) ...[
-            Icon(data.icon, size: 16, color: AppColors.text(context)),
-            const SizedBox(width: 8),
-          ],
           Text(
-            data.label,
-            style: AppTextStyles.bodyMedium.copyWith(
-              fontWeight: FontWeight.w500,
-              color: AppColors.text(context),
+            title.toUpperCase(),
+            style: AppTextStyles.bodySmall.copyWith(
+              fontWeight: FontWeight.bold,
+              color: AppColors.text(context, isMuted: true),
+              letterSpacing: 1.2,
             ),
           ),
+          const SizedBox(height: 6),
+          content,
         ],
       ),
     );
-
-  Widget _buildActions(WidgetRef ref, String userId) => Container(
-      padding: const EdgeInsets.only(left: 20, right: 20, bottom: 20, top: 20),
-      child: Row(
-        children: [
-          Expanded(
-            child: SecondaryButton(
-              onPressed: () =>
-                  ref.read(exploreProvider.notifier).handlePass(userId),
-              icon: Icons.close_rounded,
-            ),
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: SecondaryButton(
-              onPressed: () => {},
-              icon: Icons.flag_outlined,
-            ),
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: PrimaryButton(
-              onPressed: () =>
-                  ref.read(exploreProvider.notifier).handleInterested(userId),
-              icon: Icons.check_rounded,
-            ),
-          ),
-        ],
-      ),
-    );
-}
-
-class _PillData {
-
-  _PillData({this.icon, required this.label});
-  final IconData? icon;
-  final String label;
+  }
 }

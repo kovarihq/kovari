@@ -11,297 +11,765 @@ import 'package:mobile/shared/widgets/app_card.dart';
 import 'package:mobile/shared/widgets/primary_button.dart';
 import 'package:mobile/shared/widgets/secondary_button.dart';
 
-class GroupMatchCard extends ConsumerWidget {
-
+class GroupMatchCard extends ConsumerStatefulWidget {
   const GroupMatchCard({super.key, required this.group});
   final GroupModel group;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<GroupMatchCard> createState() => _GroupMatchCardState();
+}
+
+class _GroupMatchCardState extends ConsumerState<GroupMatchCard> {
+  String _activeTab = 'left';
+
+  bool _isPreferNotToSay(String? val) {
+    if (val == null) return false;
+    final clean = val.toLowerCase().replaceAll('_', ' ');
+    return clean == 'prefer not to say';
+  }
+
+  String _formatDateRange() {
+    final startStr = widget.group.dateRange.start;
+    final endStr = widget.group.dateRange.end;
+    if (startStr == null && endStr == null) return 'Dates TBD';
+    final startDate = startStr != null ? DateTime.tryParse(startStr) : null;
+    final endDate = endStr != null ? DateTime.tryParse(endStr) : null;
+    if (startDate != null && endDate != null) {
+      return "${DateFormat('MMM d').format(startDate)} - ${DateFormat('MMM d, yyyy').format(endDate)}";
+    }
+    return 'Dates TBD';
+  }
+
+  String? _formatSmokingPolicy(String? p) {
+    if (p == null || _isPreferNotToSay(p)) return null;
+    final s = p.toLowerCase();
+    if (s.contains('non-smokers') ||
+        s.contains('non-smoking') ||
+        s.contains('no')) {
+      return "No smoking";
+    }
+    return "Smoking allowed";
+  }
+
+  String? _formatDrinkingPolicy(String? p) {
+    if (p == null || _isPreferNotToSay(p)) return null;
+    final s = p.toLowerCase();
+    if (s.contains('non-drinkers') ||
+        s.contains('non-drinking') ||
+        s.contains('no')) {
+      return "No alcohol";
+    }
+    return "Alcohol allowed";
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final group = widget.group;
     final name = group.name;
     final description = group.description;
     final coverImage = group.coverImage;
     final memberCount = group.memberCount;
     final creator = group.creator;
 
-    final startDate = group.dateRange.start != null
-        ? DateTime.tryParse(group.dateRange.start!)
-        : null;
-    final endDate = group.dateRange.end != null
-        ? DateTime.tryParse(group.dateRange.end!)
-        : null;
-    final dateRange = startDate != null && endDate != null
-        ? "${DateFormat('MMM d').format(startDate)} - ${DateFormat('MMM d, yyyy').format(endDate)}"
-        : 'Dates TBD';
-    final tripLength = startDate != null && endDate != null
-        ? endDate.difference(startDate).inDays + 1
-        : null;
+    final creatorLocationDisplay =
+        creator.location != null && creator.location!.isNotEmpty
+        ? creator.location!.split(',')[0].trim()
+        : 'Unknown';
 
     return AppCard(
-      padding: EdgeInsets.zero,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       borderRadius: BorderRadius.circular(24),
       border: const Border(),
       boxShadow: const [],
-      child: Column(
-        children: [
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Mobile Header Section
-              Padding(
-                padding: const EdgeInsets.only(left: 20, right: 20, top: 12),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    AspectRatio(
-                      aspectRatio: 1 / 1,
-                      child: Container(
-                        decoration: BoxDecoration(
-                          color: AppColors.surface(context, level: 2),
-                          borderRadius: BorderRadius.circular(16),
-                        ),
-                        clipBehavior: Clip.antiAlias,
-                        child: coverImage != null && coverImage.isNotEmpty
-                            ? CachedNetworkImage(
-                                imageUrl: coverImage,
-                                fit: BoxFit.cover,
-                                placeholder: (context, url) =>
-                                    const UserAvatarFallback(
-                                      shape: BoxShape.rectangle,
-                                      borderRadius: BorderRadius.all(
-                                        Radius.circular(16),
-                                      ),
-                                      size: 100,
-                                    ),
-                                errorWidget: (context, url, dynamic error) =>
-                                    const UserAvatarFallback(
-                                      shape: BoxShape.rectangle,
-                                      borderRadius: BorderRadius.all(
-                                        Radius.circular(16),
-                                      ),
-                                      size: 100,
-                                    ),
-                              )
-                            : UserAvatarFallback(
-                                shape: BoxShape.rectangle,
-                                borderRadius: BorderRadius.circular(16),
-                                size: 100,
-                              ),
+      child: GestureDetector(
+        onHorizontalDragEnd: (details) {
+          if (details.primaryVelocity == null) return;
+          if (details.primaryVelocity! < 0) {
+            if (_activeTab == 'left') {
+              setState(() => _activeTab = 'right');
+            }
+          } else if (details.primaryVelocity! > 0) {
+            if (_activeTab == 'right') {
+              setState(() => _activeTab = 'left');
+            }
+          }
+        },
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Story Indicators
+            Row(
+              children: [
+                Expanded(
+                  child: GestureDetector(
+                    onTap: () => setState(() => _activeTab = 'left'),
+                    child: Container(
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color: _activeTab == 'left'
+                            ? AppColors.mutedColor(context)
+                            : AppColors.secondaryColor(context),
+                        borderRadius: BorderRadius.circular(2),
                       ),
                     ),
-                    const SizedBox(height: 16),
-                    Text(
-                      name,
-                      style: AppTextStyles.h3.copyWith(
-                        color: AppColors.text(context),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: GestureDetector(
+                    onTap: () => setState(() => _activeTab = 'right'),
+                    child: Container(
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color: _activeTab == 'right'
+                            ? AppColors.mutedColor(context)
+                            : AppColors.secondaryColor(context),
+                        borderRadius: BorderRadius.circular(2),
                       ),
                     ),
-                    const SizedBox(height: 4),
-                    Text(
-                      (description != null && description.isNotEmpty)
-                          ? description
-                          : 'No description provided.',
-                      style: AppTextStyles.bodyMedium.copyWith(
-                        color: AppColors.text(context, isMuted: true),
-                        fontStyle:
-                            (description != null && description.isNotEmpty)
-                            ? FontStyle.normal
-                            : FontStyle.italic,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                  ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+
+            // Header: tab-dependent title
+            if (_activeTab == 'left') ...[
+              Text(
+                name,
+                style: AppTextStyles.h3.copyWith(
+                  fontWeight: FontWeight.w800,
+                  color: AppColors.text(context),
                 ),
               ),
-              Divider(
-                indent: 20,
-                endIndent: 20,
-                color: AppColors.borderColor(context),
-              ),
-
-              // Content Sections
-              Padding(
-                padding: const EdgeInsets.all(20),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    _buildSectionTitle(context, 'Trip Details'),
-                    _buildPillList(context, [
-                      _PillData(
-                        icon: Icons.location_on_outlined,
-                        label: group.destination.split(',')[0],
-                      ),
-                      _PillData(
-                        icon: Icons.calendar_today_outlined,
-                        label: dateRange,
-                      ),
-                      if (tripLength != null)
-                        _PillData(
-                          icon: Icons.timelapse_outlined,
-                          label: '$tripLength days',
-                        ),
-                      if (group.budget != null && group.budget! > 0)
-                        _PillData(
-                          icon: Icons.currency_rupee,
-                          label: NumberFormat.decimalPattern(
-                            'en_IN',
-                          ).format(group.budget),
-                        ),
-                    ]),
-                    const SizedBox(height: 24),
-
-                    _buildSectionTitle(context, 'About'),
-                    _buildPillList(context, [
-                      _PillData(
-                        icon: Icons.person_pin_outlined,
-                        label: 'By ${creator.name}',
-                      ),
-                      _PillData(
-                        icon: Icons.group_outlined,
-                        label: '$memberCount members',
-                      ),
-                    ]),
-
-                    if (group.tags != null && group.tags!.isNotEmpty) ...[
-                      const SizedBox(height: 24),
-                      _buildSectionTitle(context, 'Group Interests'),
-                      _buildPillList(
-                        context,
-                        group.tags!
-                            .map((i) => _PillData(label: i.toString()))
-                            .toList(),
-                      ),
-                      const SizedBox(height: 24),
-                    ],
-
-                    if (group.languages != null &&
-                        group.languages!.isNotEmpty) ...[
-                      _buildSectionTitle(context, 'Languages'),
-                      _buildPillList(
-                        context,
-                        group.languages!
-                            .map(
-                              (i) => _PillData(
-                                icon: Icons.translate_outlined,
-                                label: i.toString(),
-                              ),
-                            )
-                            .toList(),
-                      ),
-                      const SizedBox(height: 24),
-                    ],
-
-                    if ((group.smokingPolicy != null &&
-                            group.smokingPolicy!.isNotEmpty) ||
-                        (group.drinkingPolicy != null &&
-                            group.drinkingPolicy!.isNotEmpty)) ...[
-                      _buildSectionTitle(context, 'Lifestyle'),
-                      _buildPillList(context, [
-                        if (group.smokingPolicy != null &&
-                            group.smokingPolicy!.isNotEmpty)
-                          _PillData(
-                            icon: Icons.smoking_rooms,
-                            label: group.smokingPolicy!,
-                          ),
-                        if (group.drinkingPolicy != null &&
-                            group.drinkingPolicy!.isNotEmpty)
-                          _PillData(
-                            icon: Icons.local_bar,
-                            label: group.drinkingPolicy!,
-                          ),
-                      ]),
-                    ],
-                  ],
+              Text(
+                description != null && description.isNotEmpty
+                    ? description
+                    : 'No description provided.',
+                style: AppTextStyles.bodyMedium.copyWith(
+                  color: AppColors.text(context, isMuted: true),
+                  fontStyle: description != null && description.isNotEmpty
+                      ? FontStyle.normal
+                      : FontStyle.italic,
                 ),
               ),
-              Divider(
-                indent: 20,
-                endIndent: 20,
-                color: AppColors.borderColor(context),
+            ] else ...[
+              Text(
+                'Created by ${creator.name}',
+                style: AppTextStyles.h3.copyWith(
+                  fontWeight: FontWeight.w800,
+                  color: AppColors.text(context),
+                ),
               ),
-              _buildActions(ref, group.id),
+              Text(
+                creator.age != null
+                    ? '${creator.age}, $creatorLocationDisplay'
+                    : creatorLocationDisplay,
+                style: AppTextStyles.bodyMedium.copyWith(
+                  fontWeight: FontWeight.w500,
+                  color: AppColors.text(context, isMuted: true),
+                ),
+              ),
             ],
-          ),
-        ],
+            const SizedBox(height: 12),
+
+            // Active Tab Content
+            Expanded(
+              child: SingleChildScrollView(
+                physics: const BouncingScrollPhysics(),
+                child: _activeTab == 'left'
+                    ? Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          // Cover Image (Centered & Aspect Ratio 4:3)
+                          Center(
+                            child: Container(
+                              width: double.infinity,
+                              constraints: const BoxConstraints(maxHeight: 280),
+                              decoration: BoxDecoration(
+                                color: AppColors.surface(context, level: 2),
+                                borderRadius: BorderRadius.circular(16),
+                                border: Border.all(
+                                  color: AppColors.borderColor(context),
+                                ),
+                              ),
+                              clipBehavior: Clip.antiAlias,
+                              child: AspectRatio(
+                                aspectRatio: 4 / 3,
+                                child:
+                                    coverImage != null && coverImage.isNotEmpty
+                                    ? CachedNetworkImage(
+                                        imageUrl: coverImage,
+                                        fit: BoxFit.cover,
+                                        placeholder: (context, url) =>
+                                            const UserAvatarFallback(
+                                              shape: BoxShape.rectangle,
+                                              borderRadius: BorderRadius.all(
+                                                Radius.circular(16),
+                                              ),
+                                              size: 100,
+                                            ),
+                                        errorWidget:
+                                            (context, url, dynamic error) =>
+                                                const UserAvatarFallback(
+                                                  shape: BoxShape.rectangle,
+                                                  borderRadius:
+                                                      BorderRadius.all(
+                                                        Radius.circular(16),
+                                                      ),
+                                                  size: 100,
+                                                ),
+                                      )
+                                    : UserAvatarFallback(
+                                        shape: BoxShape.rectangle,
+                                        borderRadius: BorderRadius.circular(16),
+                                        size: 100,
+                                      ),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                          if (group.score != null) ...[
+                            Row(
+                              crossAxisAlignment: CrossAxisAlignment.baseline,
+                              textBaseline: TextBaseline.alphabetic,
+                              children: [
+                                Text(
+                                  '${(group.score! <= 1 ? group.score! * 100 : group.score!).round()}%',
+                                  style: AppTextStyles.h2.copyWith(
+                                    fontWeight: FontWeight.bold,
+                                    color: AppColors.text(context),
+                                  ),
+                                ),
+                                const SizedBox(width: 6),
+                                Text(
+                                  'similar',
+                                  style: AppTextStyles.bodyMedium.copyWith(
+                                    fontWeight: FontWeight.bold,
+                                    color: AppColors.text(context),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 12),
+                          ],
+
+                          _buildGroupedSection(
+                            title: 'Trip Details',
+                            content: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  "${group.destination.split(',')[0].trim()}${group.budget != null ? ' • ₹${NumberFormat.decimalPattern('en_IN').format(group.budget)}' : ''}",
+                                  style: AppTextStyles.bodyMedium.copyWith(
+                                    fontWeight: FontWeight.bold,
+                                    color: AppColors.text(context),
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  _formatDateRange(),
+                                  style: AppTextStyles.bodyMedium.copyWith(
+                                    fontWeight: FontWeight.bold,
+                                    color: AppColors.text(context),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+
+                          // Group Members
+                          _buildGroupedSection(
+                            title: 'Group Members',
+                            content: Wrap(
+                              spacing: 8,
+                              runSpacing: 4,
+                              children: [
+                                Text(
+                                  'Created by ${creator.name}',
+                                  style: AppTextStyles.bodyMedium.copyWith(
+                                    fontWeight: FontWeight.bold,
+                                    color: AppColors.text(context),
+                                  ),
+                                ),
+                                Text(
+                                  '•',
+                                  style: AppTextStyles.bodyMedium.copyWith(
+                                    color: AppColors.text(
+                                      context,
+                                      isMuted: true,
+                                    ),
+                                  ),
+                                ),
+                                Text(
+                                  '$memberCount members',
+                                  style: AppTextStyles.bodyMedium.copyWith(
+                                    fontWeight: FontWeight.bold,
+                                    color: AppColors.text(context),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+
+                          // Group Interests
+                          if (group.tags != null && group.tags!.isNotEmpty) ...[
+                            _buildGroupedSection(
+                              title: 'Group Interests',
+                              content: Wrap(
+                                spacing: 8,
+                                runSpacing: 4,
+                                children: [
+                                  for (
+                                    var i = 0;
+                                    i < group.tags!.length;
+                                    i++
+                                  ) ...[
+                                    if (i > 0)
+                                      Text(
+                                        '•',
+                                        style: AppTextStyles.bodyMedium
+                                            .copyWith(
+                                              color: AppColors.text(
+                                                context,
+                                                isMuted: true,
+                                              ),
+                                            ),
+                                      ),
+                                    Text(
+                                      group.tags![i][0].toUpperCase() +
+                                          group.tags![i].substring(1),
+                                      style: AppTextStyles.bodyMedium.copyWith(
+                                        fontWeight: FontWeight.bold,
+                                        color: AppColors.text(context),
+                                      ),
+                                    ),
+                                  ],
+                                ],
+                              ),
+                            ),
+                            const SizedBox(height: 12),
+                          ],
+
+                          // Languages
+                          if (group.languages != null &&
+                              group.languages!.isNotEmpty) ...[
+                            _buildGroupedSection(
+                              title: 'Languages',
+                              content: Wrap(
+                                spacing: 8,
+                                runSpacing: 4,
+                                children: [
+                                  for (
+                                    var i = 0;
+                                    i < group.languages!.length;
+                                    i++
+                                  ) ...[
+                                    if (i > 0)
+                                      Text(
+                                        '•',
+                                        style: AppTextStyles.bodyMedium
+                                            .copyWith(
+                                              color: AppColors.text(
+                                                context,
+                                                isMuted: true,
+                                              ),
+                                            ),
+                                      ),
+                                    Text(
+                                      group.languages![i],
+                                      style: AppTextStyles.bodyMedium.copyWith(
+                                        fontWeight: FontWeight.bold,
+                                        color: AppColors.text(context),
+                                      ),
+                                    ),
+                                  ],
+                                ],
+                              ),
+                            ),
+                            const SizedBox(height: 12),
+                          ],
+
+                          // Lifestyle
+                          if ((group.smokingPolicy != null &&
+                                  !_isPreferNotToSay(group.smokingPolicy)) ||
+                              (group.drinkingPolicy != null &&
+                                  !_isPreferNotToSay(
+                                    group.drinkingPolicy,
+                                  ))) ...[
+                            _buildGroupedSection(
+                              title: 'Lifestyle',
+                              content: (() {
+                                final smokingVal = _formatSmokingPolicy(
+                                  group.smokingPolicy,
+                                );
+                                final drinkingVal = _formatDrinkingPolicy(
+                                  group.drinkingPolicy,
+                                );
+
+                                final items = [
+                                  if (smokingVal != null)
+                                    "Smoking: $smokingVal",
+                                  if (drinkingVal != null)
+                                    "Drinking: $drinkingVal",
+                                ];
+
+                                return Wrap(
+                                  spacing: 8,
+                                  runSpacing: 4,
+                                  children: [
+                                    for (var i = 0; i < items.length; i++) ...[
+                                      if (i > 0)
+                                        Text(
+                                          '•',
+                                          style: AppTextStyles.bodyMedium
+                                              .copyWith(
+                                                color: AppColors.text(
+                                                  context,
+                                                  isMuted: true,
+                                                ),
+                                              ),
+                                        ),
+                                      Text(
+                                        items[i],
+                                        style: AppTextStyles.bodyMedium
+                                            .copyWith(
+                                              fontWeight: FontWeight.bold,
+                                              color: AppColors.text(context),
+                                            ),
+                                      ),
+                                    ],
+                                  ],
+                                );
+                              })(),
+                            ),
+                          ],
+                        ],
+                      )
+                    : Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          // Creator Avatar Image (Centered & Aspect Ratio 4:3)
+                          Center(
+                            child: Container(
+                              width: double.infinity,
+                              constraints: const BoxConstraints(maxHeight: 280),
+                              decoration: BoxDecoration(
+                                color: AppColors.surface(context, level: 2),
+                                borderRadius: BorderRadius.circular(16),
+                                border: Border.all(
+                                  color: AppColors.borderColor(context),
+                                ),
+                              ),
+                              clipBehavior: Clip.antiAlias,
+                              child: AspectRatio(
+                                aspectRatio: 4 / 3,
+                                child:
+                                    creator.avatar != null &&
+                                        creator.avatar!.isNotEmpty
+                                    ? CachedNetworkImage(
+                                        imageUrl: creator.avatar!,
+                                        fit: BoxFit.cover,
+                                        placeholder: (context, url) =>
+                                            const UserAvatarFallback(
+                                              shape: BoxShape.rectangle,
+                                              borderRadius: BorderRadius.all(
+                                                Radius.circular(16),
+                                              ),
+                                              size: 100,
+                                            ),
+                                        errorWidget:
+                                            (context, url, dynamic error) =>
+                                                const UserAvatarFallback(
+                                                  shape: BoxShape.rectangle,
+                                                  borderRadius:
+                                                      BorderRadius.all(
+                                                        Radius.circular(16),
+                                                      ),
+                                                  size: 100,
+                                                ),
+                                      )
+                                    : UserAvatarFallback(
+                                        shape: BoxShape.rectangle,
+                                        borderRadius: BorderRadius.circular(16),
+                                        size: 100,
+                                      ),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+
+                          // Creator About Me Section
+                          _buildGroupedSection(
+                            title: 'About Creator',
+                            content: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                if (creator.gender != null &&
+                                    !_isPreferNotToSay(creator.gender)) ...[
+                                  Text(
+                                    creator.gender![0].toUpperCase() +
+                                        creator.gender!.substring(1),
+                                    style: AppTextStyles.bodyMedium.copyWith(
+                                      fontWeight: FontWeight.bold,
+                                      color: AppColors.text(context),
+                                    ),
+                                  ),
+                                  const SizedBox(height: 4),
+                                ],
+                                (() {
+                                  final items =
+                                      [
+                                            if (creator.profession != null &&
+                                                !_isPreferNotToSay(
+                                                  creator.profession,
+                                                ))
+                                              creator.profession!
+                                                  .replaceAll('_', ' ')
+                                                  .trim(),
+                                            if (creator.religion != null &&
+                                                !_isPreferNotToSay(
+                                                  creator.religion,
+                                                ))
+                                              creator.religion!.trim(),
+                                            if (creator.personality != null &&
+                                                !_isPreferNotToSay(
+                                                  creator.personality,
+                                                ))
+                                              creator.personality!.trim(),
+                                          ]
+                                          .map(
+                                            (item) =>
+                                                item[0].toUpperCase() +
+                                                item.substring(1),
+                                          )
+                                          .toList();
+
+                                  if (items.isEmpty)
+                                    return const SizedBox.shrink();
+
+                                  return Wrap(
+                                    spacing: 8,
+                                    runSpacing: 4,
+                                    children: [
+                                      for (
+                                        var i = 0;
+                                        i < items.length;
+                                        i++
+                                      ) ...[
+                                        if (i > 0)
+                                          Text(
+                                            '•',
+                                            style: AppTextStyles.bodyMedium
+                                                .copyWith(
+                                                  color: AppColors.text(
+                                                    context,
+                                                    isMuted: true,
+                                                  ),
+                                                ),
+                                          ),
+                                        Text(
+                                          items[i],
+                                          style: AppTextStyles.bodyMedium
+                                              .copyWith(
+                                                fontWeight: FontWeight.bold,
+                                                color: AppColors.text(context),
+                                              ),
+                                        ),
+                                      ],
+                                    ],
+                                  );
+                                })(),
+                                if (creator.languages.isNotEmpty) ...[
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    creator.languages.join(', '),
+                                    style: AppTextStyles.bodyMedium.copyWith(
+                                      fontWeight: FontWeight.bold,
+                                      color: AppColors.text(context),
+                                    ),
+                                  ),
+                                ],
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+
+                          // Creator Interests Section
+                          if (creator.interests.isNotEmpty) ...[
+                            _buildGroupedSection(
+                              title: 'Creator Interests',
+                              content: Wrap(
+                                spacing: 8,
+                                runSpacing: 4,
+                                children: [
+                                  for (
+                                    var i = 0;
+                                    i < creator.interests.length;
+                                    i++
+                                  ) ...[
+                                    if (i > 0)
+                                      Text(
+                                        '•',
+                                        style: AppTextStyles.bodyMedium
+                                            .copyWith(
+                                              color: AppColors.text(
+                                                context,
+                                                isMuted: true,
+                                              ),
+                                            ),
+                                      ),
+                                    Text(
+                                      creator.interests[i][0].toUpperCase() +
+                                          creator.interests[i].substring(1),
+                                      style: AppTextStyles.bodyMedium.copyWith(
+                                        fontWeight: FontWeight.bold,
+                                        color: AppColors.text(context),
+                                      ),
+                                    ),
+                                  ],
+                                ],
+                              ),
+                            ),
+                            const SizedBox(height: 12),
+                          ],
+
+                          // Creator Lifestyle Section
+                          if ((creator.foodPreference != null &&
+                                  !_isPreferNotToSay(creator.foodPreference)) ||
+                              (creator.smoking != null &&
+                                  !_isPreferNotToSay(creator.smoking)) ||
+                              (creator.drinking != null &&
+                                  !_isPreferNotToSay(creator.drinking))) ...[
+                            _buildGroupedSection(
+                              title: 'Creator Lifestyle',
+                              content: (() {
+                                final foodText =
+                                    creator.foodPreference != null &&
+                                        !_isPreferNotToSay(
+                                          creator.foodPreference,
+                                        )
+                                    ? creator.foodPreference!.replaceAll(
+                                        '_',
+                                        ' ',
+                                      )
+                                    : null;
+                                final smokingText =
+                                    creator.smoking != null &&
+                                        !_isPreferNotToSay(creator.smoking)
+                                    ? "Smoking: ${creator.smoking}"
+                                    : null;
+                                final drinkingText =
+                                    creator.drinking != null &&
+                                        !_isPreferNotToSay(creator.drinking)
+                                    ? "Drinking: ${creator.drinking}"
+                                    : null;
+
+                                final items =
+                                    [foodText, smokingText, drinkingText]
+                                        .whereType<String>()
+                                        .map(
+                                          (s) =>
+                                              s[0].toUpperCase() +
+                                              s.substring(1),
+                                        )
+                                        .toList();
+
+                                return Wrap(
+                                  spacing: 8,
+                                  runSpacing: 4,
+                                  children: [
+                                    for (var i = 0; i < items.length; i++) ...[
+                                      if (i > 0)
+                                        Text(
+                                          '•',
+                                          style: AppTextStyles.bodyMedium
+                                              .copyWith(
+                                                color: AppColors.text(
+                                                  context,
+                                                  isMuted: true,
+                                                ),
+                                              ),
+                                        ),
+                                      Text(
+                                        items[i],
+                                        style: AppTextStyles.bodyMedium
+                                            .copyWith(
+                                              fontWeight: FontWeight.bold,
+                                              color: AppColors.text(context),
+                                            ),
+                                      ),
+                                    ],
+                                  ],
+                                );
+                              })(),
+                            ),
+                          ],
+                        ],
+                      ),
+              ),
+            ),
+
+            // Actions Row
+            const SizedBox(height: 14),
+            Row(
+              children: [
+                Expanded(
+                  child: PrimaryButton(
+                    text: 'Interested',
+                    height: 48,
+                    borderRadius: 16,
+                    onPressed: () => ref
+                        .read(exploreProvider.notifier)
+                        .handleInterested(group.id),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: SecondaryButton(
+                    text: 'Skip',
+                    height: 48,
+                    borderRadius: 16,
+                    onPressed: () =>
+                        ref.read(exploreProvider.notifier).handlePass(group.id),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }
 
-  Widget _buildSectionTitle(BuildContext context, String title) => Padding(
-      padding: const EdgeInsets.only(bottom: 16),
-      child: Text(
-        title.toUpperCase(),
-        style: AppTextStyles.bodySmall.copyWith(
-          fontWeight: FontWeight.bold,
-          color: AppColors.text(context, isMuted: true),
-          letterSpacing: 1.2,
-        ),
+  Widget _buildGroupedSection({
+    required String title,
+    required Widget content,
+  }) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: AppColors.mutedColor(context),
+        borderRadius: BorderRadius.circular(16),
       ),
-    );
-
-  Widget _buildPillList(BuildContext context, List<_PillData> pills) => Wrap(
-      spacing: 6,
-      runSpacing: 8,
-      children: pills.map((pill) => _buildPill(context, pill)).toList(),
-    );
-
-  Widget _buildPill(BuildContext context, _PillData data) => AppCard(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      borderRadius: BorderRadius.circular(20),
-      backgroundColor: AppColors.mutedColor(context),
-      boxShadow: const [],
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          if (data.icon != null) ...[
-            Icon(data.icon, size: 16, color: AppColors.text(context)),
-            const SizedBox(width: 8),
-          ],
           Text(
-            data.label,
-            style: AppTextStyles.bodyMedium.copyWith(
-              fontWeight: FontWeight.w500,
-              color: AppColors.text(context),
+            title.toUpperCase(),
+            style: AppTextStyles.bodySmall.copyWith(
+              fontWeight: FontWeight.bold,
+              color: AppColors.text(context, isMuted: true),
+              letterSpacing: 1.2,
             ),
           ),
+          const SizedBox(height: 6),
+          content,
         ],
       ),
     );
-
-  Widget _buildActions(WidgetRef ref, String groupId) => Container(
-      padding: const EdgeInsets.only(left: 20, right: 20, bottom: 20, top: 20),
-      child: Row(
-        children: [
-          Expanded(
-            child: SecondaryButton(
-              onPressed: () =>
-                  ref.read(exploreProvider.notifier).handlePass(groupId),
-              icon: Icons.close_rounded,
-            ),
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: SecondaryButton(
-              onPressed: () => {},
-              icon: Icons.flag_outlined,
-            ),
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: PrimaryButton(
-              onPressed: () =>
-                  ref.read(exploreProvider.notifier).handleInterested(groupId),
-              icon: Icons.check_rounded,
-            ),
-          ),
-        ],
-      ),
-    );
-}
-
-class _PillData {
-
-  _PillData({this.icon, required this.label});
-  final IconData? icon;
-  final String label;
+  }
 }

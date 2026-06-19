@@ -54,6 +54,11 @@ class _ExploreScreenState extends ConsumerState<ExploreScreen>
       _tabController.index = state.searchData.travelMode == TravelMode.solo
           ? 0
           : 1;
+
+      // Auto-trigger initial search on mount (background refresh if we already have cached matches, otherwise full loading search)
+      ref
+          .read(exploreProvider.notifier)
+          .performSearch(isSilent: state.matches.isNotEmpty);
     });
   }
 
@@ -211,26 +216,35 @@ class _ExploreScreenState extends ConsumerState<ExploreScreen>
       );
     }
 
-    if (!state.hasSearched) {
-      return KovariEmptyState(
-        title: 'Start your search',
-        description:
-            'Tap Filters to find compatible travel companions or groups for your next trip.',
-        icon: Icons.search,
-        actionLabel: 'Open Filters',
-        onAction: _showFilters,
-      );
-    }
-
     if (state.matches.isEmpty) {
-      return KovariEmptyState(
-        title: 'No travelers found yet',
-        description:
-            'Try adjusting your preferences or dates to find more companions.',
-        icon: Icons.sentiment_dissatisfied_outlined,
-        actionLabel: 'Adjust Filters',
-        onAction: _showFilters,
-      );
+      final hasDestination = state.searchData.destination.trim().isNotEmpty;
+      if (hasDestination) {
+        final shortDest = state.searchData.destination.split(',')[0].trim();
+        return KovariEmptyState(
+          title: state.searchData.travelMode == TravelMode.solo
+              ? "No one's heading to $shortDest yet"
+              : "No groups found for $shortDest yet",
+          description:
+              "You're in the first batch of Kovari — more travelers are joining every week.",
+          icon: Icons.sentiment_dissatisfied_outlined,
+          actionLabel: state.searchData.travelMode == TravelMode.solo
+              ? 'Browse all travelers instead →'
+              : 'Browse all groups instead →',
+          onAction: () =>
+              ref.read(exploreProvider.notifier).searchWithoutDestination(),
+        );
+      } else {
+        return KovariEmptyState(
+          title: state.searchData.travelMode == TravelMode.solo
+              ? 'No travelers found yet'
+              : 'No groups found yet',
+          description:
+              'Try adjusting your preferences or dates to find more companions.',
+          icon: Icons.sentiment_dissatisfied_outlined,
+          actionLabel: 'Adjust Filters',
+          onAction: _showFilters,
+        );
+      }
     }
 
     final match = state.matches[state.currentIndex];
@@ -246,34 +260,44 @@ class _ExploreScreenState extends ConsumerState<ExploreScreen>
       return const KovariSkeletonExplore();
     }
 
-    return CustomScrollView(
-      key: const PageStorageKey('explore_scroll'),
-      physics: const BouncingScrollPhysics(
-        parent: AlwaysScrollableScrollPhysics(),
-      ),
-      keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-      slivers: [
-        SliverPadding(
-          padding: const EdgeInsets.symmetric(vertical: 8),
-          sliver: SliverToBoxAdapter(
+    final bottomSpacer = MediaQuery.of(context).padding.bottom + 65;
+
+    return Padding(
+      padding: EdgeInsets.only(top: 8, bottom: bottomSpacer),
+      child: Stack(
+        children: [
+          Positioned.fill(
             child: RepaintBoundary(
               child: state.searchData.travelMode == TravelMode.solo
                   ? SoloMatchCard(match: match as MatchUser)
                   : GroupMatchCard(group: match as GroupModel),
             ),
           ),
-        ),
-        if (state.isFetchingNextPage)
-          const SliverToBoxAdapter(
-            child: Padding(
-              padding: EdgeInsets.all(16.0),
+          if (state.isFetchingNextPage)
+            const Positioned(
+              bottom: 80,
+              left: 0,
+              right: 0,
               child: Center(
-                child: CircularProgressIndicator(color: AppColors.primary),
+                child: Card(
+                  elevation: 4,
+                  shape: CircleBorder(),
+                  child: Padding(
+                    padding: EdgeInsets.all(8.0),
+                    child: SizedBox(
+                      width: 24,
+                      height: 24,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2.5,
+                        color: AppColors.primary,
+                      ),
+                    ),
+                  ),
+                ),
               ),
             ),
-          ),
-        const SliverToBoxAdapter(child: SizedBox(height: 110)),
-      ],
+        ],
+      ),
     );
   }
 }

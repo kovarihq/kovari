@@ -129,7 +129,12 @@ class GroupModel {
               as String?,
       destinationImage: destinationImgUrl,
       status: json['status'] as String?,
-      score: (json['score'] as num?)?.toDouble(),
+      score: (() {
+        final val = json['score'] ?? json['compatibility_score'] ?? json['compatibility'];
+        if (val == null) return null;
+        if (val is num) return val.toDouble();
+        return double.tryParse(val.toString());
+      })(),
       tags: json['tags'] != null
           ? List<String>.from(json['tags'] as List)
           : null,
@@ -264,23 +269,71 @@ class GroupDateRange {
 }
 
 class GroupCreator {
-
-  const GroupCreator({required this.name, required this.username, this.avatar});
+  const GroupCreator({
+    required this.name,
+    required this.username,
+    this.avatar,
+    this.age,
+    this.location,
+    this.gender,
+    this.profession,
+    this.religion,
+    this.personality,
+    this.interests = const [],
+    this.languages = const [],
+    this.smoking,
+    this.drinking,
+    this.foodPreference,
+  });
 
   factory GroupCreator.fromJson(Map<String, dynamic> json) => GroupCreator(
-      name: (json['name'] as String?) ?? 'Unknown',
-      username: (json['username'] as String?) ?? 'unknown',
-      avatar: (json['avatar'] as String?) ?? (json['profile_photo'] as String?),
-    );
+        name: (json['name'] as String?) ?? 'Unknown',
+        username: (json['username'] as String?) ?? 'unknown',
+        avatar: (json['avatar'] as String?) ?? (json['profile_photo'] as String?),
+        age: json['age'] is int ? json['age'] as int? : int.tryParse(json['age']?.toString() ?? ''),
+        location: (json['locationDisplay'] ?? json['location'])?.toString(),
+        gender: json['gender']?.toString(),
+        profession: json['profession']?.toString(),
+        religion: json['religion']?.toString(),
+        personality: json['personality']?.toString(),
+        interests: json['interests'] != null ? List<String>.from(json['interests'] as List) : const [],
+        languages: json['languages'] != null ? List<String>.from(json['languages'] as List) : const [],
+        smoking: json['smoking']?.toString(),
+        drinking: json['drinking']?.toString(),
+        foodPreference: json['foodPreference']?.toString(),
+      );
+
   final String name;
   final String username;
   final String? avatar;
+  final int? age;
+  final String? location;
+  final String? gender;
+  final String? profession;
+  final String? religion;
+  final String? personality;
+  final List<String> interests;
+  final List<String> languages;
+  final String? smoking;
+  final String? drinking;
+  final String? foodPreference;
 
   Map<String, dynamic> toJson() => {
-    'name': name,
-    'username': username,
-    'avatar': avatar,
-  };
+        'name': name,
+        'username': username,
+        'avatar': avatar,
+        'age': age,
+        'location': location,
+        'gender': gender,
+        'profession': profession,
+        'religion': religion,
+        'personality': personality,
+        'interests': interests,
+        'languages': languages,
+        'smoking': smoking,
+        'drinking': drinking,
+        'foodPreference': foodPreference,
+      };
 }
 
 class GroupMember {

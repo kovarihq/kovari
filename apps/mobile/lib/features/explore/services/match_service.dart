@@ -12,7 +12,6 @@ import 'package:mobile/features/groups/models/group.dart';
 /// Returns only typed models to UI providers.
 /// Errors, timeouts, and malformed data are absorbed here.
 class MatchService {
-
   MatchService(this._apiClient, this._ref);
   final ApiClient _apiClient;
   final Ref _ref;
@@ -26,7 +25,10 @@ class MatchService {
     final queryParams = <String, dynamic>{'page': page, 'limit': limit};
 
     if (searchData != null) {
-      queryParams['destination'] = searchData.destination;
+      if (searchData.destination.trim().isNotEmpty &&
+          searchData.destination != 'Any') {
+        queryParams['destination'] = searchData.destination;
+      }
       queryParams['budget'] = searchData.budget.toString();
       queryParams['startDate'] = searchData.startDate.toIso8601String().split(
         'T',

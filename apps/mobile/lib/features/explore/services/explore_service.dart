@@ -93,7 +93,6 @@ class ExploreService {
   ) async {
     final payload = <String, dynamic>{
       'userId': userId,
-      'destination': searchData.destination,
       'budget': searchData.budget,
       'startDate': searchData.startDate.toIso8601String().split('T')[0],
       'endDate': searchData.endDate.toIso8601String().split('T')[0],
@@ -107,6 +106,10 @@ class ExploreService {
           ? filters.nationality
           : 'Unknown',
     };
+
+    if (searchData.destination.trim().isNotEmpty && searchData.destination != 'Any') {
+      payload['destination'] = searchData.destination;
+    }
 
     if (searchData.destinationDetails != null) {
       payload['lat'] = searchData.destinationDetails!['lat'];

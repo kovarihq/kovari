@@ -7,7 +7,6 @@ import 'package:mobile/core/theme/app_text_styles.dart';
 import 'package:mobile/shared/widgets/interactive_wrapper.dart';
 
 class SecondaryButton extends StatelessWidget {
-
   const SecondaryButton({
     super.key,
     this.text = '',
@@ -17,9 +16,10 @@ class SecondaryButton extends StatelessWidget {
     this.isError = false,
     this.icon,
     this.height = 44.0, // Elite standard
-    this.width,
+    this.width = double.infinity,
     this.isDate = false,
     this.backgroundColor,
+    this.borderRadius = 12,
   });
   final String text;
   final FutureOr<void> Function()? onPressed;
@@ -31,6 +31,7 @@ class SecondaryButton extends StatelessWidget {
   final double? width;
   final bool isDate;
   final Color? backgroundColor;
+  final double borderRadius;
 
   @override
   Widget build(BuildContext context) {
@@ -44,13 +45,14 @@ class SecondaryButton extends StatelessWidget {
       isLoading: isLoading,
       isSuccess: isSuccess,
       isError: isError,
-      borderRadius: BorderRadius.circular(12),
+      borderRadius: BorderRadius.circular(borderRadius),
+      hapticType: HapticType.medium,
       child: Container(
         height: height,
         width: width,
         decoration: BoxDecoration(
-          color: backgroundColor ?? AppColors.mutedColor(context),
-          borderRadius: BorderRadius.circular(12),
+          color: backgroundColor ?? AppColors.secondaryColor(context),
+          borderRadius: BorderRadius.circular(borderRadius),
           border: Border.all(color: AppColors.borderColor(context)),
         ),
         child: Center(
@@ -100,7 +102,7 @@ class SecondaryButton extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       children: [
         if (icon != null) ...[
-          Icon(icon, size: 16, color: fg),
+          Icon(icon, size: 18, color: fg),
           if (text.isNotEmpty) const SizedBox(width: 8),
         ],
         if (text.isNotEmpty)

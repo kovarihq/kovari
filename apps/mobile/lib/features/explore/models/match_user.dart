@@ -29,6 +29,7 @@ class MatchUser {
     this.startDate,
     this.endDate,
     this.budget,
+    this.travelIntentions = const [],
   });
 
   factory MatchUser.fromJson(Map<String, dynamic> json) {
@@ -53,7 +54,7 @@ class MatchUser {
                   'Unknown destination')
               .toString(),
       age: _asInt(userMap['age']),
-      score: _asDouble(json['score']),
+      score: _asDouble(json['score'] ?? json['compatibility_score'] ?? json['compatibility']),
       bio: _asStringOrNull(userMap['bio']),
       gender: _asStringOrNull(userMap['gender']),
       nationality: _asStringOrNull(userMap['nationality']),
@@ -72,6 +73,12 @@ class MatchUser {
         json['endDate'] ?? json['end_date'] ?? userMap['end_date'],
       ),
       budget: _asDouble(json['budget'] ?? userMap['budget']),
+      travelIntentions: (userMap['travel_intentions'] ??
+              userMap['travelIntentions'] ??
+              json['travel_intentions'] ??
+              json['travelIntentions'] ??
+              const [])
+          as List<dynamic>,
     );
   }
   final String id;
@@ -97,6 +104,7 @@ class MatchUser {
   final DateTime? startDate;
   final DateTime? endDate;
   final double? budget;
+  final List<dynamic> travelIntentions;
 
   Map<String, dynamic> toJson() => {
       'id': id,
@@ -120,6 +128,7 @@ class MatchUser {
       'startDate': startDate?.toIso8601String(),
       'endDate': endDate?.toIso8601String(),
       'budget': budget,
+      'travelIntentions': travelIntentions,
     };
 
   // ── Safe coercion helpers ──────────────────

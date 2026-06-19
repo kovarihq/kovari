@@ -56,6 +56,7 @@ class PrimaryButton extends StatelessWidget {
         decoration: BoxDecoration(
           color: bg,
           borderRadius: BorderRadius.circular(borderRadius),
+          border: Border.all(color: Colors.transparent),
         ),
         child: Center(
           child: AnimatedSwitcher(
