@@ -9,6 +9,8 @@ import 'package:mobile/core/utils/app_logger.dart';
 import 'package:mobile/features/chat/models/message_entity.dart';
 import 'package:mobile/features/chat/providers/chat_mutation_service.dart';
 import 'package:mobile/features/chat/providers/message_store.dart';
+import 'package:mobile/features/chat/providers/conversation_runtime_store.dart';
+import 'package:mobile/features/chat/providers/conversation_store.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:uuid/uuid.dart';
 
@@ -38,7 +40,6 @@ class ChatMediaService {
     final myUserId = authUser.resolvedUuid;
     if (myUserId == null) return; // Identity safety check
 
-    final partnerId = _getPartnerId(chatId, myUserId);
     final partnerClerkId = _ref
         .read(messageStoreProvider(chatId).notifier)
         .getPartnerClerkId();
@@ -57,6 +58,49 @@ class ChatMediaService {
             receiverClerkId: partnerClerkId,
           ),
         );
+
+    await _processAndSendWithId(chatId, file, type, clientMessageId);
+  }
+
+  Future<void> resumeUpload(String chatId, String clientMessageId, String localFilePath, String mediaType) async {
+    AppLogger.d('🔄 [ChatMediaService] Resuming upload for message $clientMessageId ($localFilePath)');
+    
+    _ref.read(messageStoreProvider(chatId).notifier).updateUploadState('pending_$clientMessageId', MediaUploadState.uploading);
+    _ref.read(messageStoreProvider(chatId).notifier).updateDeliveryStatus('pending_$clientMessageId', MessageDeliveryStatus.pending);
+
+    await _processAndSendWithId(chatId, File(localFilePath), mediaType, clientMessageId);
+  }
+
+  Future<void> recoverBackgroundUploads() async {
+    final conversations = _ref.read(conversationRuntimeStoreProvider);
+    for (final chatId in conversations.keys) {
+      final msgState = _ref.read(messageStoreProvider(chatId));
+      for (final msg in msgState.messages.values) {
+        if (msg.localFilePath != null &&
+            (msg.mediaUploadState == MediaUploadState.uploading ||
+             msg.mediaUploadState == MediaUploadState.failed)) {
+          resumeUpload(
+            chatId,
+            msg.clientMessageId ?? msg.id.replaceFirst('pending_', ''),
+            msg.localFilePath!,
+            msg.mediaType ?? 'image',
+          );
+        }
+      }
+    }
+  }
+
+  Future<void> _processAndSendWithId(String chatId, File file, String type, String clientMessageId) async {
+    final authUser = _ref.read(authProvider).user;
+    if (authUser == null) return;
+
+    final myUserId = authUser.resolvedUuid;
+    if (myUserId == null) return;
+
+    final partnerId = _getPartnerId(chatId, myUserId);
+    final partnerClerkId = _ref
+        .read(messageStoreProvider(chatId).notifier)
+        .getPartnerClerkId();
 
     try {
       // 2. 🛡️ E2EE: Encrypt the file bytes
@@ -146,6 +190,7 @@ class ChatMediaService {
 
   String _getPartnerId(String chatId, String myId) {
     final ids = chatId.split('_');
+    if (ids.length != 2) return '';
     return ids[0] == myId ? ids[1] : ids[0];
   }
 }

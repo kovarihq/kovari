@@ -1,53 +1,24 @@
 import 'dart:async';
 
 import 'package:mobile/core/utils/app_logger.dart';
-import 'package:safe_device/safe_device.dart';
 
+/// 🛡️ IntegrityAttestationService (Dormant - Phase 11 Security Activation Target)
+///
+/// TODO: Reactivate in Phase 11 Security Activation by calling hardware-backed APIs
+/// (Play Integrity / App Attest) and verifying on backend.
 class IntegrityAttestationService {
   factory IntegrityAttestationService() => _instance;
   IntegrityAttestationService._internal();
   static final IntegrityAttestationService _instance = IntegrityAttestationService._internal();
 
-  String? _cachedToken;
-  DateTime? _tokenExpiry;
-
-  /// 🛰️ Fetches a hardware-backed integrity token for backend verification.
-  /// This token proves the app is genuine and running on a safe device.
+  /// 🛰️ Dormant implementation: Returns null or simulated bypass token.
   Future<String?> getAttestationToken() async {
-    if (_isTokenValid) return _cachedToken;
-
-    AppLogger.i('🛡️ [IntegrityAttestationService] Fetching new device attestation token...');
-    
-    try {
-      // 1. In a production environment, this would call Play Integrity or App Attest plugins.
-      // 2. For now, we simulate the token generation using safe_device signals.
-      final isSafe = await SafeDevice.isSafeDevice;
-      if (!isSafe) {
-        AppLogger.w('⚠️ [IntegrityAttestationService] Device integrity check failed. Token may be rejected by backend.');
-      }
-
-      // Simulated token: [DEVICE_ID]|[TIMESTAMP]|[INTEGRITY_SIGNAL]
-      final timestamp = DateTime.now().millisecondsSinceEpoch;
-      final token = 'attestation_${isSafe ? "trusted" : "untrusted"}_$timestamp';
-      
-      _cachedToken = token;
-      _tokenExpiry = DateTime.now().add(const Duration(hours: 1)); // Cache for 1 hour
-      
-      return token;
-    } catch (e) {
-      AppLogger.e('❌ [IntegrityAttestationService] Attestation failed: $e');
-      return null;
-    }
+    AppLogger.d('🛡️ [IntegrityAttestationService] (Dormant) getAttestationToken bypassed.');
+    return 'attestation_bypass_dormant';
   }
 
-  /// 🔄 Forces a refresh of the attestation token (e.g., before sensitive mutations).
+  /// 🔄 Dormant implementation: Returns bypass token.
   Future<String?> refreshAttestation() async {
-    _cachedToken = null;
     return getAttestationToken();
   }
-
-  bool get _isTokenValid => 
-      _cachedToken != null && 
-      _tokenExpiry != null && 
-      DateTime.now().isBefore(_tokenExpiry!);
 }

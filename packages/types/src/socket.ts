@@ -20,7 +20,7 @@ export interface ServerToClientEvents {
     isFullySeen?: boolean;
     lastSeenSequence?: number;
   }) => void;
-  message_delivered_ack: (payload: { chatId: string; messageId: string; userId: string }) => void;
+  message_delivered_ack: (payload: { chatId: string; messageId: string; userId: string; conversationSequence?: number }) => void;
   user_last_seen: (payload: { userId: string; lastSeen: string | null }) => void;
 
   // Gap Recovery
@@ -44,7 +44,13 @@ export interface ClientToServerEvents {
   leave_chat: (payload: { chatId: string }) => void;
   send_message: (
     payload: { chatId: string; message: any },
-    callback?: (response: { status: string; error?: string }) => void
+    callback?: (response: { 
+      status: string; 
+      error?: string;
+      messageId?: string;
+      conversationSequence?: number;
+      serverSequence?: number;
+    }) => void
   ) => void;
 
   // UX Features (Client -> Server)
@@ -55,7 +61,14 @@ export interface ClientToServerEvents {
   get_last_seen: (payload: { userId: string }, callback: (lastSeen: string | null) => void) => void;
   
   // Recovery
-  request_gap_fill: (payload: { chatId: string; fromSequence: number; toSequence: number }) => void;
+  request_gap_fill: (
+    payload: { chatId: string; fromSequence: number; toSequence: number },
+    callback?: (response: {
+      status: string;
+      messages?: any[];
+      error?: string;
+    }) => void
+  ) => void;
 }
 
 export interface InterServerEvents {}

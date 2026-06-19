@@ -93,6 +93,11 @@ export const useGroupChat = (groupId: string) => {
 
   const groupKeyRef = useRef(groupKey);
   const seenIdsRef = useRef(new Set<string>());
+  // Gap detection: track the highest conversation sequence seen
+  const lastKnownSequenceRef = useRef<number>(0);
+  // Typing throttle: only emit typing_start once per 3s window
+  const lastTypingEmitRef = useRef<number>(0);
+
   useEffect(() => {
     groupKeyRef.current = groupKey;
   }, [groupKey]);
@@ -256,9 +261,15 @@ export const useGroupChat = (groupId: string) => {
     if (user?.id && chatId) {
       const socket = getSocket(user.id);
       if (socket.connected) {
-        socket.emit("typing_start", { chatId });
+        const now = Date.now();
+        // Rate-limit typing_start to once per 3 seconds
+        if (now - lastTypingEmitRef.current >= 3000) {
+          socket.emit("typing_start", { chatId });
+          lastTypingEmitRef.current = now;
+        }
         if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
-        typingTimeoutRef.current = setTimeout(stopTyping, 2500);
+        // Debounce typing_stop by 1.5s
+        typingTimeoutRef.current = setTimeout(stopTyping, 1500);
       }
     }
   }, [user?.id, chatId, stopTyping]);
@@ -425,6 +436,65 @@ export const useGroupChat = (groupId: string) => {
     if (msgId) seenIdsRef.current.add(msgId);
     if (incomingMsg.tempId) seenIdsRef.current.add(incomingMsg.tempId);
 
+    // --- Gap Detection ---
+    const incomingSeq: number | undefined = (incomingMsg as any).conversationSequence;
+    if (incomingSeq && incomingSeq > 0) {
+      const lastSeq = lastKnownSequenceRef.current;
+      if (lastSeq > 0 && incomingSeq > lastSeq + 1) {
+        const fromSeq = lastSeq + 1;
+        const toSeq = incomingSeq - 1;
+        console.warn(`[useGroupChat] Gap detected: missing CSN ${fromSeq}–${toSeq}`);
+        const socket = getSocket(user?.id || "");
+        if (socket.connected) {
+          socket.emit("request_gap_fill", {
+            chatId,
+            fromSequence: fromSeq,
+            toSequence: toSeq,
+          }, async (response: any) => {
+            if (response?.status === "success" && Array.isArray(response.messages)) {
+              const currentGroupKey = groupKeyRef.current;
+              const decryptedGap = await Promise.all(
+                response.messages.map(async (m: any) => {
+                  let decryptedContent = m.text || m.content || "";
+                  if (m.isEncrypted && m.encryptedContent && currentGroupKey) {
+                    try {
+                      decryptedContent = decryptGroupMessage(
+                        { encryptedContent: m.encryptedContent, iv: m.iv, salt: m.salt },
+                        currentGroupKey
+                      ) || "[Encrypted message]";
+                    } catch (e) {}
+                  }
+                  return {
+                    id: m.id,
+                    content: decryptedContent,
+                    sender: m.senderName || "Unknown",
+                    senderUsername: m.senderUsername,
+                    avatar: m.avatar,
+                    isCurrentUser: m.senderId === user?.id,
+                    createdAt: m.createdAt || m.created_at || new Date().toISOString(),
+                    timestamp: new Date(m.createdAt || m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', timeZone: "Asia/Kolkata" }),
+                    status: "delivered" as const,
+                  };
+                })
+              );
+              setMessages((prev) => {
+                const existingIds = new Set(prev.map((m) => m.id));
+                const newGap = decryptedGap.filter((m) => !existingIds.has(m.id));
+                return [...prev, ...newGap].sort(
+                  (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+                );
+              });
+            } else if (response?.status === "GAP_TOO_LARGE") {
+              fetchMessages();
+            }
+          });
+        }
+      }
+      if (incomingSeq > lastKnownSequenceRef.current) {
+        lastKnownSequenceRef.current = incomingSeq;
+      }
+    }
+
     setMessages((prev) => {
       const exists = prev.some(
         (m) =>
@@ -479,7 +549,7 @@ export const useGroupChat = (groupId: string) => {
       const merged = [...prev, newMessage];
       return merged.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
     });
-  }, [user?.id, chatId, decryptGroupMessage, groupKeyRef, seenIdsRef]); // Added decryptGroupMessage, groupKeyRef, seenIdsRef to deps
+  }, [user?.id, chatId, decryptGroupMessage, groupKeyRef, seenIdsRef, fetchMessages]); // Added decryptGroupMessage, groupKeyRef, seenIdsRef to deps
 
   // Socket.IO Integration Setup
   useEffect(() => {
@@ -556,6 +626,13 @@ export const useGroupChat = (groupId: string) => {
       }
     };
 
+    // Workstream 7: Gap fill response from server
+    const handleGapFound = (data: { fromSequence: number; toSequence: number; chatId: string }) => {
+      if (data.chatId !== chatId) return;
+      console.warn(`[useGroupChat] Server reported gap: ${data.fromSequence}–${data.toSequence}. Resyncing.`);
+      fetchMessages();
+    };
+
     socket.on("messages_seen", handleMessagesSeen);
     socket.on("receive_message", handleReceiveMessage);
     socket.on("message_persisted", handleMessagePersisted);
@@ -564,6 +641,7 @@ export const useGroupChat = (groupId: string) => {
     socket.on("user_stopped_typing", handleUserStoppedTyping);
     socket.on("user_online", handleUserOnline);
     socket.on("user_offline", handleUserOffline);
+    socket.on("gap_found", handleGapFound);
 
     return () => {
       socket.off("connect", onConnect);
@@ -575,6 +653,7 @@ export const useGroupChat = (groupId: string) => {
       socket.off("user_stopped_typing", handleUserStoppedTyping);
       socket.off("user_online", handleUserOnline);
       socket.off("user_offline", handleUserOffline);
+      socket.off("gap_found", handleGapFound);
       socket.emit("leave_chat", { chatId });
     };
   }, [groupId, user?.id, handleReceiveMessage, handleMessagesSeen, fetchMessages, chatId, isEncryptionAvailable]); // Added chatId, isEncryptionAvailable to deps

@@ -35,7 +35,10 @@ class _RuntimeObservabilityOverlayState
   }
 
   @override
-  Widget build(BuildContext context) => Stack(
+  Widget build(BuildContext context) {
+    if (!kDebugMode) return widget.child;
+
+    return Stack(
       children: [
         widget.child,
         // 🎯 Diagnostic Hotzone (Invisible 80x80 area in top-right)
@@ -44,11 +47,19 @@ class _RuntimeObservabilityOverlayState
           right: 0,
           child: GestureDetector(
             behavior: HitTestBehavior.translucent,
-            onDoubleTap: () => setState(() => _isVisible = !_isVisible),
+            onLongPress: () {
+              setState(() {
+                _tapCount++;
+                if (_tapCount >= 5) {
+                  _isVisible = !_isVisible;
+                  _tapCount = 0;
+                }
+              });
+            },
             child: Container(
               width: 80,
               height: 80,
-              color: kDebugMode ? Colors.transparent : null,
+              color: Colors.transparent,
             ),
           ),
         ),
@@ -56,6 +67,7 @@ class _RuntimeObservabilityOverlayState
           Positioned(top: 100, right: 16, child: _buildMetricPanel(context)),
       ],
     );
+  }
 
   Widget _buildMetricPanel(BuildContext context) {
     final scheduler = ref.watch(runtimeSchedulerProvider);

@@ -6,6 +6,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:mobile/core/theme/app_colors.dart';
 import 'package:mobile/core/theme/app_text_styles.dart';
 import 'package:mobile/features/groups/models/group.dart';
+import 'package:mobile/features/groups/providers/entity_stores.dart';
 import 'package:mobile/features/groups/providers/group_details_provider.dart';
 import 'package:mobile/shared/widgets/kovari_avatar.dart';
 import 'package:mobile/shared/widgets/primary_button.dart';
@@ -204,7 +205,7 @@ class _ItineraryFormModalState extends ConsumerState<ItineraryFormModal> {
 
   @override
   Widget build(BuildContext context) {
-    final membersAsync = ref.watch(groupMembersProvider(widget.groupId));
+    final membersState = ref.watch(memberStoreProvider.select((s) => s[widget.groupId]));
 
     final bottomInset = MediaQuery.of(context).viewInsets.bottom;
     final maxHeight = MediaQuery.of(context).size.height * 0.65;
@@ -248,8 +249,8 @@ class _ItineraryFormModalState extends ConsumerState<ItineraryFormModal> {
                             children: [
                               Text(
                                 widget.initialItem == null
-                                    ? 'Add Itinerary Item'
-                                    : 'Edit Itinerary Item',
+                                      ? 'Add Itinerary Item'
+                                      : 'Edit Itinerary Item',
                                 style: AppTextStyles.h2.copyWith(
                                   fontSize: 14,
                                   color: AppColors.text(context),
@@ -259,8 +260,8 @@ class _ItineraryFormModalState extends ConsumerState<ItineraryFormModal> {
                               const SizedBox(height: 4),
                               Text(
                                 widget.initialItem == null
-                                    ? 'Create a new activity or event for your group.'
-                                    : 'Update the details of this itinerary item.',
+                                      ? 'Create a new activity or event for your group.'
+                                      : 'Update the details of this itinerary item.',
                                 maxLines: 2,
                                 overflow: TextOverflow.ellipsis,
                                 style: AppTextStyles.bodySmall.copyWith(
@@ -481,8 +482,23 @@ class _ItineraryFormModalState extends ConsumerState<ItineraryFormModal> {
                             ),
                           ),
                           const SizedBox(height: 8),
-                          membersAsync.when(
-                            data: (members) => Column(
+                          (() {
+                            if (membersState == null || (membersState.isHydrating && !membersState.hasData)) {
+                              return const Center(
+                                child: SizedBox(
+                                  height: 20,
+                                  width: 20,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                  ),
+                                ),
+                              );
+                            }
+                            if (membersState.error != null && !membersState.hasData) {
+                              return const Text('Error loading members');
+                            }
+                            final members = membersState.data ?? [];
+                            return Column(
                               crossAxisAlignment: CrossAxisAlignment.stretch,
                               children: members.map((member) {
                                 final isSelected = _selectedAssignedTo.contains(
@@ -550,19 +566,8 @@ class _ItineraryFormModalState extends ConsumerState<ItineraryFormModal> {
                                   ),
                                 );
                               }).toList(),
-                            ),
-                            loading: () => const Center(
-                              child: SizedBox(
-                                height: 20,
-                                width: 20,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                ),
-                              ),
-                            ),
-                            error: (e, s) =>
-                                const Text('Error loading members'),
-                          ),
+                            );
+                          })(),
                         ],
                       ),
                     ),

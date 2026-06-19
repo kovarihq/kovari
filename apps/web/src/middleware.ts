@@ -423,7 +423,7 @@ export default async function middleware(req: NextRequest, evt: any) {
     res = nextResponseWithHeaders(req);
   }
   // 2. Intercept Other Mobile JWTs (Avoid Clerk middleware crash on non-Clerk tokens)
-  else if (isMobileToken && !pathname.startsWith("/api/direct-chat")) {
+  else if (isMobileToken) {
     res = nextResponseWithHeaders(req);
   }
   else {

@@ -14,6 +14,7 @@ import 'package:mobile/features/groups/widgets/tabs/itinerary_tab.dart';
 import 'package:mobile/features/groups/widgets/tabs/overview_tab.dart';
 import 'package:mobile/features/groups/widgets/tabs/settings_tab.dart';
 import 'package:mobile/shared/widgets/app_card.dart';
+import 'package:mobile/features/chat/providers/conversation_runtime_store.dart';
 import 'package:mobile/shared/widgets/kovari_avatar.dart';
 import 'package:mobile/shared/widgets/kovari_refresh_indicator.dart';
 import 'package:mobile/shared/widgets/primary_button.dart';
@@ -365,11 +366,31 @@ class _GroupDetailsScreenState extends ConsumerState<GroupDetailsScreen> {
                   itemCount: sortedMembers.length,
                   itemBuilder: (context, index) {
                     final member = sortedMembers[index];
+                    final conversations = ref.watch(conversationRuntimeStoreProvider);
+                    bool isMemberOnline = false;
+                    for (final state in conversations.values) {
+                      if (state.conversationType == ConversationType.direct) {
+                        final pUserId = state.metadata?.partnerUserId;
+                        final pClerkId = state.metadata?.partnerClerkId;
+                        if ((pUserId != null && pUserId == member.userIdFromUserTable) ||
+                            (pClerkId != null && pClerkId == member.clerkId) ||
+                            (pUserId != null && pUserId == member.id) ||
+                            (pClerkId != null && pClerkId == member.id)) {
+                          isMemberOnline = state.isPartnerOnline;
+                          break;
+                        }
+                      }
+                    }
                     return Padding(
                       padding: const EdgeInsets.only(bottom: 16.0),
                       child: Row(
                         children: [
-                          KovariAvatar(imageUrl: member.avatar, size: 48),
+                          KovariAvatar(
+                            imageUrl: member.avatar,
+                            size: 48,
+                            isOnline: isMemberOnline,
+                            fullName: member.name,
+                          ),
                           const SizedBox(width: 16),
                           Expanded(
                             child: Column(

@@ -189,13 +189,18 @@ class MessageEntity {
                 ? DateTime.tryParse(data['created_at'] as String) ??
                       DateTime.now()
                 : DateTime.now()),
-      text: data['text'] as String? ?? data['encrypted_content'] as String?,
+      text: data['text'] as String?,
       encryptedContent:
           data['encryptedContent'] as String? ??
           data['encrypted_content'] as String?,
-      encryptionIv: data['encryption_iv'] as String? ?? data['iv'] as String?,
+      encryptionIv:
+          data['encryptionIv'] as String? ??
+          data['encryption_iv'] as String? ??
+          data['iv'] as String?,
       encryptionSalt:
-          data['encryption_salt'] as String? ?? data['salt'] as String?,
+          data['encryptionSalt'] as String? ??
+          data['encryption_salt'] as String? ??
+          data['salt'] as String?,
       isEncrypted:
           data['isEncrypted'] as bool? ??
           data['is_encrypted'] as bool? ??

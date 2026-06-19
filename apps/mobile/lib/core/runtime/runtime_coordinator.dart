@@ -1,7 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/legacy.dart';
 import 'package:mobile/core/runtime/hydration_engine.dart';
-import 'package:mobile/core/runtime/replay_engine.dart';
 import 'package:mobile/core/runtime/runtime_scheduler.dart';
 import 'package:mobile/core/telemetry/telemetry_service.dart';
 import 'package:mobile/core/utils/app_logger.dart';
@@ -12,11 +11,9 @@ class RuntimeCoordinator {
   RuntimeCoordinator(
     this._hydrationEngine,
     this._scheduler,
-    this._replayEngine,
   );
   final HydrationEngine _hydrationEngine;
   final RuntimeScheduler _scheduler;
-  final ReplayEngine _replayEngine;
 
   Stream<HydratedState<T>> requestHydration<T>(
     Hydratable<T> target, {
@@ -62,13 +59,6 @@ class RuntimeCoordinator {
     return stream;
   }
 
-  /// High-level replay restoration
-  void persistState(String key, Map<String, dynamic> metadata) =>
-      _replayEngine.persist(key, metadata);
-
-  Map<String, dynamic>? restoreState(String key) =>
-      _replayEngine.restore(key)?.metadata;
-
   // Accessors for UI to bind to scheduler metrics if needed
   RuntimeScheduler get scheduler => _scheduler;
 }
@@ -78,11 +68,9 @@ final hydrationEngineProvider = Provider((ref) => HydrationEngine());
 final runtimeSchedulerProvider = ChangeNotifierProvider(
   (ref) => RuntimeScheduler(),
 );
-final replayEngineProvider = Provider((ref) => ReplayEngine());
 
 final runtimeCoordinatorProvider = Provider((ref) {
   final hydration = ref.watch(hydrationEngineProvider);
   final scheduler = ref.watch(runtimeSchedulerProvider);
-  final replay = ref.watch(replayEngineProvider);
-  return RuntimeCoordinator(hydration, scheduler, replay);
+  return RuntimeCoordinator(hydration, scheduler);
 });

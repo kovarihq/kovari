@@ -68,27 +68,31 @@ io.use(async (socket, next) => {
 
   // SECURITY: Verify the token to prevent identity spoofing
   let verifiedUserId: string | null = null;
-  try {
-    // 1. Try to verify as a Clerk session token (Web client)
-    if (process.env.CLERK_SECRET_KEY && token.length > 200) {
+  // 1. Try to verify as a Clerk session token (Web client)
+  if (process.env.CLERK_SECRET_KEY && token.length > 200) {
+    try {
       const claims = await verifyToken(token, {
         secretKey: process.env.CLERK_SECRET_KEY,
       });
       verifiedUserId = claims.sub;
+    } catch (err) {
+      // Non-fatal: fall back to custom mobile JWT
+      console.log(`[Socket Auth] Clerk token check failed for ${userId}, trying mobile JWT...`);
     }
-    
-    // 2. Try to verify as Kovari custom mobile JWT
-    if (!verifiedUserId) {
+  }
+  
+  // 2. Try to verify as Kovari custom mobile JWT
+  if (!verifiedUserId) {
+    try {
       const payload = verifyAccessToken(token);
       if (payload) verifiedUserId = payload.sub;
+    } catch (err) {
+      console.warn(`[Socket Auth] Custom JWT check failed for ${userId}:`, err);
     }
+  }
 
-    if (!verifiedUserId || verifiedUserId !== userId) {
-      console.warn(`[Socket Auth] Failed verification for requested userId: ${userId}`);
-      return next(new Error("Authentication error: invalid token"));
-    }
-  } catch (err) {
-    console.warn(`[Socket Auth] Token verification exception for userId: ${userId}`, err);
+  if (!verifiedUserId || verifiedUserId !== userId) {
+    console.warn(`[Socket Auth] Failed verification for requested userId: ${userId}`);
     return next(new Error("Authentication error: invalid token"));
   }
 

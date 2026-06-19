@@ -8,6 +8,7 @@ import 'package:mobile/core/utils/app_logger.dart';
 import 'package:mobile/core/security/encryption_service.dart';
 import 'package:mobile/features/chat/models/conversation_entity.dart';
 import 'package:mobile/features/chat/models/message_entity.dart';
+import 'package:mobile/features/chat/providers/conversation_runtime_store.dart';
 
 /// Typing indicator TTL in seconds.
 const _kTypingTtlSeconds = 5;
@@ -60,25 +61,53 @@ class ConversationStore extends Notifier<Map<String, ConversationEntity>> {
         ignoreCache: forceRefresh,
       );
 
-      final messages = response.data?['messages'] as List<dynamic>? ?? [];
-      print(
-        '🛡️ [ConversationStore] Fetched inbox: ${messages.length} conversations',
-      );
-      if (messages.isNotEmpty) {
-        print('🛡️ [ConversationStore] Raw first message: ${messages.first}');
+      final rawData = response.data ?? {};
+      // Support both DM-only inbox ('messages') and unified inbox ('conversations')
+      final messages =
+          rawData['conversations'] as List<dynamic>? ??
+          rawData['messages'] as List<dynamic>? ??
+          [];
+      AppLogger.d('[ConversationStore] Fetched inbox: ${messages.length} conversations');
 
+      if (messages.isNotEmpty) {
         final Map<String, ConversationEntity> newConversations = {};
         final myUser = ref.read(authProvider).user;
         if (myUser == null) {
-          print('⚠️ [ConversationStore] Cannot process inbox: myUser is null');
+          AppLogger.w('[ConversationStore] Cannot process inbox: myUser is null');
           return;
         }
 
         final myUuid = myUser.uuid ?? myUser.id;
 
         for (final msg in messages) {
-          final senderId = msg['sender_id'] as String;
-          final receiverId = msg['receiver_id'] as String;
+          // --- Group Conversation Detection ---
+          final isGroup = msg['is_group'] as bool? ?? false;
+          final groupId = msg['group_id'] as String?;
+
+          if (isGroup && groupId != null) {
+            // Group conversation entry
+            if (!newConversations.containsKey(groupId)) {
+              final lastMsgRaw = MessageEntity.fromSocket(
+                msg as Map<String, dynamic>,
+                groupId,
+              );
+              final conv = ConversationEntity(
+                chatId: groupId,
+                participantIds: const [],
+                isGroup: true,
+                groupName: msg['group_name'] as String? ?? 'Group',
+                groupAvatar: msg['group_avatar'] as String?,
+                lastMessageAt: lastMsgRaw.createdAt,
+                lastMessage: lastMsgRaw,
+              );
+              newConversations[groupId] = conv;
+            }
+            continue;
+          }
+
+          // --- Direct Conversation Entry ---
+          final senderId = msg['sender_id'] as String? ?? '';
+          final receiverId = msg['receiver_id'] as String? ?? '';
           final serverChatId = msg['chat_id'] as String?;
 
           final partnerId =
@@ -122,6 +151,13 @@ class ConversationStore extends Notifier<Map<String, ConversationEntity>> {
         }
 
         state = {...state, ...newConversations};
+
+        // --- Workstream 2.5: Bootstrap ConversationRuntimeStore ---
+        // Seed the runtime store so background socket events can instantly
+        // update metadata without requiring manual REST re-fetches.
+        ref
+            .read(conversationRuntimeStoreProvider.notifier)
+            .seedFromInbox(newConversations.values.toList());
       }
     } catch (e) {
       AppLogger.e('[ConversationStore] Failed to fetch inbox', error: e);

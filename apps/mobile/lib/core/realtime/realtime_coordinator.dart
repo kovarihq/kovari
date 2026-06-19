@@ -49,7 +49,12 @@ class RealtimeCoordinator extends Notifier<void> {
     // Flush any pending mutations for this room
     ref.read(chatMutationServiceProvider).replayPendingMessages(chatId);
 
-    AppLogger.i('[RealtimeCoordinator] Joined chat: $chatId (lastSeq: $lastKnownSequence)');
+    // Eagerly refresh messages to pull any missed offline packets
+    ref.read(messageStoreProvider(chatId).notifier).resync();
+
+    AppLogger.i(
+      '[RealtimeCoordinator] Joined chat: $chatId (lastSeq: $lastKnownSequence)',
+    );
   }
 
   /// Leave a chat room. Updates the last known sequence before leaving.
@@ -57,7 +62,9 @@ class RealtimeCoordinator extends Notifier<void> {
     // Persist the final known sequence before leaving
     final msgState = ref.read(messageStoreProvider(chatId));
     _activeChatLastKnownSeq[chatId] = msgState.highestKnownSequence;
-    ref.read(socketServiceProvider.notifier).emit('leave_chat', {'chatId': chatId});
+    ref.read(socketServiceProvider.notifier).emit('leave_chat', {
+      'chatId': chatId,
+    });
     AppLogger.i('[RealtimeCoordinator] Left chat: $chatId');
   }
 
@@ -71,8 +78,8 @@ class RealtimeCoordinator extends Notifier<void> {
       'send_message',
       {'chatId': chatId, 'message': messagePayload},
       (dynamic ack) {
-        if (ack is Map<String, dynamic>) {
-          onAck?.call(ack);
+        if (ack is Map) {
+          onAck?.call(Map<String, dynamic>.from(ack));
         }
       },
     );
@@ -80,27 +87,38 @@ class RealtimeCoordinator extends Notifier<void> {
 
   /// Emit compressed read receipt for a conversation.
   void markSeenUpTo(String chatId, int lastSeenSequence) {
-    ref.read(conversationStoreProvider.notifier).markSeenUpTo(chatId, lastSeenSequence);
-    ref.read(messageStoreProvider(chatId).notifier).markSeenUpTo(lastSeenSequence);
-    ref.read(socketServiceProvider.notifier).emit('mark_seen', <String, dynamic>{
-      'chatId': chatId,
-      'messageIds': <String>[], // Legacy field — kept for server compat
-      'lastSeenSequence': lastSeenSequence,
-    });
+    ref
+        .read(conversationStoreProvider.notifier)
+        .markSeenUpTo(chatId, lastSeenSequence);
+    ref
+        .read(messageStoreProvider(chatId).notifier)
+        .markSeenUpTo(lastSeenSequence);
+    ref.read(socketServiceProvider.notifier).emit(
+      'mark_seen',
+      <String, dynamic>{
+        'chatId': chatId,
+        'messageIds': <String>[], // Legacy field — kept for server compat
+        'lastSeenSequence': lastSeenSequence,
+      },
+    );
   }
 
-  void startTyping(String chatId) =>
-      ref.read(socketServiceProvider.notifier).emit('typing_start', {'chatId': chatId});
+  void startTyping(String chatId) => ref
+      .read(socketServiceProvider.notifier)
+      .emit('typing_start', {'chatId': chatId});
 
-  void stopTyping(String chatId) =>
-      ref.read(socketServiceProvider.notifier).emit('typing_stop', {'chatId': chatId});
+  void stopTyping(String chatId) => ref
+      .read(socketServiceProvider.notifier)
+      .emit('typing_stop', {'chatId': chatId});
 
   // ---------------------------------------------------------------------------
   // Reconnect Resync (Sequence Audit)
   // ---------------------------------------------------------------------------
 
   void _onConnected() {
-    AppLogger.i('[RealtimeCoordinator] Socket connected. Performing sequence audit for ${_activeChatLastKnownSeq.length} active rooms.');
+    AppLogger.i(
+      '[RealtimeCoordinator] Socket connected. Performing sequence audit for ${_activeChatLastKnownSeq.length} active rooms.',
+    );
 
     // Re-join all previously active rooms with their last known sequence
     // The server will emit gap_found events if it detects missing messages
@@ -110,7 +128,9 @@ class RealtimeCoordinator extends Notifier<void> {
   }
 
   void _onDisconnected() {
-    AppLogger.w('[RealtimeCoordinator] Socket disconnected. Preserving active room sequences.');
+    AppLogger.w(
+      '[RealtimeCoordinator] Socket disconnected. Preserving active room sequences.',
+    );
     // Sequences are preserved in _activeChatLastKnownSeq for reconnect resync
   }
 

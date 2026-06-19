@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:mobile/core/theme/app_colors.dart';
 import 'package:mobile/features/groups/models/group.dart';
+import 'package:mobile/features/groups/providers/entity_stores.dart';
 import 'package:mobile/features/groups/providers/group_details_provider.dart';
 import 'package:mobile/features/groups/widgets/edit_group_sheets.dart';
 import 'package:mobile/features/groups/widgets/management_sheets.dart';
@@ -23,7 +24,7 @@ class SettingsTab extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final membershipAsync = ref.watch(groupMembershipProvider(group.id));
+    final membershipState = ref.watch(membershipStoreProvider.select((s) => s[group.id]));
     final dateStr = group.dateRange.start != null
         ? "${DateFormat('MMM d').format(DateTime.parse(group.dateRange.start!))} - ${group.dateRange.end != null ? DateFormat('MMM d').format(DateTime.parse(group.dateRange.end!)) : 'Ongoing'}"
         : 'Not set';
@@ -73,7 +74,7 @@ class SettingsTab extends ConsumerWidget {
                   context,
                   GroupMembersManagementSheet(
                     group: group,
-                    isAdmin: membershipAsync.value?.isAdmin ?? false,
+                    isAdmin: membershipState?.data?.isAdmin ?? false,
                   ),
                 ),
               ),
@@ -84,8 +85,8 @@ class SettingsTab extends ConsumerWidget {
                 onTap: () =>
                     _showEditSheet(context, InviteMembersSheet(group: group)),
               ),
-              if (membershipAsync.value?.isAdmin == true ||
-                  membershipAsync.value?.isCreator == true)
+              if (membershipState?.data?.isAdmin == true ||
+                  membershipState?.data?.isCreator == true)
                 KovariListRow(
                   icon: LucideIcons.inbox,
                   label: 'Join Requests',
@@ -118,7 +119,7 @@ class SettingsTab extends ConsumerWidget {
                 labelColor: AppColors.destructive,
                 onTap: () => _showLeaveConfirmation(context, ref),
               ),
-              if (membershipAsync.value?.isCreator == true)
+              if (membershipState?.data?.isCreator == true)
                 KovariListRow(
                   icon: LucideIcons.trash2,
                   iconColor: AppColors.destructive,

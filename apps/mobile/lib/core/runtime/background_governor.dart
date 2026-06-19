@@ -1,13 +1,14 @@
 import 'package:flutter/widgets.dart';
-import 'package:mobile/core/runtime/replay_engine.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mobile/core/runtime/runtime_scheduler.dart';
 import 'package:mobile/core/utils/app_logger.dart';
+import 'package:mobile/features/chat/providers/chat_media_service.dart';
 
 class BackgroundGovernor extends WidgetsBindingObserver {
 
-  BackgroundGovernor(this._scheduler, this._replayEngine);
+  BackgroundGovernor(this._scheduler, this._ref);
   final RuntimeScheduler _scheduler;
-  final ReplayEngine _replayEngine;
+  final Ref _ref;
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
@@ -33,9 +34,6 @@ class BackgroundGovernor extends WidgetsBindingObserver {
     // 2. Clear image cache to free memory for system
     PaintingBinding.instance.imageCache.clear();
     PaintingBinding.instance.imageCache.clearLiveImages();
-    
-    // 3. Flush ReplayEngine to disk
-    // _replayEngine.flush(); // Assuming flush exists or just ensure persistence is called
   }
 
   void _handleForeground() {
@@ -45,9 +43,12 @@ class BackgroundGovernor extends WidgetsBindingObserver {
     Future.delayed(const Duration(milliseconds: 500), () {
       _scheduler.setScrollVelocity(0);
     });
-    
-    // 2. Trigger re-hydration for active entities
-    // This is handled by Riverpod's provider lifecycle usually, 
-    // but we could trigger a refresh here if needed.
+
+    // 2. Recover background uploads
+    try {
+      _ref.read(chatMediaServiceProvider).recoverBackgroundUploads();
+    } catch (e) {
+      AppLogger.e('⚠️ [BackgroundGovernor] Background upload recovery failed', error: e);
+    }
   }
 }

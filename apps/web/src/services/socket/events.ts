@@ -160,34 +160,42 @@ export const registerSocketEvents = (
         }
       }
 
-      // Generate sequence IDs with in-memory fallback
-      const conversationSequence = await sequenceManager.getNext(`chat_seq:${chatId}`);
-      const serverSequence = await sequenceManager.getNext(`global_seq`);
-
-      // Override avatar with the Supabase profile_photo cached at connection time
-      const enrichedMessage = {
-        ...message,
-        avatar: (socket.data as any).profilePhoto || message.avatar,
-        conversationSequence,
-        serverSequence,
-      };
-
-      // Immediately broadcast to all users in the room
-      io.to(chatId).emit("receive_message", enrichedMessage);
-
-      // Level 1: DELIVERY ACK
-      if (callback) {
-        callback({ status: "sent" });
-      }
-
-      // Async DB write reusing API logic/principles
+      // 1. Persist message to DB first to generate database sequence values
       const persistedMessage = await persistMessageToDb(
         chatId,
         message,
         userId,
+      );
+
+      const conversationSequence = persistedMessage.conversation_sequence;
+      const serverSequence = persistedMessage.global_sequence;
+
+      // 2. Override avatar with the Supabase profile_photo cached at connection time
+      // FINDING-1 FIX: Inject senderClerkId so receivers can derive the correct E2EE shared secret
+      // FINDING-2 FIX: Inject chatId explicitly so the payload is self-describing for all consumers
+      const enrichedMessage = {
+        ...message,
+        id: persistedMessage.id,
+        chatId,
+        avatar: (socket.data as any).profilePhoto || message.avatar,
+        senderClerkId: userId, // userId is the verified Clerk ID on this socket
         conversationSequence,
         serverSequence,
-      );
+        createdAt: persistedMessage.created_at || new Date().toISOString(),
+      };
+
+      // 3. Immediately broadcast to all users in the room
+      io.to(chatId).emit("receive_message", enrichedMessage);
+
+      // 4. Return ACK containing the generated sequence values to the sender
+      if (callback) {
+        callback({
+          status: "sent",
+          messageId: persistedMessage.id,
+          conversationSequence,
+          serverSequence,
+        });
+      }
 
       // Level 2: PERSISTENCE ACK
       io.to(chatId).emit("message_persisted", {
@@ -329,20 +337,58 @@ export const registerSocketEvents = (
     socket.to(chatId).emit("user_stopped_typing", { chatId, userId });
   });
 
-  socket.on("message_delivered", ({ chatId, messageId }) => {
+  socket.on("message_delivered", async ({ chatId, messageId }) => {
+    // FINDING-4 FIX: Include conversationSequence so mobile can advance the delivered watermark.
+    // Look up the sequence from DB — use a non-throwing path to avoid breaking the ack on errors.
+    let conversationSequence: number | undefined;
+    try {
+      const supabase = createAdminSupabaseClient();
+      const isDirectChat = chatId.includes("_");
+      const table = isDirectChat ? "direct_messages" : "group_messages";
+      const { data: row } = await supabase
+        .from(table)
+        .select("conversation_sequence")
+        .eq("id", messageId)
+        .maybeSingle();
+      if (row?.conversation_sequence != null) {
+        conversationSequence = row.conversation_sequence;
+      }
+    } catch (_) {
+      // Non-fatal: ack still relayed without sequence
+    }
     // Relay to sender immediately
     socket
       .to(chatId)
-      .emit("message_delivered_ack", { chatId, messageId, userId });
+      .emit("message_delivered_ack", { chatId, messageId, userId, conversationSequence });
   });
 
-  socket.on("mark_seen", async ({ chatId, messageIds }) => {
+  socket.on("mark_seen", async ({ chatId, messageIds, lastSeenSequence }) => {
     try {
       const supabase = createAdminSupabaseClient();
       const isDirectChat = chatId.includes("_");
       const supabaseId = socket.data.supabaseId;
 
       const table = isDirectChat ? "direct_messages" : "group_messages";
+
+      // FINDING-5 FIX: Resolve lastSeenSequence if not provided by client.
+      // We need this to advance the delivered/seen watermarks on all mobile clients.
+      let resolvedLastSeenSequence = lastSeenSequence;
+      if (resolvedLastSeenSequence == null && messageIds.length > 0) {
+        try {
+          const { data: seqRow } = await supabase
+            .from(table)
+            .select("conversation_sequence")
+            .in("id", messageIds)
+            .order("conversation_sequence", { ascending: false })
+            .limit(1)
+            .maybeSingle();
+          if (seqRow?.conversation_sequence != null) {
+            resolvedLastSeenSequence = seqRow.conversation_sequence;
+          }
+        } catch (_) {
+          // Non-fatal: watermark ommitted from this ack
+        }
+      }
 
       if (messageIds.length > 0) {
         if (isDirectChat) {
@@ -381,6 +427,7 @@ export const registerSocketEvents = (
                 messageIds: [msgId],
                 userId,
                 isFullySeen: true, // This flag triggers the blue check in the UI
+                lastSeenSequence: resolvedLastSeenSequence,
               });
               // Once fully seen, we can optionally cleanup the set (after a short delay or now)
               await pubClient.expire(setKey, 3600); // Keep for an hour just in case of race conditions
@@ -390,7 +437,7 @@ export const registerSocketEvents = (
       }
 
       // Individual feedback (grey ticks still, but tells sender SOMEONE saw it)
-      socket.to(chatId).emit("messages_seen", { chatId, messageIds, userId });
+      socket.to(chatId).emit("messages_seen", { chatId, messageIds, userId, lastSeenSequence: resolvedLastSeenSequence });
     } catch (error) {
       console.error("[Socket] Failed to mark messages seen:", error);
     }
@@ -420,12 +467,94 @@ export const registerSocketEvents = (
 
   socket.on(
     "request_gap_fill",
-    async ({ chatId, fromSequence, toSequence }) => {
+    async ({ chatId, fromSequence, toSequence }, callback) => {
       console.log(
         `[Socket] User ${userId} requested gap fill for ${chatId} from ${fromSequence} to ${toSequence}`,
       );
-      // Implementation for Phase 10 Gap Recovery
-      // Should fetch from DB and emit to the user's socket
+
+      // Rate limit check: Max 10 requests per 10s
+      const isAllowed = await RateLimiter.checkRateLimit(userId, 10, 10);
+      if (!isAllowed) {
+        if (callback) callback({ status: "RATE_LIMIT_EXCEEDED" });
+        return;
+      }
+
+      if (toSequence - fromSequence > 500) {
+        if (callback) callback({ status: "GAP_TOO_LARGE" });
+        return;
+      }
+
+      try {
+        const supabase = createAdminSupabaseClient();
+        const isDirectChat = chatId.includes("_");
+
+        let messages: any[] = [];
+        if (isDirectChat) {
+          const supabaseId = socket.data.supabaseId;
+          if (supabaseId) {
+            const [id1, id2] = chatId.split("_");
+            const partnerId = supabaseId === id1 ? id2 : id1;
+            const userA = supabaseId < partnerId ? supabaseId : partnerId;
+            const userB = supabaseId < partnerId ? partnerId : supabaseId;
+
+            const { data: conv } = await supabase
+              .from("conversations")
+              .select("id")
+              .eq("user_a_id", userA)
+              .eq("user_b_id", userB)
+              .maybeSingle();
+
+            if (conv) {
+              const { data, error } = await supabase
+                .from("direct_messages")
+                .select("*")
+                .eq("conversation_id", conv.id)
+                .gte("conversation_sequence", fromSequence)
+                .lte("conversation_sequence", toSequence)
+                .order("conversation_sequence", { ascending: true });
+
+              if (error) throw error;
+              messages = data || [];
+            }
+          }
+        } else {
+          const { data, error } = await supabase
+            .from("group_messages")
+            .select("*")
+            .eq("group_id", chatId)
+            .gte("conversation_sequence", fromSequence)
+            .lte("conversation_sequence", toSequence)
+            .order("conversation_sequence", { ascending: true });
+
+          if (error) throw error;
+          messages = data || [];
+        }
+
+        if (callback) {
+          callback({
+            status: "success",
+            // FINDING-6 FIX: Include full E2EE fields so gap-recovered messages can be decrypted.
+            messages: messages.map((m: any) => ({
+              id: m.id,
+              senderId: m.sender_id || m.user_id,
+              // text is kept for backward compat, but clients should use encryptedContent for decryption
+              text: m.encrypted_content || "",
+              encryptedContent: m.encrypted_content || null,
+              iv: m.encryption_iv || null,
+              salt: m.encryption_salt || null,
+              isEncrypted: m.is_encrypted ?? false,
+              mediaUrl: m.media_url || null,
+              mediaType: m.media_type || null,
+              conversationSequence: m.conversation_sequence,
+              serverSequence: m.global_sequence,
+              createdAt: m.created_at,
+            })),
+          });
+        }
+      } catch (err) {
+        console.error("[Socket] request_gap_fill failed:", err);
+        if (callback) callback({ status: "error", error: String(err) });
+      }
     },
   );
 };
@@ -439,8 +568,6 @@ async function persistMessageToDb(
   chatId: string,
   message: any,
   socketAuthUserId: string,
-  conversationSequence?: number,
-  serverSequence?: number,
 ) {
   const supabase = createAdminSupabaseClient();
 
@@ -451,9 +578,36 @@ async function persistMessageToDb(
   const isDirectChat = chatId.includes("_");
 
   if (isDirectChat) {
+    const [id1, id2] = chatId.split("_");
+    const partnerId = message.receiverId;
+    const userA = userUuid < partnerId ? userUuid : partnerId;
+    const userB = userUuid < partnerId ? partnerId : userUuid;
+
+    // Find or create conversation
+    let { data: conv } = await supabase
+      .from("conversations")
+      .select("id")
+      .eq("user_a_id", userA)
+      .eq("user_b_id", userB)
+      .maybeSingle();
+
+    if (!conv) {
+      const { data: newConv, error: newConvError } = await supabase
+        .from("conversations")
+        .insert({ user_a_id: userA, user_b_id: userB })
+        .select("id")
+        .single();
+      if (newConvError) {
+        console.error("[Socket DB Persist] Failed to create conversation:", newConvError);
+        throw newConvError;
+      }
+      conv = newConv;
+    }
+
     const { data, error } = await supabase
       .from("direct_messages")
       .insert({
+        conversation_id: conv.id,
         sender_id: userUuid,
         receiver_id: message.receiverId,
         encrypted_content: message.encryptedContent || null,
@@ -486,7 +640,7 @@ async function persistMessageToDb(
         media_type: message.mediaType || null,
         is_encrypted: message.isEncrypted ?? true,
       })
-      .select("id")
+      .select("*")
       .single();
 
     if (error) {

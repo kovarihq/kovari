@@ -9,6 +9,7 @@ import 'package:mobile/core/theme/app_radius.dart';
 import 'package:mobile/core/theme/app_text_styles.dart';
 import 'package:mobile/core/widgets/skeletons/kovari_skeletons.dart';
 import 'package:mobile/features/chat/models/conversation_entity.dart';
+import 'package:mobile/features/chat/providers/conversation_runtime_store.dart';
 import 'package:mobile/features/chat/providers/conversation_store.dart';
 import 'package:mobile/features/chat/screens/chat_screen.dart';
 import 'package:mobile/shared/widgets/app_card.dart';
@@ -47,7 +48,7 @@ class _ChatInboxScreenState extends ConsumerState<ChatInboxScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final conversations = ref.watch(conversationStoreProvider);
+    final conversations = ref.watch(conversationRuntimeStoreProvider);
     final isLoading = ref.watch(inboxLoadingProvider);
 
     // Sort by lastMessageAt descending
@@ -65,7 +66,7 @@ class _ChatInboxScreenState extends ConsumerState<ChatInboxScreen> {
         ? sorted
         : sorted
               .where(
-                (c) => c.displayName.toLowerCase().contains(
+                (c) => (c.metadata?.displayName ?? '').toLowerCase().contains(
                   _searchQuery.toLowerCase(),
                 ),
               )
@@ -208,7 +209,7 @@ class _ChatInboxScreenState extends ConsumerState<ChatInboxScreen> {
                               for (int i = 0; i < filtered.length; i++) ...[
                                 RepaintBoundary(
                                   child: _ConversationTile(
-                                    conversation: filtered[i],
+                                    state: filtered[i],
                                     onTap: () {
                                       context.push(
                                         '/chat/${filtered[i].chatId}',
@@ -242,130 +243,118 @@ class _ChatInboxScreenState extends ConsumerState<ChatInboxScreen> {
 // ── Conversation Tile ────────────────────────────────────────────────────────
 
 class _ConversationTile extends StatelessWidget {
-  const _ConversationTile({required this.conversation, required this.onTap});
+  const _ConversationTile({required this.state, required this.onTap});
 
-  final ConversationEntity conversation;
+  final ConversationRuntimeState state;
   final VoidCallback onTap;
 
   @override
-  Widget build(BuildContext context) => InkWell(
-    onTap: onTap,
-    child: Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      child: Row(
-        children: [
-          // ── Avatar + Presence Dot ──────────────────────────────────
-          Stack(
-            children: [
-              KovariAvatar(
-                imageUrl: conversation.displayAvatar,
-                size: 40,
-                fullName: conversation.displayName,
-              ),
-              if (conversation.isPartnerOnline && !conversation.isGroup)
-                Positioned(
-                  bottom: 0,
-                  right: 0,
-                  child: Container(
-                    width: 14,
-                    height: 14,
-                    decoration: BoxDecoration(
-                      color: AppColors.primary,
-                      shape: BoxShape.circle,
-                      border: Border.all(
-                        color: AppColors.surface(context, level: 1),
-                        width: 2,
-                      ),
-                    ),
-                  ),
-                ),
-            ],
-          ),
-          const SizedBox(width: 12),
+  Widget build(BuildContext context) {
+    final metadata = state.metadata;
+    if (metadata == null) return const SizedBox.shrink();
 
-          // ── Content ────────────────────────────────────────────────
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                // Name + Timestamp
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Expanded(
-                      child: Text(
-                        conversation.displayName,
-                        style: AppTextStyles.bodySmall.copyWith(
-                          fontWeight: FontWeight.w600,
-                          color: AppColors.text(context),
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Text(
-                      _formatTimestamp(conversation.lastMessageAt),
-                      style: AppTextStyles.bodySmall.copyWith(
-                        color: AppColors.text(context, isMuted: true),
-                        fontSize: 11,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 1),
+    return InkWell(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        child: Row(
+          children: [
+            // ── Avatar + Presence Dot ──────────────────────────────────
+            KovariAvatar(
+              imageUrl: metadata.displayAvatar,
+              size: 40,
+              fullName: metadata.displayName,
+              isOnline: state.isPartnerOnline && !metadata.isGroup,
+              borderColor: AppColors.surface(context, level: 1),
+            ),
+            const SizedBox(width: 12),
 
-                // Subtitle + Unread Badge
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Expanded(child: _buildSubtitle(context)),
-                    if (conversation.unreadCount > 0)
-                      Container(
-                        margin: const EdgeInsets.only(left: 8),
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 6,
-                          vertical: 2,
-                        ),
-                        decoration: BoxDecoration(
-                          color: AppColors.primary,
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        constraints: const BoxConstraints(
-                          minWidth: 20,
-                          minHeight: 20,
-                        ),
-                        alignment: Alignment.center,
+            // ── Content ────────────────────────────────────────────────
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  // Name + Timestamp
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Expanded(
                         child: Text(
-                          conversation.unreadCount > 99
-                              ? '99+'
-                              : '${conversation.unreadCount}',
+                          metadata.displayName,
                           style: AppTextStyles.bodySmall.copyWith(
-                            color: Colors.white,
-                            fontSize: 10,
                             fontWeight: FontWeight.w600,
+                            color: AppColors.text(context),
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        _formatTimestamp(state.lastMessageAt),
+                        style: AppTextStyles.bodySmall.copyWith(
+                          color: AppColors.text(context, isMuted: true),
+                          fontSize: 11,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 1),
+
+                  // Subtitle + Unread Badge
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Expanded(child: _buildSubtitle(context)),
+                      if (state.unreadCount > 0)
+                        Container(
+                          margin: const EdgeInsets.only(left: 8),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 6,
+                            vertical: 2,
+                          ),
+                          decoration: BoxDecoration(
+                            color: AppColors.primary,
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          constraints: const BoxConstraints(
+                            minWidth: 20,
+                            minHeight: 20,
+                          ),
+                          alignment: Alignment.center,
+                          child: Text(
+                            state.unreadCount > 99
+                                ? '99+'
+                                : '${state.unreadCount}',
+                            style: AppTextStyles.bodySmall.copyWith(
+                              color: Colors.white,
+                              fontSize: 10,
+                              fontWeight: FontWeight.w600,
+                            ),
                           ),
                         ),
-                      ),
-                  ],
-                ),
-              ],
+                    ],
+                  ),
+                ],
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
-    ),
-  );
+    );
+  }
 
   Widget _buildSubtitle(BuildContext context) {
+    final metadata = state.metadata;
     // Typing indicator (TTL-backed, auto-expires)
-    final typingUsers = conversation.typingUserIds;
+    final typingUsers = state.typingUserIds;
     if (typingUsers.isNotEmpty) {
+      final String name = metadata?.isGroup == true
+          ? (typingUsers.length == 1 ? 'Someone' : '${typingUsers.length} people')
+          : (metadata?.displayName ?? 'User');
       return Text(
-        typingUsers.length == 1
-            ? 'typing…'
-            : '${typingUsers.length} people typing…',
+        '$name is typing…',
         style: AppTextStyles.bodySmall.copyWith(
           color: AppColors.primary,
           fontSize: 12,
@@ -373,10 +362,11 @@ class _ConversationTile extends StatelessWidget {
       );
     }
 
-    final last = conversation.lastMessage;
+    final snippet = state.lastMessageSnippet;
+    final mediaType = state.lastMessageMediaType;
 
     // No messages yet — new conversation
-    if (last == null) {
+    if (snippet == null && (mediaType == null || mediaType == 'init')) {
       return Text(
         'Start a conversation!',
         style: AppTextStyles.bodySmall.copyWith(
@@ -388,7 +378,7 @@ class _ConversationTile extends StatelessWidget {
     }
 
     // Media messages
-    if (last.mediaType == 'image') {
+    if (mediaType == 'image') {
       return Row(
         children: [
           Icon(
@@ -407,7 +397,7 @@ class _ConversationTile extends StatelessWidget {
         ],
       );
     }
-    if (last.mediaType == 'video') {
+    if (mediaType == 'video') {
       return Row(
         children: [
           Icon(
@@ -428,8 +418,8 @@ class _ConversationTile extends StatelessWidget {
     }
 
     // Text message (or encrypted placeholder)
-    final displayText = last.text?.isNotEmpty == true
-        ? last.text!
+    final displayText = snippet?.isNotEmpty == true
+        ? snippet!
         : '🔒 Encrypted message';
     return Text(
       displayText,

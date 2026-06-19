@@ -6,6 +6,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:mobile/core/theme/app_colors.dart';
 import 'package:mobile/core/theme/app_text_styles.dart';
 import 'package:mobile/features/groups/models/group.dart';
+import 'package:mobile/features/groups/providers/entity_stores.dart';
 import 'package:mobile/features/groups/providers/group_details_provider.dart';
 import 'package:mobile/features/groups/widgets/edit_group_sheets.dart';
 import 'package:mobile/features/groups/widgets/settings_widgets.dart';
@@ -28,13 +29,30 @@ class GroupMembersManagementSheet extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final membersAsync = ref.watch(groupMembersProvider(group.id));
+    final membersState = ref.watch(memberStoreProvider.select((s) => s[group.id]));
 
     return SettingsBottomSheet(
       title: 'Group Members',
       children: [
-        membersAsync.when(
-          data: (members) => KovariGroupContainer(
+        (() {
+          if (membersState == null || (membersState.isHydrating && !membersState.hasData)) {
+            return const Center(
+              child: Padding(
+                padding: EdgeInsets.symmetric(vertical: 50),
+                child: SizedBox(
+                  height: 20,
+                  width: 20,
+                  child: CircularProgressIndicator(strokeWidth: 3),
+                ),
+              ),
+            );
+          }
+          if (membersState.error != null && !membersState.hasData) {
+            return Center(child: Text('Error loading members'));
+          }
+
+          final members = membersState.data ?? [];
+          return KovariGroupContainer(
             backgroundColor: AppColors.surface(context, level: 1),
             children: () {
               final sortedMembers = [...members]
@@ -48,99 +66,88 @@ class GroupMembersManagementSheet extends ConsumerWidget {
                 });
 
               return sortedMembers.map((member) {
-              final isOtherAdmin = member.role == 'admin';
+                final isOtherAdmin = member.role == 'admin';
 
-              return Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 12,
-                ),
-                child: Row(
-                  children: [
-                    KovariAvatar(imageUrl: member.avatar, size: 42),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            member.name,
-                            style: AppTextStyles.bodyMedium.copyWith(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w500,
-                              color: AppColors.text(context),
+                return Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 12,
+                  ),
+                  child: Row(
+                    children: [
+                      KovariAvatar(imageUrl: member.avatar, size: 42),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              member.name,
+                              style: AppTextStyles.bodyMedium.copyWith(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w500,
+                                color: AppColors.text(context),
+                              ),
                             ),
-                          ),
-                          // const SizedBox(height: 1),
-                          Text(
-                            '@${member.username}',
-                            style: AppTextStyles.bodySmall.copyWith(
-                              fontSize: 13,
-                              color: AppColors.text(context, isMuted: true),
+                            // const SizedBox(height: 1),
+                            Text(
+                              '@${member.username}',
+                              style: AppTextStyles.bodySmall.copyWith(
+                                fontSize: 13,
+                                color: AppColors.text(context, isMuted: true),
+                              ),
                             ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    if (member.role == 'admin')
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 10,
-                          vertical: 4,
-                        ),
-                        decoration: BoxDecoration(
-                          color: AppColors.primary.withValues(alpha: 0.1),
-                          borderRadius: BorderRadius.circular(
-                            100,
-                          ), // Pill shape
-                        ),
-                        child: Text(
-                          'Admin',
-                          style: AppTextStyles.bodySmall.copyWith(
-                            color: AppColors.primary,
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                            letterSpacing: 0.2,
-                          ),
+                          ],
                         ),
                       ),
-                    if (isAdmin && !isOtherAdmin)
-                      GestureDetector(
-                        onTap: () => _confirmRemove(context, ref, member),
-                        child: Container(
+                      if (member.role == 'admin')
+                        Container(
                           padding: const EdgeInsets.symmetric(
-                            horizontal: 5,
+                            horizontal: 10,
                             vertical: 4,
                           ),
+                          decoration: BoxDecoration(
+                            color: AppColors.primary.withValues(alpha: 0.1),
+                            borderRadius: BorderRadius.circular(
+                              100,
+                            ), // Pill shape
+                          ),
                           child: Text(
-                            'Remove',
+                            'Admin',
                             style: AppTextStyles.bodySmall.copyWith(
-                              color: AppColors.destructive,
+                              color: AppColors.primary,
                               fontSize: 12,
                               fontWeight: FontWeight.w600,
                               letterSpacing: 0.2,
                             ),
                           ),
                         ),
-                      ),
-                  ],
-                ),
-              );
+                      if (isAdmin && !isOtherAdmin)
+                        GestureDetector(
+                          onTap: () => _confirmRemove(context, ref, member),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 5,
+                              vertical: 4,
+                            ),
+                            child: Text(
+                              'Remove',
+                              style: AppTextStyles.bodySmall.copyWith(
+                                color: AppColors.destructive,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                                letterSpacing: 0.2,
+                              ),
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                );
               }).toList();
             }(),
-          ),
-          loading: () => const Center(
-            child: Padding(
-              padding: EdgeInsets.symmetric(vertical: 50),
-              child: SizedBox(
-                height: 20,
-                width: 20,
-                child: CircularProgressIndicator(strokeWidth: 3),
-              ),
-            ),
-          ),
-          error: (e, _) => Center(child: Text('Error: $e')),
-        ),
+          );
+        })(),
       ],
     );
   }

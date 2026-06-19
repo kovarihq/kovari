@@ -80,6 +80,10 @@ export const useDirectChat = (
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   const seenIdsRef = useRef(new Set<string>());
+  // Gap detection: track the highest conversation sequence seen
+  const lastKnownSequenceRef = useRef<number>(0);
+  // Typing throttle: only emit typing_start once per 3s window
+  const lastTypingEmitRef = useRef<number>(0);
 
   // Shared secret for encryption - standardizing on UUIDs for cross-platform parity
   const sharedSecret = useMemo(() => {
@@ -245,9 +249,15 @@ export const useDirectChat = (
      const chatId = currentUserUuid && partnerUuid ? getDirectChatId(currentUserUuid, partnerUuid) : null;
      if (user?.id && chatId) {
         const socket = getSocket(user.id);
-        socket.emit("typing_start", { chatId });
+        const now = Date.now();
+        // Workstream 5: Rate-limit typing_start to once per 3 seconds
+        if (now - lastTypingEmitRef.current >= 3000) {
+          socket.emit("typing_start", { chatId });
+          lastTypingEmitRef.current = now;
+        }
         if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
-        typingTimeoutRef.current = setTimeout(stopTyping, 2500);
+        // Debounce typing_stop by 1.5s
+        typingTimeoutRef.current = setTimeout(stopTyping, 1500);
      }
   }, [user?.id, currentUserUuid, partnerUuid, stopTyping]);
 
@@ -489,6 +499,53 @@ export const useDirectChat = (
             finalContent = incomingMsg.content || incomingMsg.plain_content || ""; // Use content or plain_content
         }
 
+        // --- Workstream 7: Sequence Gap Detection & Idempotent Merge ---
+        const incomingSeq: number | undefined = (incomingMsg as any).conversationSequence;
+        if (incomingSeq && incomingSeq > 0) {
+          const lastSeq = lastKnownSequenceRef.current;
+          if (lastSeq > 0 && incomingSeq > lastSeq + 1) {
+            // Gap detected — request missing messages from server
+            const fromSeq = lastSeq + 1;
+            const toSeq = incomingSeq - 1;
+            console.warn(`[useDirectChat] Gap detected: missing CSN ${fromSeq}–${toSeq}`);
+            socket.emit("request_gap_fill", {
+              chatId,
+              fromSequence: fromSeq,
+              toSequence: toSeq,
+            }, (response: any) => {
+              if (response?.status === "success" && Array.isArray(response.messages)) {
+                setMessages((prev) => {
+                  const existingIds = new Set(prev.map((m) => m.id));
+                  const gapMessages: DirectChatMessage[] = response.messages
+                    .filter((m: any) => !existingIds.has(m.id))
+                    .map((m: any) => ({
+                      id: m.id,
+                      sender_id: m.senderId || m.sender_id,
+                      receiver_id: m.receiverId || m.receiver_id,
+                      encrypted_content: m.encryptedContent || m.encrypted_content,
+                      encryption_iv: m.iv || m.encryption_iv,
+                      encryption_salt: m.salt || m.encryption_salt,
+                      is_encrypted: m.isEncrypted ?? m.is_encrypted ?? false,
+                      created_at: m.createdAt || m.created_at || new Date().toISOString(),
+                      plain_content: m.text || m.plain_content || "",
+                      status: "delivered" as const,
+                    }));
+                  return [...prev, ...gapMessages].sort(
+                    (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+                  );
+                });
+              } else if (response?.status === "GAP_TOO_LARGE") {
+                // Fall back to full REST fetch
+                fetchMessages();
+              }
+            });
+          }
+          // Update highest known sequence — idempotent: only move forward
+          if (incomingSeq > lastKnownSequenceRef.current) {
+            lastKnownSequenceRef.current = incomingSeq;
+          }
+        }
+
         // Constructing a DirectChatMessage, not ChatMessage as per the original type
         const newMessage: DirectChatMessage = {
           id: incomingMsg.id || incomingMsg.tempId,
@@ -516,9 +573,15 @@ export const useDirectChat = (
       });
     };
 
-    const handleMessagePersisted = (ack: { tempId: string, messageId: string, chatId: string }) => {
+    const handleMessagePersisted = (ack: { tempId: string, messageId: string, chatId: string, conversationSequence?: number }) => {
        if (ack.chatId === chatId) {
           seenIdsRef.current.add(ack.messageId);
+          // FINDING-3 FIX: Advance the gap detector's sequence cursor on the sender's own messages.
+          // Without this, the sender's side would not know their own message's sequence, causing
+          // false gap detections when the next receive_message arrives.
+          if (ack.conversationSequence && ack.conversationSequence > lastKnownSequenceRef.current) {
+            lastKnownSequenceRef.current = ack.conversationSequence;
+          }
           // Only upgrade status if it was stuck on 'sending', don't override delivery states
           setMessages((prev) => prev.map(m => m.tempId === ack.tempId ? { ...m, id: ack.messageId, status: m.status === 'sending' ? "sent" : m.status } : m));
        }
@@ -574,6 +637,14 @@ export const useDirectChat = (
     socket.on("user_online", handleUserOnline);
     socket.on("user_offline", handleUserOffline);
 
+    // Workstream 7: Gap fill response from server
+    const handleGapFound = (data: { fromSequence: number; toSequence: number; chatId: string }) => {
+      if (data.chatId !== chatId) return;
+      console.warn(`[useDirectChat] Server reported gap: ${data.fromSequence}–${data.toSequence}. Resyncing.`);
+      fetchMessages();
+    };
+    socket.on("gap_found", handleGapFound);
+
     return () => {
       socket.off("connect", onConnect);
       socket.off("receive_message", handleReceiveMessage);
@@ -584,6 +655,7 @@ export const useDirectChat = (
       socket.off("user_stopped_typing", handleUserStoppedTyping);
       socket.off("user_online", handleUserOnline);
       socket.off("user_offline", handleUserOffline);
+      socket.off("gap_found", handleGapFound);
       socket.emit("leave_chat", { chatId });
     };
   }, [user?.id, currentUserUuid, partnerUuid, fetchMessages, decryptMessage, sharedSecret]);
