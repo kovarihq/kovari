@@ -18,17 +18,39 @@ const FinalCTA = dynamic(() => import("@/shared/components/landing/FinalCTA"));
 const Footer = dynamic(() => import("@/shared/components/landing/Footer"));
 const WaitlistModal = dynamic(() => import("@/shared/components/landing/WaitlistModal"), { ssr: false });
 
-export default function HomePage() {
+interface LandingContentProps {
+  initialWaitlistCount: number | null;
+}
+
+export default function HomePage({ initialWaitlistCount }: LandingContentProps) {
   // Get all top picks destinations
   const allDestinations = getAllDestinations();
   const [isWaitlistModalOpen, setIsWaitlistModalOpen] = useState(false);
   const [waitlistSource, setWaitlistSource] = useState("unknown");
+  const [waitlistCount, setWaitlistCount] = useState<number | null>(initialWaitlistCount);
 
   const openWaitlist = (source: string) => {
     trackEvent("waitlist_click", { source });
     setWaitlistSource(source);
     setIsWaitlistModalOpen(true);
   };
+
+  // Synchronize waitlist count changes globally (e.g. from Navbar modal)
+  useEffect(() => {
+    const handleWaitlistJoined = () => {
+      setWaitlistCount((prev) => (prev !== null ? prev + 1 : 1));
+    };
+
+    if (typeof window !== "undefined") {
+      window.addEventListener("waitlist-joined", handleWaitlistJoined);
+    }
+
+    return () => {
+      if (typeof window !== "undefined") {
+        window.removeEventListener("waitlist-joined", handleWaitlistJoined);
+      }
+    };
+  }, []);
 
   // Track page view on mount
   useEffect(() => {
@@ -47,7 +69,10 @@ export default function HomePage() {
 
   return (
     <div className="bg-background min-h-screen font-sans text-foreground overflow-x-hidden selection:bg-primary/20">
-      <Hero onJoinWaitlist={() => openWaitlist("hero_cta")} />
+      <Hero
+        waitlistCount={waitlistCount}
+        onJoinWaitlist={() => openWaitlist("hero_cta")}
+      />
 
       {/* Problem Statement Section */}
       <Problem />
@@ -89,6 +114,9 @@ export default function HomePage() {
         open={isWaitlistModalOpen}
         onOpenChange={setIsWaitlistModalOpen}
         source={waitlistSource}
+        onSuccess={() => {
+          setWaitlistCount((prev) => (prev !== null ? prev + 1 : 1));
+        }}
       />
     </div>
   );

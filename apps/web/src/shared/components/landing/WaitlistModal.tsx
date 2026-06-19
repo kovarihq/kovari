@@ -18,12 +18,14 @@ interface WaitlistModalProps {
   onChange?: (open: boolean) => void; // Support HeroUI's name if needed, though we use onOpenChange
   onOpenChange: (open: boolean) => void;
   source?: string;
+  onSuccess?: () => void;
 }
 
 export default function WaitlistModal({
   open,
   onOpenChange,
   source = "unknown",
+  onSuccess,
 }: WaitlistModalProps) {
   const [email, setEmail] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -81,9 +83,18 @@ export default function WaitlistModal({
         description: "We'll notify you when Kovari is ready.",
       });
 
+      if (onSuccess) {
+        onSuccess();
+      }
+
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new CustomEvent("waitlist-joined"));
+      }
+
       // Close modal and reset form on success
       onOpenChange(false);
       setEmail("");
+
     } catch (error) {
       Sentry.captureException(error);
       console.error("Error submitting waitlist:", error);

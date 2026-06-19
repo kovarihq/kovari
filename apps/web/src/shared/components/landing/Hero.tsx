@@ -22,9 +22,10 @@ const HERO_SECTION_CLASSES =
 
 interface HeroProps {
   onJoinWaitlist?: () => void;
+  waitlistCount: number | null;
 }
 
-export default function Hero({ onJoinWaitlist }: HeroProps) {
+export default function Hero({ onJoinWaitlist, waitlistCount }: HeroProps) {
   const router = useRouter();
 
   const handleJoinWaitlist = useCallback(() => {
@@ -34,6 +35,9 @@ export default function Hero({ onJoinWaitlist }: HeroProps) {
       router.push("/sign-up");
     }
   }, [onJoinWaitlist, router]);
+
+  const hasCount = waitlistCount !== null;
+  const formattedCount = hasCount ? new Intl.NumberFormat().format(waitlistCount) : "50";
 
   return (
     <section 
@@ -56,19 +60,27 @@ export default function Hero({ onJoinWaitlist }: HeroProps) {
             </h1>
           </div>
 
-          <p className="text-muted-foreground text-sm sm:text-base md:text-lg font-light max-w-[90vw] sm:max-w-xl mx-auto leading-relaxed mb-12 text-center animate-fade-in-up [animation-delay:200ms]">
+          <p className="text-muted-foreground text-sm sm:text-base md:text-lg font-light max-w-[90vw] sm:max-w-xl mx-auto leading-relaxed mb-6 text-center animate-fade-in-up [animation-delay:200ms]">
             {HERO_DESCRIPTION}
           </p>
           
           <div className="flex flex-col items-center justify-center gap-4 mt-1 animate-fade-in-up [animation-delay:300ms]">
             <Button
-              className="h-12 sm:h-14 bg-primary text-primary-foreground hover:bg-primary-hover shadow-lg px-12 py-5 sm:py-6 text-sm sm:text-base font-semibold leading-5"
+              className="h-12 sm:h-14 bg-primary text-primary-foreground hover:bg-primary-hover shadow-lg pl-6 pr-4 sm:pl-7 sm:pr-4 flex items-center gap-1 text-sm sm:text-base font-semibold transition-all duration-300"
               radius="full"
               variant="solid"
               aria-label="Join the Waitlist"
               onPress={handleJoinWaitlist}
             >
-              Join the waitlist
+              <span>Join the waitlist</span>
+              <div className="h-4 w-[1px] bg-primary-foreground/30" />
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 sm:py-1 bg-white/15 rounded-full text-[10px] sm:text-xs font-semibold backdrop-blur-sm text-primary-foreground/90">
+                <span className="relative flex h-1.5 w-1.5 animate-pulse">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-400"></span>
+                </span>
+                {formattedCount} joined
+              </span>
             </Button>
             <Link
               href="/sign-in"

@@ -1,5 +1,6 @@
 import LandingContent from "@/shared/components/landing/LandingContent";
 import ClientRedirectGate from "@/shared/components/landing/ClientRedirectGate";
+import { createAdminSupabaseClient } from "@kovari/api";
 
 export async function generateMetadata() {
   return {
@@ -8,12 +9,27 @@ export async function generateMetadata() {
   };
 }
 
-export default function HomePage() {
+export default async function HomePage() {
+  let initialCount: number | null = null;
+  try {
+    const supabase = createAdminSupabaseClient();
+    const { count, error } = await supabase
+      .from("waitlist")
+      .select("*", { count: "exact", head: true });
+
+    if (!error && count !== null) {
+      initialCount = count;
+    }
+  } catch (error) {
+    console.error("Error fetching waitlist count:", error);
+  }
+
   return (
     <>
       <ClientRedirectGate />
-      <LandingContent />
+      <LandingContent initialWaitlistCount={initialCount} />
     </>
   );
 }
+
 
