@@ -109,6 +109,8 @@ class _ExploreScreenState extends ConsumerState<ExploreScreen>
       }
     });
 
+    final bottomSpacer = MediaQuery.of(context).padding.bottom + 76;
+
     return Column(
       children: [
         Padding(
@@ -123,15 +125,13 @@ class _ExploreScreenState extends ConsumerState<ExploreScreen>
             child: AppCard(
               width: double.infinity,
               padding: EdgeInsets.zero,
-              margin: const EdgeInsets.symmetric(horizontal: 16.0),
-              borderRadius: const BorderRadius.vertical(
-                top: Radius.circular(20),
+              margin: EdgeInsets.only(
+                left: 16.0,
+                right: 16.0,
+                bottom: bottomSpacer,
               ),
-              border: Border(
-                top: BorderSide(color: AppColors.borderColor(context)),
-                left: BorderSide(color: AppColors.borderColor(context)),
-                right: BorderSide(color: AppColors.borderColor(context)),
-              ),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: AppColors.borderColor(context)),
               boxShadow: const [],
               child: _buildBody(state),
             ),
@@ -260,10 +260,8 @@ class _ExploreScreenState extends ConsumerState<ExploreScreen>
       return const KovariSkeletonExplore();
     }
 
-    final bottomSpacer = MediaQuery.of(context).padding.bottom + 65;
-
     return Padding(
-      padding: EdgeInsets.only(top: 8, bottom: bottomSpacer),
+      padding: const EdgeInsets.only(top: 8, bottom: 8),
       child: Stack(
         children: [
           Positioned.fill(
@@ -275,7 +273,7 @@ class _ExploreScreenState extends ConsumerState<ExploreScreen>
           ),
           if (state.isFetchingNextPage)
             const Positioned(
-              bottom: 80,
+              bottom: 12,
               left: 0,
               right: 0,
               child: Center(

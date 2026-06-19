@@ -17,6 +17,7 @@ import 'package:mobile/features/onboarding/widgets/steps/location_job_step.dart'
 import 'package:mobile/features/onboarding/widgets/steps/media_bio_step.dart';
 import 'package:mobile/features/onboarding/widgets/steps/policy_step.dart';
 import 'package:mobile/features/onboarding/widgets/steps/success_step.dart';
+import 'package:mobile/features/onboarding/widgets/steps/travel_intentions_step.dart';
 
 class OnboardingScreen extends ConsumerStatefulWidget {
   const OnboardingScreen({super.key});
@@ -39,7 +40,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(onboardingProvider);
-    const totalSteps = 7;
+    const totalSteps = 8;
     final isComplete = state.currentStep > totalSteps;
 
     // Synchronize PageView with currentStep state (only for active steps)
@@ -63,6 +64,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
       LocationJobStep(),
       LanguagesInterestsStep(),
       LifestyleStep(),
+      TravelIntentionsStep(),
       PolicyStep(),
     ];
 

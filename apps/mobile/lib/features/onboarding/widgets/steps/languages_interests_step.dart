@@ -31,68 +31,43 @@ class LanguagesInterestsStep extends ConsumerWidget {
     ];
 
     final interestOptions = [
-      // Travel & Adventure
-      'Travel',
-      'Hiking',
-      'Camping',
-      'Backpacking',
-      'Surfing',
-      'Skiing',
-      'Rock Climbing',
+      // How they travel
+      'Solo Backpacking',
+      'Weekend Getaways',
+      'Long-Term Travel',
+      'Workations',
+      'Road Trips',
+      'Train Journeys',
 
-      // Food & Drink
-      'Food',
-      'Cooking',
-      'Wine',
-      'Coffee',
-      'Brunch',
+      // Mountains & outdoors
+      'Himalayan Treks',
+      'Camping & Stargazing',
+      'River Rafting',
+      'Skiing & Snow',
+      'Wildlife & Safaris',
 
-      // Fitness & Wellness
-      'Fitness',
-      'Yoga',
-      'Running',
-      'Cycling',
-      'Dance',
+      // Beaches & water
+      'Beach Bumming',
+      'Scuba & Snorkeling',
+      'Island Hopping',
 
-      // Sports
-      'Sports',
-      'Football',
-      'Basketball',
-      'Tennis',
+      // Food & local
+      'Street Food Crawls',
+      'Local Markets',
+      'Chai & Conversations',
 
-      // Arts & Culture
-      'Art',
+      // Culture & art
+      'Heritage & History',
+      'Art & Galleries',
+      'Music & Festivals',
+      'Spiritual Travel',
+
+      // Photography & content
       'Photography',
-      'Museums',
-      'Concerts',
-      'Festivals',
-
-      // Music
-      'Music',
-      'Live Music',
-
-      // Entertainment
-      'Movies',
-      'Netflix',
-      'Podcasts',
-
-      // Reading & Learning
-      'Reading',
-      'Books',
-
-      // Social & Causes
-      'Volunteering',
-
-      // Lifestyle
-      'Fashion',
-
-      // Pets & Animals
-      'Dogs',
-      'Cats',
+      'Aesthetic Spots',
 
       // Nightlife
-      'Nightlife',
-      'Bars',
+      'Nightlife & Clubs',
     ];
 
     return SingleChildScrollView(

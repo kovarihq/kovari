@@ -37,6 +37,7 @@ class OnboardingState {
     this.policyAccepted = false,
     this.isSubmitting = false,
     this.errorMessage,
+    this.travelIntents = const [],
   });
   final int currentStep;
   final String firstName;
@@ -63,6 +64,7 @@ class OnboardingState {
   final bool policyAccepted;
   final bool isSubmitting;
   final String? errorMessage;
+  final List<Map<String, dynamic>> travelIntents;
 
   OnboardingState copyWith({
     int? currentStep,
@@ -90,6 +92,7 @@ class OnboardingState {
     bool? policyAccepted,
     bool? isSubmitting,
     String? errorMessage,
+    List<Map<String, dynamic>>? travelIntents,
   }) => OnboardingState(
     currentStep: currentStep ?? this.currentStep,
     firstName: firstName ?? this.firstName,
@@ -120,6 +123,7 @@ class OnboardingState {
     policyAccepted: policyAccepted ?? this.policyAccepted,
     isSubmitting: isSubmitting ?? this.isSubmitting,
     errorMessage: errorMessage ?? this.errorMessage,
+    travelIntents: travelIntents ?? this.travelIntents,
   );
 }
 
@@ -226,6 +230,33 @@ class OnboardingNotifier extends Notifier<OnboardingState> {
     state = state.copyWith(interests: list);
   }
 
+  void addTravelIntent(String destination, {GeoapifyResult? details}) {
+    final current = List<Map<String, dynamic>>.from(state.travelIntents);
+    if (current.length >= 3) return;
+
+    final Map<String, dynamic> newIntent = {
+      'destination': destination,
+    };
+    if (details != null) {
+      newIntent['destination_details'] = {
+        'city': details.city,
+        'country': details.country,
+        'lat': details.lat,
+        'lon': details.lon,
+      };
+    }
+    current.add(newIntent);
+    state = state.copyWith(travelIntents: current);
+  }
+
+  void removeTravelIntent(int index) {
+    final current = List<Map<String, dynamic>>.from(state.travelIntents);
+    if (index >= 0 && index < current.length) {
+      current.removeAt(index);
+      state = state.copyWith(travelIntents: current);
+    }
+  }
+
   void updateLifestyle({
     String? religion,
     String? smoking,
@@ -304,7 +335,7 @@ class OnboardingNotifier extends Notifier<OnboardingState> {
               }
             : null,
         'languages': state.languages,
-        'nationality': state.nationality,
+        'nationality': state.nationality ?? 'Indian',
         'job': state.jobType,
         'religion': state.religion ?? 'Prefer not to say',
         'smoking': state.smoking ?? 'No',
@@ -312,6 +343,10 @@ class OnboardingNotifier extends Notifier<OnboardingState> {
         'personality': state.personality ?? 'Ambivert',
         'food_preference': state.foodPreference ?? 'Veg',
         'interests': state.interests,
+        'travel_intentions': state.travelIntents.map((intent) => {
+          'destination': intent['destination'],
+          'destination_details': intent['destination_details'] ?? null,
+        }).toList(),
       };
 
       // 2.5 Remove null values from payload
@@ -331,7 +366,7 @@ class OnboardingNotifier extends Notifier<OnboardingState> {
         cancelToken: _cancelToken,
       );
 
-      setStep(8);
+      setStep(9);
       state = state.copyWith(isSubmitting: false);
       return true;
     } catch (e) {

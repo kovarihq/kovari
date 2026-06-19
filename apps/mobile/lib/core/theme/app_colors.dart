@@ -72,6 +72,10 @@ class AppColors {
   static Color mutedForegroundColor(BuildContext context) =>
       isDark(context) ? mutedForegroundDark : AppColors.mutedForeground;
 
+  /// Returns the color for active tab indicators.
+  static Color activeIndicatorColor(BuildContext context) =>
+      isDark(context) ? mutedForegroundDark : AppColors.muted;
+
   /// Returns the secondary color for the current theme.
   static Color secondaryColor(BuildContext context) =>
       isDark(context) ? secondaryDark : AppColors.secondary;

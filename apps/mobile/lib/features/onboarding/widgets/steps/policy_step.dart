@@ -8,14 +8,49 @@ import 'package:mobile/features/onboarding/providers/onboarding_provider.dart';
 import 'package:mobile/shared/widgets/app_card.dart';
 import 'package:mobile/shared/widgets/primary_button.dart';
 import 'package:mobile/shared/widgets/secondary_button.dart';
+import 'package:mobile/shared/widgets/select_field.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-class PolicyStep extends ConsumerWidget {
+class PolicyStep extends ConsumerStatefulWidget {
   const PolicyStep({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<PolicyStep> createState() => _PolicyStepState();
+}
+
+class _PolicyStepState extends ConsumerState<PolicyStep> {
+  bool _showPreferences = false;
+
+  @override
+  Widget build(BuildContext context) {
     final state = ref.watch(onboardingProvider);
+
+    const religionOptions = [
+      'Christianity',
+      'Islam',
+      'Hinduism',
+      'Buddhism',
+      'Judaism',
+      'Sikhism',
+      'Atheist',
+      'Agnostic',
+      'Other',
+      'Prefer not to say',
+    ];
+
+    const smokingOptions = [
+      'Yes',
+      'No',
+      'Occasionally',
+      'Prefer not to say',
+    ];
+
+    const drinkingOptions = [
+      'Yes',
+      'No',
+      'Socially',
+      'Prefer not to say',
+    ];
 
     return SingleChildScrollView(
       padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
@@ -24,18 +59,89 @@ class PolicyStep extends ConsumerWidget {
         children: [
           const SizedBox(height: AppSpacing.sm),
           Text(
-            'Almost there!',
+            'Almost there',
             style: AppTextStyles.h3.copyWith(fontWeight: FontWeight.w600),
             textAlign: TextAlign.center,
           ),
           const SizedBox(height: 6),
           Text(
-            'Please review and accept our policies to join the community.',
+            "A few optional preferences, then you're in.",
             style: AppTextStyles.bodyMedium.copyWith(
               color: AppColors.mutedForeground,
             ),
             textAlign: TextAlign.center,
           ),
+          const SizedBox(height: AppSpacing.lg),
+
+          // Collapsible optional preferences trigger
+          TextButton(
+            onPressed: () {
+              setState(() {
+                _showPreferences = !_showPreferences;
+              });
+            },
+            style: TextButton.styleFrom(
+              minimumSize: Size.zero,
+              padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            ),
+            child: Text(
+              _showPreferences
+                  ? 'Hide optional preferences'
+                  : 'Add preferences — religion, smoking, drinking',
+              style: AppTextStyles.bodySmall.copyWith(
+                color: AppColors.mutedForeground,
+                decoration: TextDecoration.underline,
+              ),
+            ),
+          ),
+
+          if (_showPreferences) ...[
+            const SizedBox(height: AppSpacing.md),
+            SelectField<String>(
+              label: 'Religion (Optional)',
+              value: state.religion,
+              hintText: 'Select religion',
+              options: religionOptions,
+              itemLabelBuilder: (v) => v,
+              onChanged: (v) => ref
+                  .read(onboardingProvider.notifier)
+                  .updateLifestyle(religion: v),
+            ),
+            const SizedBox(height: AppSpacing.md),
+            Row(
+              children: [
+                Expanded(
+                  child: SelectField<String>(
+                    label: 'Smoking (Optional)',
+                    value: state.smoking,
+                    hintText: 'Select',
+                    options: smokingOptions,
+                    itemLabelBuilder: (v) => v,
+                    onChanged: (v) => ref
+                        .read(onboardingProvider.notifier)
+                        .updateLifestyle(smoking: v),
+                  ),
+                ),
+                const SizedBox(width: AppSpacing.md),
+                Expanded(
+                  child: SelectField<String>(
+                    label: 'Drinking (Optional)',
+                    value: state.drinking,
+                    hintText: 'Select',
+                    options: drinkingOptions,
+                    itemLabelBuilder: (v) => v,
+                    onChanged: (v) => ref
+                        .read(onboardingProvider.notifier)
+                        .updateLifestyle(drinking: v),
+                  ),
+                ),
+              ],
+            ),
+          ],
+
+          const SizedBox(height: AppSpacing.lg),
+          const Divider(height: 1, color: AppColors.border),
           const SizedBox(height: AppSpacing.lg),
 
           AppCard(
@@ -102,7 +208,7 @@ class PolicyStep extends ConsumerWidget {
                   text: 'Back',
                   icon: LucideIcons.chevronLeft,
                   onPressed: () =>
-                      ref.read(onboardingProvider.notifier).setStep(6),
+                      ref.read(onboardingProvider.notifier).setStep(7),
                 ),
               ),
               const SizedBox(width: AppSpacing.sm),
@@ -143,22 +249,20 @@ class PolicyStep extends ConsumerWidget {
     required String title,
     required VoidCallback onTap,
   }) => InkWell(
-      onTap: onTap,
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text(
-            title,
-            style: AppTextStyles.bodyMedium.copyWith(
-              fontWeight: FontWeight.w500,
-            ),
-          ),
-          const Icon(
-            LucideIcons.chevronRight,
-            size: 16,
-            color: AppColors.mutedForeground,
-          ),
-        ],
-      ),
-    );
+    onTap: onTap,
+    child: Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Text(
+          title,
+          style: AppTextStyles.bodyMedium.copyWith(fontWeight: FontWeight.w500),
+        ),
+        const Icon(
+          LucideIcons.chevronRight,
+          size: 16,
+          color: AppColors.mutedForeground,
+        ),
+      ],
+    ),
+  );
 }

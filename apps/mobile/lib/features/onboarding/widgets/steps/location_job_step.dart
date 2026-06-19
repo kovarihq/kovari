@@ -6,7 +6,6 @@ import 'package:mobile/core/theme/app_spacing.dart';
 import 'package:mobile/core/theme/app_text_styles.dart';
 import 'package:mobile/features/onboarding/providers/onboarding_provider.dart';
 import 'package:mobile/shared/widgets/location_autocomplete.dart';
-import 'package:mobile/shared/widgets/nationality_autocomplete.dart';
 import 'package:mobile/shared/widgets/primary_button.dart';
 import 'package:mobile/shared/widgets/secondary_button.dart';
 import 'package:mobile/shared/widgets/text_input_field.dart';
@@ -24,13 +23,13 @@ class LocationJobStep extends ConsumerWidget {
         children: [
           const SizedBox(height: AppSpacing.sm),
           Text(
-            'Where are you from?',
+            'Where are you based?',
             style: AppTextStyles.h3.copyWith(fontWeight: FontWeight.w600),
             textAlign: TextAlign.center,
           ),
           const SizedBox(height: 6),
           Text(
-            'Help us connect you locally',
+            'Your city and job type',
             style: AppTextStyles.bodyMedium.copyWith(
               color: AppColors.mutedForeground,
             ),
@@ -47,16 +46,6 @@ class LocationJobStep extends ConsumerWidget {
                   .read(onboardingProvider.notifier)
                   .updateLocationJob(loc: result.formatted, details: result);
             },
-          ),
-          const SizedBox(height: AppSpacing.md),
-
-          // Searchable Nationality
-          NationalityAutocomplete(
-            label: 'Nationality',
-            initialValue: state.nationality,
-            onSelect: (v) => ref
-                .read(onboardingProvider.notifier)
-                .updateLocationJob(nation: v),
           ),
           const SizedBox(height: AppSpacing.md),
 
@@ -85,12 +74,7 @@ class LocationJobStep extends ConsumerWidget {
                 child: PrimaryButton(
                   text: 'Continue',
                   onPressed:
-                      (state.location != null &&
-                          state.nationality != null &&
-                          state.jobType != null &&
-                          state.location!.isNotEmpty &&
-                          state.nationality!.isNotEmpty &&
-                          state.jobType!.isNotEmpty)
+                      (state.location != null && state.location!.isNotEmpty)
                       ? () => ref.read(onboardingProvider.notifier).setStep(5)
                       : null,
                   icon: LucideIcons.chevronRight,

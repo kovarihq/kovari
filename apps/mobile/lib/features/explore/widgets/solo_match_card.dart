@@ -83,7 +83,7 @@ class _SoloMatchCardState extends ConsumerState<SoloMatchCard> {
                       height: 4,
                       decoration: BoxDecoration(
                         color: _activeTab == 'left'
-                            ? AppColors.mutedColor(context)
+                            ? AppColors.activeIndicatorColor(context)
                             : AppColors.secondaryColor(context),
                         borderRadius: BorderRadius.circular(2),
                       ),
@@ -98,7 +98,7 @@ class _SoloMatchCardState extends ConsumerState<SoloMatchCard> {
                       height: 4,
                       decoration: BoxDecoration(
                         color: _activeTab == 'right'
-                            ? AppColors.mutedColor(context)
+                            ? AppColors.activeIndicatorColor(context)
                             : AppColors.secondaryColor(context),
                         borderRadius: BorderRadius.circular(2),
                       ),
@@ -124,7 +124,7 @@ class _SoloMatchCardState extends ConsumerState<SoloMatchCard> {
                 color: AppColors.text(context, isMuted: true),
               ),
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 10),
 
             // Active Tab Content
             Expanded(
@@ -146,40 +146,47 @@ class _SoloMatchCardState extends ConsumerState<SoloMatchCard> {
                                   color: AppColors.borderColor(context),
                                 ),
                               ),
-                              clipBehavior: Clip.antiAlias,
-                              child: AspectRatio(
-                                aspectRatio: 1 / 1,
-                                child: match.image.isNotEmpty
-                                    ? CachedNetworkImage(
-                                        imageUrl: match.image,
-                                        fit: BoxFit.cover,
-                                        placeholder: (context, url) =>
-                                            const UserAvatarFallback(
-                                              shape: BoxShape.rectangle,
-                                              borderRadius: BorderRadius.all(
-                                                Radius.circular(16),
-                                              ),
-                                              size: 100,
-                                            ),
-                                        errorWidget:
-                                            (context, url, dynamic error) =>
-                                                UserAvatarFallback(
-                                                  name: match.name,
-                                                  backgroundColor: AppColors
-                                                      .primary
-                                                      .withValues(alpha: 0.1),
-                                                  iconColor: AppColors.primary,
-                                                  shape: BoxShape.rectangle,
-                                                  borderRadius:
-                                                      BorderRadius.circular(16),
-                                                  fontSize: 64,
+                              child: ClipRRect(
+                                borderRadius: BorderRadius.circular(15),
+                                child: AspectRatio(
+                                  aspectRatio: 1 / 1,
+                                  child: match.image.isNotEmpty
+                                      ? CachedNetworkImage(
+                                          imageUrl: match.image,
+                                          fit: BoxFit.cover,
+                                          placeholder: (context, url) =>
+                                              const UserAvatarFallback(
+                                                shape: BoxShape.rectangle,
+                                                borderRadius: BorderRadius.all(
+                                                  Radius.circular(16),
                                                 ),
-                                      )
-                                    : UserAvatarFallback(
-                                        shape: BoxShape.rectangle,
-                                        borderRadius: BorderRadius.circular(16),
-                                        size: 100,
-                                      ),
+                                                size: 100,
+                                              ),
+                                          errorWidget:
+                                              (
+                                                context,
+                                                url,
+                                                dynamic error,
+                                              ) => UserAvatarFallback(
+                                                name: match.name,
+                                                backgroundColor: AppColors
+                                                    .primary
+                                                    .withValues(alpha: 0.1),
+                                                iconColor: AppColors.primary,
+                                                shape: BoxShape.rectangle,
+                                                borderRadius:
+                                                    BorderRadius.circular(16),
+                                                fontSize: 64,
+                                              ),
+                                        )
+                                      : UserAvatarFallback(
+                                          shape: BoxShape.rectangle,
+                                          borderRadius: BorderRadius.circular(
+                                            16,
+                                          ),
+                                          size: 100,
+                                        ),
+                                ),
                               ),
                             ),
                           ),

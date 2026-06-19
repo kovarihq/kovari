@@ -9,10 +9,10 @@ import 'package:mobile/core/theme/app_text_styles.dart';
 import 'package:mobile/shared/widgets/text_input_field.dart';
 
 class LocationAutocomplete extends ConsumerStatefulWidget {
-
   const LocationAutocomplete({
     super.key,
     required this.label,
+    this.controller,
     this.initialValue,
     this.hintText,
     required this.onSelect,
@@ -20,6 +20,7 @@ class LocationAutocomplete extends ConsumerStatefulWidget {
     this.contentPadding,
   });
   final String label;
+  final TextEditingController? controller;
   final String? initialValue;
   final String? hintText;
   final void Function(GeoapifyResult) onSelect;
@@ -32,7 +33,7 @@ class LocationAutocomplete extends ConsumerStatefulWidget {
 }
 
 class _LocationAutocompleteState extends ConsumerState<LocationAutocomplete> {
-  final TextEditingController _controller = TextEditingController();
+  late final TextEditingController _controller;
   final FocusNode _focusNode = FocusNode();
   final LayerLink _layerLink = LayerLink();
   final GlobalKey _fieldKey = GlobalKey();
@@ -44,6 +45,7 @@ class _LocationAutocompleteState extends ConsumerState<LocationAutocomplete> {
   @override
   void initState() {
     super.initState();
+    _controller = widget.controller ?? TextEditingController();
     if (widget.initialValue != null) {
       _controller.text = widget.initialValue!;
     }
@@ -191,7 +193,8 @@ class _LocationAutocompleteState extends ConsumerState<LocationAutocomplete> {
                 }
               },
               child: Padding(
-                padding: widget.contentPadding ??
+                padding:
+                    widget.contentPadding ??
                     const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -236,27 +239,29 @@ class _LocationAutocompleteState extends ConsumerState<LocationAutocomplete> {
 
   @override
   Widget build(BuildContext context) => TapRegion(
-      groupId: 'location_autocomplete',
-      onTapOutside: (_) => _hideOverlay(),
-      child: CompositedTransformTarget(
-        link: _layerLink,
-        child: TextInputField(
-          key: _fieldKey,
-          label: widget.label,
-          controller: _controller,
-          focusNode: _focusNode,
-          hintText: widget.hintText ?? 'Search city...',
-          onChanged: _onChanged,
-          fillColor: widget.fillColor,
-          contentPadding: widget.contentPadding,
-        ),
+    groupId: 'location_autocomplete',
+    onTapOutside: (_) => _hideOverlay(),
+    child: CompositedTransformTarget(
+      link: _layerLink,
+      child: TextInputField(
+        key: _fieldKey,
+        label: widget.label,
+        controller: _controller,
+        focusNode: _focusNode,
+        hintText: widget.hintText ?? 'Search city...',
+        onChanged: _onChanged,
+        fillColor: widget.fillColor,
+        contentPadding: widget.contentPadding,
       ),
-    );
+    ),
+  );
 
   @override
   void dispose() {
     _debounceTimer?.cancel();
-    _controller.dispose();
+    if (widget.controller == null) {
+      _controller.dispose();
+    }
     _focusNode.removeListener(_onFocusChange);
     _focusNode.dispose();
     _hideOverlay();

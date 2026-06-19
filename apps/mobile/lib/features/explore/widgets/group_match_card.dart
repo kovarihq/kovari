@@ -107,7 +107,7 @@ class _GroupMatchCardState extends ConsumerState<GroupMatchCard> {
                       height: 4,
                       decoration: BoxDecoration(
                         color: _activeTab == 'left'
-                            ? AppColors.mutedColor(context)
+                            ? AppColors.activeIndicatorColor(context)
                             : AppColors.secondaryColor(context),
                         borderRadius: BorderRadius.circular(2),
                       ),
@@ -122,7 +122,7 @@ class _GroupMatchCardState extends ConsumerState<GroupMatchCard> {
                       height: 4,
                       decoration: BoxDecoration(
                         color: _activeTab == 'right'
-                            ? AppColors.mutedColor(context)
+                            ? AppColors.activeIndicatorColor(context)
                             : AppColors.secondaryColor(context),
                         borderRadius: BorderRadius.circular(2),
                       ),
@@ -193,38 +193,43 @@ class _GroupMatchCardState extends ConsumerState<GroupMatchCard> {
                                   color: AppColors.borderColor(context),
                                 ),
                               ),
-                              clipBehavior: Clip.antiAlias,
-                              child: AspectRatio(
-                                aspectRatio: 4 / 3,
-                                child:
-                                    coverImage != null && coverImage.isNotEmpty
-                                    ? CachedNetworkImage(
-                                        imageUrl: coverImage,
-                                        fit: BoxFit.cover,
-                                        placeholder: (context, url) =>
-                                            const UserAvatarFallback(
-                                              shape: BoxShape.rectangle,
-                                              borderRadius: BorderRadius.all(
-                                                Radius.circular(16),
-                                              ),
-                                              size: 100,
-                                            ),
-                                        errorWidget:
-                                            (context, url, dynamic error) =>
-                                                const UserAvatarFallback(
-                                                  shape: BoxShape.rectangle,
-                                                  borderRadius:
-                                                      BorderRadius.all(
-                                                        Radius.circular(16),
-                                                      ),
-                                                  size: 100,
+                              child: ClipRRect(
+                                borderRadius: BorderRadius.circular(15),
+                                child: AspectRatio(
+                                  aspectRatio: 4 / 3,
+                                  child:
+                                      coverImage != null &&
+                                          coverImage.isNotEmpty
+                                      ? CachedNetworkImage(
+                                          imageUrl: coverImage,
+                                          fit: BoxFit.cover,
+                                          placeholder: (context, url) =>
+                                              const UserAvatarFallback(
+                                                shape: BoxShape.rectangle,
+                                                borderRadius: BorderRadius.all(
+                                                  Radius.circular(16),
                                                 ),
-                                      )
-                                    : UserAvatarFallback(
-                                        shape: BoxShape.rectangle,
-                                        borderRadius: BorderRadius.circular(16),
-                                        size: 100,
-                                      ),
+                                                size: 100,
+                                              ),
+                                          errorWidget:
+                                              (context, url, dynamic error) =>
+                                                  const UserAvatarFallback(
+                                                    shape: BoxShape.rectangle,
+                                                    borderRadius:
+                                                        BorderRadius.all(
+                                                          Radius.circular(16),
+                                                        ),
+                                                    size: 100,
+                                                  ),
+                                        )
+                                      : UserAvatarFallback(
+                                          shape: BoxShape.rectangle,
+                                          borderRadius: BorderRadius.circular(
+                                            16,
+                                          ),
+                                          size: 100,
+                                        ),
+                                ),
                               ),
                             ),
                           ),
@@ -463,39 +468,43 @@ class _GroupMatchCardState extends ConsumerState<GroupMatchCard> {
                                   color: AppColors.borderColor(context),
                                 ),
                               ),
-                              clipBehavior: Clip.antiAlias,
-                              child: AspectRatio(
-                                aspectRatio: 4 / 3,
-                                child:
-                                    creator.avatar != null &&
-                                        creator.avatar!.isNotEmpty
-                                    ? CachedNetworkImage(
-                                        imageUrl: creator.avatar!,
-                                        fit: BoxFit.cover,
-                                        placeholder: (context, url) =>
-                                            const UserAvatarFallback(
-                                              shape: BoxShape.rectangle,
-                                              borderRadius: BorderRadius.all(
-                                                Radius.circular(16),
-                                              ),
-                                              size: 100,
-                                            ),
-                                        errorWidget:
-                                            (context, url, dynamic error) =>
-                                                const UserAvatarFallback(
-                                                  shape: BoxShape.rectangle,
-                                                  borderRadius:
-                                                      BorderRadius.all(
-                                                        Radius.circular(16),
-                                                      ),
-                                                  size: 100,
+                              child: ClipRRect(
+                                borderRadius: BorderRadius.circular(15),
+                                child: AspectRatio(
+                                  aspectRatio: 4 / 3,
+                                  child:
+                                      creator.avatar != null &&
+                                          creator.avatar!.isNotEmpty
+                                      ? CachedNetworkImage(
+                                          imageUrl: creator.avatar!,
+                                          fit: BoxFit.cover,
+                                          placeholder: (context, url) =>
+                                              const UserAvatarFallback(
+                                                shape: BoxShape.rectangle,
+                                                borderRadius: BorderRadius.all(
+                                                  Radius.circular(16),
                                                 ),
-                                      )
-                                    : UserAvatarFallback(
-                                        shape: BoxShape.rectangle,
-                                        borderRadius: BorderRadius.circular(16),
-                                        size: 100,
-                                      ),
+                                                size: 100,
+                                              ),
+                                          errorWidget:
+                                              (context, url, dynamic error) =>
+                                                  const UserAvatarFallback(
+                                                    shape: BoxShape.rectangle,
+                                                    borderRadius:
+                                                        BorderRadius.all(
+                                                          Radius.circular(16),
+                                                        ),
+                                                    size: 100,
+                                                  ),
+                                        )
+                                      : UserAvatarFallback(
+                                          shape: BoxShape.rectangle,
+                                          borderRadius: BorderRadius.circular(
+                                            16,
+                                          ),
+                                          size: 100,
+                                        ),
+                                ),
                               ),
                             ),
                           ),

@@ -22,13 +22,13 @@ class LifestyleStep extends ConsumerWidget {
         children: [
           const SizedBox(height: AppSpacing.sm),
           Text(
-            'Lifestyle & Habits',
+            'Lifestyle',
             style: AppTextStyles.h3.copyWith(fontWeight: FontWeight.w600),
             textAlign: TextAlign.center,
           ),
           const SizedBox(height: 6),
           Text(
-            'Final details for better matching',
+            'Personality and food preference',
             style: AppTextStyles.bodyMedium.copyWith(
               color: AppColors.mutedForeground,
             ),
@@ -37,55 +37,16 @@ class LifestyleStep extends ConsumerWidget {
           const SizedBox(height: AppSpacing.lg),
 
           SelectField<String>(
-            label: 'Religion',
-            value: state.religion,
-            hintText: 'Select Religion',
-            options: const [
-              'Christianity',
-              'Islam',
-              'Hinduism',
-              'Buddhism',
-              'Judaism',
-              'Sikhism',
-              'Atheist',
-              'Other',
-            ],
-            itemLabelBuilder: (v) => v,
-            onChanged: (v) => ref
-                .read(onboardingProvider.notifier)
-                .updateLifestyle(religion: v),
-          ),
-          const SizedBox(height: AppSpacing.md),
-
-          SelectField<String>(
-            label: 'Smoking',
-            value: state.smoking,
-            hintText: 'Select Smoking',
-            options: const ['Yes', 'No', 'Occasionally', 'Socially'],
-            itemLabelBuilder: (v) => v,
-            onChanged: (v) => ref
-                .read(onboardingProvider.notifier)
-                .updateLifestyle(smoking: v),
-          ),
-          const SizedBox(height: AppSpacing.md),
-
-          SelectField<String>(
-            label: 'Drinking',
-            value: state.drinking,
-            hintText: 'Select Drinking',
-            options: const ['Yes', 'No', 'Occasionally', 'Socially'],
-            itemLabelBuilder: (v) => v,
-            onChanged: (v) => ref
-                .read(onboardingProvider.notifier)
-                .updateLifestyle(drinking: v),
-          ),
-          const SizedBox(height: AppSpacing.md),
-
-          SelectField<String>(
             label: 'Personality',
             value: state.personality,
-            hintText: 'Select Personality',
-            options: const ['Introvert', 'Extrovert', 'Ambivert'],
+            hintText: 'Select personality',
+            options: const [
+              'Introvert',
+              'Extrovert',
+              'Ambivert',
+              'Mixed / Not sure',
+              'Prefer not to say',
+            ],
             itemLabelBuilder: (v) => v,
             onChanged: (v) => ref
                 .read(onboardingProvider.notifier)
@@ -96,14 +57,22 @@ class LifestyleStep extends ConsumerWidget {
           SelectField<String>(
             label: 'Food Preference',
             value: state.foodPreference,
-            hintText: 'Select Food Preference',
-            options: const ['Vegetarian', 'Vegan', 'Non-vegetarian', 'Halal'],
+            hintText: 'Select food preference',
+            options: const [
+              'Vegetarian',
+              'Vegan',
+              'Non-vegetarian',
+              'Pescatarian',
+              'Halal',
+              'Kosher',
+              'No preference',
+            ],
             itemLabelBuilder: (v) => v,
             onChanged: (v) =>
                 ref.read(onboardingProvider.notifier).updateLifestyle(food: v),
           ),
 
-          const SizedBox(height: AppSpacing.md),
+          const SizedBox(height: AppSpacing.lg),
           Row(
             children: [
               Expanded(
@@ -119,9 +88,10 @@ class LifestyleStep extends ConsumerWidget {
                 child: PrimaryButton(
                   text: 'Continue',
                   onPressed:
-                      (state.religion != null &&
-                          state.smoking != null &&
-                          state.personality != null)
+                      (state.personality != null &&
+                          state.foodPreference != null &&
+                          state.personality!.isNotEmpty &&
+                          state.foodPreference!.isNotEmpty)
                       ? () => ref.read(onboardingProvider.notifier).setStep(7)
                       : null,
                   icon: LucideIcons.chevronRight,

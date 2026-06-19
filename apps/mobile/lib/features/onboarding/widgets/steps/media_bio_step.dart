@@ -26,6 +26,7 @@ class MediaBioStep extends ConsumerStatefulWidget {
 class _MediaBioStepState extends ConsumerState<MediaBioStep> {
   late final TextEditingController _bioController;
   final ImagePicker _picker = ImagePicker();
+  String? _photoError;
 
   @override
   void initState() {
@@ -131,6 +132,7 @@ class _MediaBioStepState extends ConsumerState<MediaBioStep> {
                   ref
                       .read(onboardingProvider.notifier)
                       .updateMediaBio(url: null, localPath: null);
+                  setState(() => _photoError = null);
                 },
               ),
             const SizedBox(height: 16),
@@ -189,6 +191,7 @@ class _MediaBioStepState extends ConsumerState<MediaBioStep> {
         ref
             .read(onboardingProvider.notifier)
             .updateMediaBio(localPath: croppedFile.path);
+        setState(() => _photoError = null);
       }
     } catch (e) {
       debugPrint('Error cropping image: $e');
@@ -211,7 +214,7 @@ class _MediaBioStepState extends ConsumerState<MediaBioStep> {
           ),
           const SizedBox(height: 6),
           Text(
-            'Add a photo and short bio',
+            'Add a profile photo — it helps others trust you',
             style: AppTextStyles.bodyMedium.copyWith(
               color: AppColors.mutedForeground,
             ),
@@ -282,6 +285,43 @@ class _MediaBioStepState extends ConsumerState<MediaBioStep> {
               ],
             ),
           ),
+          const SizedBox(height: 8),
+
+          // Skip photo for now text button
+          TextButton(
+            onPressed: () {
+              ref
+                  .read(onboardingProvider.notifier)
+                  .updateMediaBio(url: null, localPath: null);
+              setState(() => _photoError = null);
+              ref.read(onboardingProvider.notifier).setStep(3);
+            },
+            style: TextButton.styleFrom(
+              minimumSize: Size.zero,
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            ),
+            child: Text(
+              'Skip photo for now',
+              style: AppTextStyles.bodySmall.copyWith(
+                color: AppColors.mutedForeground,
+                decoration: TextDecoration.underline,
+              ),
+            ),
+          ),
+
+          if (_photoError != null) ...[
+            const SizedBox(height: 8),
+            Text(
+              _photoError!,
+              style: AppTextStyles.bodySmall.copyWith(
+                color: AppColors.destructive,
+                fontWeight: FontWeight.w500,
+              ),
+              textAlign: TextAlign.center,
+            ),
+          ],
+
           const SizedBox(height: AppSpacing.lg),
 
           TextInputField(
@@ -308,8 +348,19 @@ class _MediaBioStepState extends ConsumerState<MediaBioStep> {
               Expanded(
                 child: PrimaryButton(
                   text: 'Continue',
-                  onPressed: () =>
-                      ref.read(onboardingProvider.notifier).setStep(3),
+                  onPressed: () {
+                    final hasPhoto = state.localProfilePicPath != null ||
+                        state.profilePicUrl != null;
+                    if (!hasPhoto) {
+                      setState(() {
+                        _photoError =
+                            "Please add a profile photo to continue, or tap 'Skip photo for now'.";
+                      });
+                      return;
+                    }
+                    setState(() => _photoError = null);
+                    ref.read(onboardingProvider.notifier).setStep(3);
+                  },
                   icon: LucideIcons.chevronRight,
                 ),
               ),
