@@ -5,7 +5,7 @@
 
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Avatar, AvatarImage } from "@/shared/components/ui/avatar";
 import { Card, CardContent } from "@/shared/components/ui/card";
 import { Badge } from "@/shared/components/ui/badge";
@@ -83,6 +83,19 @@ export function GroupMatchCard({
 
   const { hasReported, setHasReported } = useReportStatus(group?.id, "group");
   const [activeTab, setActiveTab] = useState<"left" | "right">("left");
+
+  useEffect(() => {
+    if (group?.creatorId) {
+      fetch("/api/profile-impressions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          viewedUserId: group.creatorId,
+          destinationId: destinationId || "Global",
+        }),
+      }).catch((err) => console.error("Error tracking profile impression:", err));
+    }
+  }, [group?.creatorId, destinationId]);
 
   const isPreferNotToSay = (val?: string) => {
     if (!val) return false;

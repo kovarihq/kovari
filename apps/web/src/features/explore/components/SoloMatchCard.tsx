@@ -5,7 +5,7 @@
 
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Avatar, AvatarImage } from "@/shared/components/ui/avatar";
 import { UserAvatarFallback } from "@/shared/components/UserAvatarFallback";
 import { Card, CardContent } from "@/shared/components/ui/card";
@@ -157,6 +157,19 @@ export function SoloMatchCard({
   const [activeTab, setActiveTab] = useState<"left" | "right">("left");
 
   const { hasReported, setHasReported } = useReportStatus(user?.userId, "user");
+
+  useEffect(() => {
+    if (user?.userId) {
+      fetch("/api/profile-impressions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          viewedUserId: user.userId,
+          destinationId: destinationId || "Global",
+        }),
+      }).catch((err) => console.error("Error tracking profile impression:", err));
+    }
+  }, [user?.userId, destinationId]);
 
   const handleInterested = (e?: React.MouseEvent) => {
     if (e) {
