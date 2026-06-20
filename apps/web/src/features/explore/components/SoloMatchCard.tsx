@@ -449,7 +449,7 @@ export function SoloMatchCard({
         </div>
 
         {/* Name, Age, Location Header */}
-        <div className="flex-none pt-3">
+        <div className="flex-none pt-3 pb-3">
           <h1 className="text-md font-extrabold text-foreground tracking-tight flex items-center gap-2">
             {user.full_name || user.name || "Traveler"}
           </h1>
@@ -464,7 +464,7 @@ export function SoloMatchCard({
           {activeTab === "left" ? (
             <div className="flex flex-col">
               {/* Avatar (Centered and correctly sized) */}
-                <div className="w-full max-w-[400px] aspect-square rounded-2xl overflow-hidden bg-secondary shadow-none border border-border my-4">
+                <div className="w-full max-w-[400px] aspect-[4/3] rounded-2xl overflow-hidden bg-secondary shadow-none border border-border mb-4">
                   {user.avatar ? (
                     <img
                       src={getFeedImageUrl(user.avatar)}

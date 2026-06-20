@@ -179,7 +179,7 @@ export const ResultsDisplay = ({
 
       {/* Results Display */}
       {matchedGroups.length > 0 ? (
-        <div className="flex-1 relative flex items-center justify-center p-0 md:p-6">
+        <div className="flex-1 relative flex flex-col items-stretch justify-stretch p-0 md:p-6 min-h-0 h-full w-full">
           {/* Navigation arrows */}
           {/* {matchedGroups.length > 1 && (
             <>

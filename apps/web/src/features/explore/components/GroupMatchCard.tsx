@@ -411,7 +411,7 @@ export function GroupMatchCard({
         {/* Header Section */}
         {activeTab === "left" ? (
           /* Left Header: Group Name and Description */
-          <div className="flex-none pt-3">
+          <div className="flex-none pt-3 pb-3">
             <h1 className="text-md font-extrabold text-foreground tracking-tight flex items-center gap-2">
               {group.name || "Travel Group"}
             </h1>
@@ -421,7 +421,7 @@ export function GroupMatchCard({
           </div>
         ) : (
           /* Right Header: Creator's Name, Age, City */
-          <div className="flex-none pt-3">
+          <div className="flex-none pt-3 pb-3">
             <h1 className="text-md font-extrabold text-foreground tracking-tight flex items-center gap-2">
               Created by {group.creator?.name || "Traveler"}
             </h1>
@@ -438,7 +438,7 @@ export function GroupMatchCard({
             /* LEFT TAB CONTENT */
             <div className="flex flex-col">
               {/* Group Cover Image */}
-              <div className="w-full max-w-[400px] aspect-[4/3] rounded-2xl overflow-hidden bg-secondary shadow-none border border-border my-4">
+              <div className="w-full max-w-[400px] aspect-[4/3] rounded-2xl overflow-hidden bg-secondary shadow-none border border-border mb-4">
                 {group.cover_image || group.image ? (
                   <img
                     src={getFeedImageUrl(group.cover_image || group.image)}
@@ -577,7 +577,7 @@ export function GroupMatchCard({
             /* RIGHT TAB CONTENT */
             <div className="flex flex-col">
               {/* Creator's Avatar */}
-              <div className="w-full max-w-[400px] aspect-[4/3] rounded-2xl overflow-hidden bg-secondary shadow-none border border-border my-4">
+              <div className="w-full max-w-[400px] aspect-[4/3] rounded-2xl overflow-hidden bg-secondary shadow-none border border-border mb-4">
                 {group.creator?.avatar ? (
                   <img
                     src={getFeedImageUrl(group.creator.avatar)}
