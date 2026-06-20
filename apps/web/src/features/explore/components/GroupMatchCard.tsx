@@ -380,7 +380,7 @@ export function GroupMatchCard({
   );
 
   return (
-    <div className="w-full h-full flex flex-col overflow-y-auto relative">
+    <div className="w-full h-full flex flex-col flex-1 min-h-0 md:overflow-y-auto relative">
       {/* Loading overlay for View Group */}
       {isViewingGroup && (
         <div className="absolute inset-0 z-50 flex items-center justify-center bg-card">
@@ -391,7 +391,7 @@ export function GroupMatchCard({
       {/* ============================================================== */}
       {/* MOBILE VIEW (Screens smaller than md) */}
       {/* ============================================================== */}
-      <div className="md:hidden flex flex-col w-full">
+      <div className="md:hidden flex flex-col w-full h-full flex-1 min-h-0 overflow-hidden p-5">
         {/* Story Indicators */}
         <div className="flex gap-2 px-0 pt-0 w-full shrink-0">
           <div
@@ -408,29 +408,31 @@ export function GroupMatchCard({
           />
         </div>
 
-        <div className="overflow-y-auto overflow-x-hidden flex flex-col px-0">
-          {/* Header Section */}
-          {activeTab === "left" ? (
-            /* Left Header: Group Name and Description */
-            <div className="flex-none pt-3">
-              <h1 className="text-md font-extrabold text-foreground tracking-tight flex items-center gap-2">
-                {group.name || "Travel Group"}
-              </h1>
-              <p className="text-sm text-muted-foreground font-medium flex flex-wrap gap-1 leading-normal mt-0">
-                {group.description || "No description provided."}
-              </p>
-            </div>
-          ) : (
-            /* Right Header: Creator's Name, Age, City */
-            <div className="flex-none pt-3">
-              <h1 className="text-md font-extrabold text-foreground tracking-tight flex items-center gap-2">
-                Created by {group.creator?.name || "Traveler"}
-              </h1>
-              <p className="text-sm text-muted-foreground font-medium flex flex-wrap gap-1 mt-0">
-                {group.creator?.age ? `${group.creator.age}, ` : ""} {typeof group.creator?.location === 'string' ? group.creator.location.split(',')[0].trim() : "Unknown"}
-              </p>
-            </div>
-          )}
+        {/* Header Section */}
+        {activeTab === "left" ? (
+          /* Left Header: Group Name and Description */
+          <div className="flex-none pt-3">
+            <h1 className="text-md font-extrabold text-foreground tracking-tight flex items-center gap-2">
+              {group.name || "Travel Group"}
+            </h1>
+            <p className="text-sm text-muted-foreground font-medium flex flex-wrap gap-1 leading-normal mt-0">
+              {group.description || "No description provided."}
+            </p>
+          </div>
+        ) : (
+          /* Right Header: Creator's Name, Age, City */
+          <div className="flex-none pt-3">
+            <h1 className="text-md font-extrabold text-foreground tracking-tight flex items-center gap-2">
+              Created by {group.creator?.name || "Traveler"}
+            </h1>
+            <p className="text-sm text-muted-foreground font-medium flex flex-wrap gap-1 mt-0">
+              {group.creator?.age ? `${group.creator.age}, ` : ""} {typeof group.creator?.location === 'string' ? group.creator.location.split(',')[0].trim() : "Unknown"}
+            </p>
+          </div>
+        )}
+
+        {/* Scrollable Active Tab Content */}
+        <div className="flex-grow overflow-y-auto overflow-x-hidden flex flex-col px-0 scrollbar-none">
 
           {activeTab === "left" ? (
             /* LEFT TAB CONTENT */
@@ -703,7 +705,7 @@ export function GroupMatchCard({
         </div>
 
         {/* Mobile Action Buttons */}
-        <div className="flex pt-0 gap-3 shrink-0">
+        <div className="flex pt-5 gap-3 shrink-0">
           <Button
             variant="default"
             className="flex-1 h-12 rounded-2xl text-sm font-bold bg-primary text-primary-foreground shadow-sm flex flex-row items-center justify-center gap-1 border-0"

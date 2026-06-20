@@ -649,8 +649,8 @@ export default function ExplorePage() {
   };
 
   return (
-    <div className="min-h-screen px-4 pb-4">
-      <div className="max-w-full mx-auto flex flex-col gap-0">
+    <div className="h-dvh md:min-h-screen overflow-hidden px-4 pb-[88px] md:pb-4 flex flex-col">
+      <div className="max-w-full mx-auto flex flex-col gap-0 flex-1 min-h-0 w-full">
         {/* Tabs Header - Outside containers like groups layout */}
         <header className="flex w-full items-center gap-2 sticky top-0 z-50 bg-background py-4">
           <div className="flex gap-2 flex-auto min-[930px]:w-auto min-[930px]:flex-none">
@@ -695,7 +695,7 @@ export default function ExplorePage() {
         </header>
 
         {/* Main Content Area */}
-        <div className="flex-1 flex flex-col min-[930px]:flex-row gap-3 min-[930px]:h-[calc(100vh-9rem)] lg:h-[calc(100vh-10rem)]">
+        <div className="flex-1 flex flex-col min-[930px]:flex-row gap-3 h-[calc(100dvh-11.5rem)] min-[930px]:h-[calc(100vh-9rem)] lg:h-[calc(100vh-10rem)]">
           {/* Left Sidebar - Rounded Container */}
           <div className="hidden min-[930px]:flex w-full min-[930px]:w-1/3 flex-shrink-0 rounded-3xl bg-card border-1 border-border overflow-hidden flex-col">
             <ExploreSidebar

@@ -420,7 +420,7 @@ export function SoloMatchCard({
   const profession = user.profession || (match as any).profession || user.Profession || (match as any).Profession;
 
   return (
-    <div className="w-full h-full flex flex-col overflow-y-auto relative">
+    <div className="w-full h-full flex flex-col flex-1 min-h-0 md:overflow-y-auto relative">
       {/* Loading overlay for View Profile */}
       {isViewingProfile && (
         <div className="absolute inset-0 z-50 flex items-center justify-center bg-card">
@@ -431,7 +431,7 @@ export function SoloMatchCard({
       {/* ============================================================== */}
       {/* MOBILE VIEW (Screens smaller than md) */}
       {/* ============================================================== */}
-      <div className="md:hidden flex flex-col w-full">
+      <div className="md:hidden flex flex-col w-full h-full flex-1 min-h-0 overflow-hidden p-5">
         {/* Story Indicators */}
         <div className="flex gap-2 px-0 pt-0 w-full shrink-0">
           <div
@@ -448,16 +448,18 @@ export function SoloMatchCard({
           />
         </div>
 
-        <div className="overflow-y-auto overflow-x-hidden flex flex-col px-0">
-          {/* Name, Age, Location */}
-          <div className="flex-none pt-3">
-            <h1 className="text-md font-extrabold text-foreground tracking-tight flex items-center gap-2">
-              {user.full_name || user.name || "Traveler"}
-            </h1>
-            <p className="text-sm text-muted-foreground font-medium flex flex-wrap gap-1">
-              {user.age && `${user.age}, `} {typeof locationDisplay === 'string' ? locationDisplay.split(',')[0].trim() : "Unknown"}
-            </p>
-          </div>
+        {/* Name, Age, Location Header */}
+        <div className="flex-none pt-3">
+          <h1 className="text-md font-extrabold text-foreground tracking-tight flex items-center gap-2">
+            {user.full_name || user.name || "Traveler"}
+          </h1>
+          <p className="text-sm text-muted-foreground font-medium flex flex-wrap gap-1 mt-0.5">
+            {user.age && `${user.age}, `} {typeof locationDisplay === 'string' ? locationDisplay.split(',')[0].trim() : "Unknown"}
+          </p>
+        </div>
+
+        {/* Scrollable Active Tab Content */}
+        <div className="flex-grow overflow-y-auto overflow-x-hidden flex flex-col px-0 scrollbar-none">
 
           {activeTab === "left" ? (
             <div className="flex flex-col">

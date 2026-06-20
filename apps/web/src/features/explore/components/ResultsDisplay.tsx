@@ -179,7 +179,7 @@ export const ResultsDisplay = ({
 
       {/* Results Display */}
       {matchedGroups.length > 0 ? (
-        <div className="flex-1 relative flex items-center justify-center p-5 md:p-6">
+        <div className="flex-1 relative flex items-center justify-center p-0 md:p-6">
           {/* Navigation arrows */}
           {/* {matchedGroups.length > 1 && (
             <>
@@ -227,7 +227,7 @@ export const ResultsDisplay = ({
           )} */}
 
           {/* Match Card - Direct display without extra wrapper */}
-          <div className="w-full h-full">
+          <div className="w-full h-full flex flex-col min-h-0">
             <MatchCardComponent />
           </div>
 
