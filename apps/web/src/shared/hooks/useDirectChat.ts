@@ -446,21 +446,51 @@ export const useDirectChat = (
     }
 
     const handleReceiveMessage = async (incomingMsg: any) => {
-      const msgId = incomingMsg.id || incomingMsg.tempId || incomingMsg.client_id;
-      if (msgId && seenIdsRef.current.has(msgId)) {
+      const hasId = incomingMsg.id && seenIdsRef.current.has(incomingMsg.id);
+      const hasTempId = incomingMsg.tempId && seenIdsRef.current.has(incomingMsg.tempId);
+      const hasClientId = incomingMsg.client_id && seenIdsRef.current.has(incomingMsg.client_id);
+
+      if (hasId || hasTempId || hasClientId) {
         // If we've already seen this message (e.g., from optimistic send or initial fetch),
-        // update its status if it's an optimistic message becoming 'sent'
+        // update its status and ID so it matches the server's persisted ID.
+        if (incomingMsg.id) seenIdsRef.current.add(incomingMsg.id);
+        if (incomingMsg.tempId) seenIdsRef.current.add(incomingMsg.tempId);
+        if (incomingMsg.client_id) seenIdsRef.current.add(incomingMsg.client_id);
+
         setMessages((prev) => prev.map(m => 
           (m.tempId === incomingMsg.tempId || m.id === incomingMsg.id || m.client_id === incomingMsg.client_id)
-          ? { ...m, status: m.status === 'sending' ? "sent" : m.status } // Only update status, NEVER overwrite with incomingMsg dummy fields
+          ? { 
+              ...m, 
+              id: incomingMsg.id || m.id, 
+              status: m.status === 'sending' ? "sent" : m.status 
+            }
           : m
         ));
         return;
       }
-      if (msgId) seenIdsRef.current.add(msgId);
+      if (incomingMsg.id) seenIdsRef.current.add(incomingMsg.id);
+      if (incomingMsg.tempId) seenIdsRef.current.add(incomingMsg.tempId);
+      if (incomingMsg.client_id) seenIdsRef.current.add(incomingMsg.client_id);
 
       // We handle decryption inside state update to use the latest keys
       setMessages((prev) => {
+        const exists = prev.some(
+          (m) =>
+            (incomingMsg.id && m.id === incomingMsg.id) ||
+            (incomingMsg.tempId && m.tempId === incomingMsg.tempId) ||
+            (incomingMsg.client_id && m.client_id === incomingMsg.client_id)
+        );
+        if (exists) {
+          return prev.map(m => 
+            (m.tempId === incomingMsg.tempId || m.id === incomingMsg.id || m.client_id === incomingMsg.client_id)
+            ? { 
+                ...m, 
+                id: incomingMsg.id || m.id, 
+                status: m.status === 'sending' ? "sent" : m.status 
+              }
+            : m
+          );
+        }
         let finalContent = incomingMsg.encryptedContent;
         let finalIsEncrypted = incomingMsg.isEncrypted;
 

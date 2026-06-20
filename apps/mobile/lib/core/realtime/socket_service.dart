@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:mobile/core/auth/auth_repository.dart';
 import 'package:mobile/core/auth/token_storage.dart';
 import 'package:mobile/core/config/env.dart';
 import 'package:mobile/core/providers/auth_provider.dart';
@@ -13,8 +14,10 @@ final _eventController = StreamController<SocketEvent>.broadcast();
 
 class SocketService extends Notifier<SocketState> {
   final _uuid = const Uuid();
-  final String _instanceId = DateTime.now().millisecondsSinceEpoch.toString().substring(7);
-  
+  final String _instanceId = DateTime.now().millisecondsSinceEpoch
+      .toString()
+      .substring(7);
+
   io.Socket? _socket;
   bool _isInitializing = false;
   String? _deviceId;
@@ -26,14 +29,18 @@ class SocketService extends Notifier<SocketState> {
   SocketState build() {
     ref.keepAlive(); // 🔒 Lock this provider to prevent accidental disposal
     AppLogger.d('🏗️ [SocketService] [$_instanceId] Building provider');
-    
+
     // Selectively watch only what triggers a connection lifecycle change.
-    // This prevents re-builds (and socket churn) when the user profile 
+    // This prevents re-builds (and socket churn) when the user profile
     // is refreshed in the background (e.g. bio, name, or stats change).
     final userId = ref.watch(authProvider.select((s) => s.user?.id));
-    final isAuthenticated = ref.watch(authProvider.select((s) => s.isAuthenticated));
-    final isBootstrapping = ref.watch(authProvider.select((s) => s.isBootstrapping));
-    
+    final isAuthenticated = ref.watch(
+      authProvider.select((s) => s.isAuthenticated),
+    );
+    final isBootstrapping = ref.watch(
+      authProvider.select((s) => s.isBootstrapping),
+    );
+
     // Register dispose logic only once for this Notifier instance
     ref.onDispose(() {
       AppLogger.i('🔌 [SocketService] [$_instanceId] Provider disposing');
@@ -46,7 +53,7 @@ class SocketService extends Notifier<SocketState> {
       if (_socket != null && _socket!.connected) {
         return SocketState.connected;
       }
-      
+
       // Use microtask to avoid side-effects during build
       Future.microtask(() => _init());
       return SocketState.connecting;
@@ -59,7 +66,9 @@ class SocketService extends Notifier<SocketState> {
   /// Refreshes the socket connection with a new token without disposing the Notifier instance.
   /// This prevents the event stream from closing and ensures no events are dropped.
   Future<void> reconnectWithToken() async {
-    AppLogger.i('🔄 [SocketService] [$_instanceId] Reconnecting with fresh token');
+    AppLogger.i(
+      '🔄 [SocketService] [$_instanceId] Reconnecting with fresh token',
+    );
     await _init();
   }
 
@@ -93,6 +102,23 @@ class SocketService extends Notifier<SocketState> {
       // Ensure we have a stable device ID
       _deviceId ??= await _getOrCreateDeviceId(storage);
 
+      // If token is expired or expiring soon, let's refresh it first!
+      if (await storage.isExpiringSoon()) {
+        AppLogger.i(
+          '🔌 [SocketService] Token is expired or expiring soon, refreshing...',
+        );
+        try {
+          await ref
+              .read(authRepositoryProvider)
+              .refreshToken(requestId: 'SOCKET-INIT-REFRESH');
+        } catch (e) {
+          AppLogger.e(
+            '🔌 [SocketService] Silent refresh failed during socket init',
+            error: e,
+          );
+        }
+      }
+
       final accessToken = await storage.getAccessToken();
 
       // Clean up previous instance before creating new one
@@ -101,7 +127,9 @@ class SocketService extends Notifier<SocketState> {
       _socket = io.io(
         Env.socketUrl,
         io.OptionBuilder()
-            .setTransports(['websocket']) // Force websocket - more stable on mobile
+            .setTransports([
+              'websocket',
+            ]) // Force websocket - more stable on mobile
             .enableAutoConnect()
             .setReconnectionAttempts(10)
             .setReconnectionDelay(2000)
@@ -136,9 +164,33 @@ class SocketService extends Notifier<SocketState> {
       state = SocketState.disconnected;
     });
 
-    _socket!.onConnectError((err) {
+    _socket!.onConnectError((err) async {
       AppLogger.e('⚠️ [Socket] Connection error', error: err);
       state = SocketState.error;
+
+      // Handle invalid token / authentication error from socket server
+      final errMsg = err.toString().toLowerCase();
+      if (errMsg.contains('authentication error') ||
+          errMsg.contains('invalid token')) {
+        AppLogger.w(
+          '🔑 [Socket] Authentication error detected. Refreshing token...',
+        );
+        try {
+          await ref
+              .read(authRepositoryProvider)
+              .refreshToken(requestId: 'SOCKET-CONN-REFRESH');
+          // If refresh was successful, reconnect
+          AppLogger.i(
+            '🔑 [Socket] Token refreshed successfully. Reconnecting...',
+          );
+          await reconnectWithToken();
+        } catch (e) {
+          AppLogger.e(
+            '🔑 [Socket] Token refresh failed after connection error',
+            error: e,
+          );
+        }
+      }
     });
 
     _socket!.onError((err) {

@@ -227,9 +227,11 @@ export default function Inbox({ activeUserId }: InboxProps) {
         <div className="p-3 bg-card flex-shrink-0 border-b border-border sticky top-0 z-50">
           <div className="relative">
             <input
+              key="skeleton-search-input"
               type="text"
               placeholder="Search"
               className="w-full pl-4 pr-12 py-2 bg-secondary border-0 rounded-md text-muted-foreground placeholder:text-gray-400 text-sm placeholder:text-sm focus:outline-none"
+              disabled
             />
             <Search className="absolute right-2 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
           </div>
@@ -245,6 +247,7 @@ export default function Inbox({ activeUserId }: InboxProps) {
       <div className="p-3 bg-card flex-shrink-0 border-b border-border sticky top-0 z-50">
         <div className="relative">
           <input
+            key="active-search-input"
             type="text"
             placeholder="Search"
             className="w-full pl-4 pr-12 py-2 bg-secondary border-0 rounded-md text-muted-foreground placeholder:text-gray-400 text-sm placeholder:text-sm focus:outline-none"

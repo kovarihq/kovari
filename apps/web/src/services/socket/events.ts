@@ -44,7 +44,7 @@ export const registerSocketEvents = (
         // Direct chat format: {idA}_{idB}
         const [id1, id2] = chatId.split("_");
         
-        const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+        const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
         if (UUID_REGEX.test(id1) && UUID_REGEX.test(id2) && supabaseId && (supabaseId === id1 || supabaseId === id2)) {
           const partnerId = supabaseId === id1 ? id2 : id1;
           const supabase = createAdminSupabaseClient();
