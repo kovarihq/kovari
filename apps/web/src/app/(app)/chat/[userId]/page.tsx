@@ -1351,7 +1351,7 @@ const DirectChatPage = () => {
   // The chat will still be accessible and messages will be visible
 
   return (
-    <div className="flex flex-col h-full bg-card">
+    <div className="fixed inset-0 z-50 md:relative md:inset-auto md:z-0 flex flex-col h-full bg-card overflow-hidden">
       {/* Header */}
       <div className="sticky top-0 z-10 w-full bg-card border-b border-border px-3 sm:px-5 py-3 flex-shrink-0">
         <div className="flex items-center justify-between">
