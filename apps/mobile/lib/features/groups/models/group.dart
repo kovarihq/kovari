@@ -364,6 +364,16 @@ class GroupMember {
   final String role;
   final String? clerkId;
   final String? userIdFromUserTable;
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'name': name,
+        'avatar': avatar,
+        'username': username,
+        'role': role,
+        'clerkId': clerkId,
+        'userIdFromUserTable': userIdFromUserTable,
+      };
 }
 
 class JoinRequestModel {
@@ -508,4 +518,12 @@ class MembershipInfo {
   final bool isAdmin;
   final bool hasPendingRequest;
   final Map<String, dynamic>? membership;
+
+  Map<String, dynamic> toJson() => {
+        'isCreator': isCreator,
+        'isMember': isMember,
+        'isAdmin': isAdmin,
+        'hasPendingRequest': hasPendingRequest,
+        'membership': membership,
+      };
 }

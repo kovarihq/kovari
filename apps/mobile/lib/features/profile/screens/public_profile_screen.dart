@@ -276,6 +276,7 @@ class _PublicProfileScreenState extends ConsumerState<PublicProfileScreen> {
                 child: KovariAvatar(
                   imageUrl: UrlUtils.getFullImageUrl(profile.profileImage),
                   size: 65,
+                  fullName: profile.name,
                 ),
               ),
               const SizedBox(width: AppSpacing.md),

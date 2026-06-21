@@ -9,10 +9,11 @@ class GroupService {
   GroupService(this._apiClient);
   final ApiClient _apiClient;
 
-  Future<List<GroupModel>> getMyGroups() async {
+  Future<List<GroupModel>> getMyGroups({bool ignoreCache = false}) async {
     final response = await _apiClient.get<List<GroupModel>>(
-      '${ApiEndpoints.myGroups}?_t=${DateTime.now().millisecondsSinceEpoch}',
+      ApiEndpoints.myGroups,
       parser: parseGroups,
+      ignoreCache: ignoreCache,
     );
 
     if (response.success && response.data != null) {

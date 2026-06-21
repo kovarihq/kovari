@@ -181,8 +181,17 @@ class ConversationIntegrityService {
   /// for the given event type, or `null` if valid.
   String? _checkStructure(String eventType, Map<String, dynamic> data) {
     switch (eventType) {
-      case 'receive_message':
       case 'message_persisted':
+        final tempId = data['tempId'] as String?;
+        final messageId =
+            data['messageId'] as String? ?? data['id'] as String?;
+        if (tempId == null || tempId.isEmpty) return 'Missing tempId';
+        if (messageId == null || messageId.isEmpty) {
+          return 'Missing messageId';
+        }
+        return null;
+
+      case 'receive_message':
         final msgData = (data['message'] as Map<String, dynamic>?) ?? data;
         final id = msgData['id'] as String?;
         final senderId =
@@ -201,7 +210,13 @@ class ConversationIntegrityService {
 
       case 'messages_seen':
         final seq = data['lastSeenSequence'];
-        if (seq == null) return 'Missing lastSeenSequence';
+        final messageIds = data['messageIds'];
+        final hasSeq = seq != null;
+        final hasIds =
+            messageIds is List && messageIds.isNotEmpty;
+        if (!hasSeq && !hasIds) {
+          return 'Missing lastSeenSequence and messageIds';
+        }
         return null;
 
       case 'message_delivered_ack':

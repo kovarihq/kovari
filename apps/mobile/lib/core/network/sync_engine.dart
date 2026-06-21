@@ -41,9 +41,14 @@ class SyncEngine {
               : cached.data,
         );
 
-        // Trigger background refresh if online
+        // Trigger background refresh if online and cache is older than 30s (throttling)
+        final age = DateTime.now().difference(cached.timestamp);
         if (_ref.read(connectivityProvider).isOnline) {
-          _backgroundFetch(path, parser, queryParameters, ttl, onUpdate);
+          if (age > const Duration(seconds: 30)) {
+            _backgroundFetch(path, parser, queryParameters, ttl, onUpdate);
+          } else {
+            AppLogger.d('⚡ [SWR] Skipping background refresh for $path (Cache age: ${age.inSeconds}s, fresh < 30s)');
+          }
         }
 
         return data;

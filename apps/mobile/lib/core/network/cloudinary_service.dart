@@ -48,11 +48,13 @@ class CloudinaryService {
     try {
       final signData = await _getSignature(folder, cancelToken: cancelToken);
       
-      final String signature = signData['signature'] as String;
-      final int timestamp = signData['timestamp'] as int;
-      final String apiKey = signData['api_key'] as String;
-      final String cloudName = signData['cloud_name'] as String;
-      final String targetFolder = signData['folder'] as String;
+      final String signature = signData['signature']?.toString() ?? '';
+      final int timestamp = signData['timestamp'] is int
+          ? signData['timestamp'] as int
+          : int.tryParse(signData['timestamp']?.toString() ?? '') ?? 0;
+      final String apiKey = signData['api_key']?.toString() ?? '';
+      final String cloudName = signData['cloud_name']?.toString() ?? '';
+      final String targetFolder = signData['folder']?.toString() ?? '';
 
       final fileName = file.path.split('/').last;
       final formData = FormData.fromMap({
@@ -92,11 +94,13 @@ class CloudinaryService {
       // 1. Get signature from our backend
       final signData = await _getSignature(folder, cancelToken: cancelToken);
       
-      final String signature = signData['signature'] as String;
-      final int timestamp = signData['timestamp'] as int;
-      final String apiKey = signData['api_key'] as String;
-      final String cloudName = signData['cloud_name'] as String;
-      final String targetFolder = signData['folder'] as String;
+      final String signature = signData['signature']?.toString() ?? '';
+      final int timestamp = signData['timestamp'] is int
+          ? signData['timestamp'] as int
+          : int.tryParse(signData['timestamp']?.toString() ?? '') ?? 0;
+      final String apiKey = signData['api_key']?.toString() ?? '';
+      final String cloudName = signData['cloud_name']?.toString() ?? '';
+      final String targetFolder = signData['folder']?.toString() ?? '';
 
       // 2. Prepare multipart data for Cloudinary
       final fileName = file.path.split('/').last;

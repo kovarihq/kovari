@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -155,6 +156,8 @@ void main() {
 
   setUpAll(() {
     registerFallbackValue(File(''));
+    registerFallbackValue(CancelToken());
+    registerFallbackValue(const Duration(hours: 1));
   });
 
   late ProviderContainer container;
@@ -204,6 +207,8 @@ void main() {
         queryParameters: any(named: 'queryParameters'),
         parser: any(named: 'parser'),
         ignoreCache: any(named: 'ignoreCache'),
+        ttl: any(named: 'ttl'),
+        cancelToken: any(named: 'cancelToken'),
       ),
     ).thenAnswer(
       (_) async => ApiResponse<Map<String, dynamic>>.fallback(reason: 'test_stub'),

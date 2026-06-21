@@ -42,7 +42,12 @@ class GroupStore extends Notifier<Map<String, HydratedState<GroupModel>>> {
   @override
   Map<String, HydratedState<GroupModel>> build() {
     _startGC();
-    ref.onDispose(() => _gcTimer?.cancel());
+    ref.onDispose(() {
+      _gcTimer?.cancel();
+      for (final t in _persistenceTimers.values) {
+        t.cancel();
+      }
+    });
     return {};
   }
 
@@ -327,8 +332,17 @@ class MemberStore
     extends Notifier<Map<String, HydratedState<List<GroupMember>>>> {
   final Map<String, EntityMetadata> _metadata = {};
 
+  final Map<String, Timer> _persistenceTimers = {};
+
   @override
-  Map<String, HydratedState<List<GroupMember>>> build() => {};
+  Map<String, HydratedState<List<GroupMember>>> build() {
+    ref.onDispose(() {
+      for (final t in _persistenceTimers.values) {
+        t.cancel();
+      }
+    });
+    return {};
+  }
 
   Future<void> subscribe(String groupId, {bool force = false}) async {
     _metadata.putIfAbsent(groupId, EntityMetadata.new).subscriberCount++;
@@ -370,6 +384,25 @@ class MemberStore
     }
 
     state = newState;
+    _persistDebounced(groupId, newState[groupId]!);
+  }
+
+  void _persistDebounced(
+    String groupId,
+    HydratedState<List<GroupMember>> hydratedState,
+  ) {
+    _persistenceTimers[groupId]?.cancel();
+    _persistenceTimers[groupId] = Timer(const Duration(milliseconds: 500), () {
+      if (hydratedState.hasData) {
+        final cache = ref.read(localCacheProvider);
+        cache.set(
+          ApiEndpoints.groupMembers(groupId),
+          hydratedState.data!.map((m) => m.toJson()).toList(),
+          ttl: const Duration(hours: 2),
+        );
+      }
+      _persistenceTimers.remove(groupId);
+    });
   }
 }
 
@@ -419,8 +452,17 @@ class ItineraryStore
     extends Notifier<Map<String, HydratedState<List<ItineraryItem>>>> {
   final Map<String, EntityMetadata> _metadata = {};
 
+  final Map<String, Timer> _persistenceTimers = {};
+
   @override
-  Map<String, HydratedState<List<ItineraryItem>>> build() => {};
+  Map<String, HydratedState<List<ItineraryItem>>> build() {
+    ref.onDispose(() {
+      for (final t in _persistenceTimers.values) {
+        t.cancel();
+      }
+    });
+    return {};
+  }
 
   Future<void> subscribe(String groupId, {bool force = false}) async {
     _metadata.putIfAbsent(groupId, EntityMetadata.new).subscriberCount++;
@@ -467,6 +509,25 @@ class ItineraryStore
     }
 
     state = newState;
+    _persistDebounced(groupId, newState[groupId]!);
+  }
+
+  void _persistDebounced(
+    String groupId,
+    HydratedState<List<ItineraryItem>> hydratedState,
+  ) {
+    _persistenceTimers[groupId]?.cancel();
+    _persistenceTimers[groupId] = Timer(const Duration(milliseconds: 500), () {
+      if (hydratedState.hasData) {
+        final cache = ref.read(localCacheProvider);
+        cache.set(
+          ApiEndpoints.groupItinerary(groupId),
+          hydratedState.data!.map((item) => item.toJson()).toList(),
+          ttl: const Duration(hours: 2),
+        );
+      }
+      _persistenceTimers.remove(groupId);
+    });
   }
 }
 
@@ -516,8 +577,17 @@ class MembershipStore
     extends Notifier<Map<String, HydratedState<MembershipInfo>>> {
   final Map<String, EntityMetadata> _metadata = {};
 
+  final Map<String, Timer> _persistenceTimers = {};
+
   @override
-  Map<String, HydratedState<MembershipInfo>> build() => {};
+  Map<String, HydratedState<MembershipInfo>> build() {
+    ref.onDispose(() {
+      for (final t in _persistenceTimers.values) {
+        t.cancel();
+      }
+    });
+    return {};
+  }
 
   Future<void> subscribe(String groupId, {bool force = false}) async {
     _metadata.putIfAbsent(groupId, EntityMetadata.new).subscriberCount++;
@@ -559,6 +629,25 @@ class MembershipStore
     }
 
     state = newState;
+    _persistDebounced(groupId, newState[groupId]!);
+  }
+
+  void _persistDebounced(
+    String groupId,
+    HydratedState<MembershipInfo> hydratedState,
+  ) {
+    _persistenceTimers[groupId]?.cancel();
+    _persistenceTimers[groupId] = Timer(const Duration(milliseconds: 500), () {
+      if (hydratedState.hasData) {
+        final cache = ref.read(localCacheProvider);
+        cache.set(
+          ApiEndpoints.groupMembership(groupId),
+          hydratedState.data!.toJson(),
+          ttl: const Duration(hours: 2),
+        );
+      }
+      _persistenceTimers.remove(groupId);
+    });
   }
 }
 
@@ -619,7 +708,7 @@ class MyGroupsStore extends Hydratable<List<GroupModel>> {
     debugPrint(
       '📡 [MyGroupsStore] Initiating network fetch from: ${ApiEndpoints.myGroups}',
     );
-    return ref.read(groupServiceProvider).getMyGroups();
+    return ref.read(groupServiceProvider).getMyGroups(ignoreCache: true);
   }
 
   Future<void> refresh() async {

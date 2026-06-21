@@ -445,19 +445,8 @@ export const registerSocketEvents = (
 
   socket.on("get_last_seen", async ({ userId: targetUserId }, callback) => {
     try {
-      const supabase = createAdminSupabaseClient();
-      const { data, error } = await supabase
-        .from("users")
-        .select("clerk_user_id")
-        .eq("id", targetUserId)
-        .single();
-
-      if (error || !data?.clerk_user_id) {
-        callback(null);
-        return;
-      }
-
-      const lastSeen = await PresenceManager.getLastSeen(data.clerk_user_id);
+      const presenceKey = await presenceKeyForSupabaseUserId(targetUserId);
+      const lastSeen = await PresenceManager.getLastSeen(presenceKey);
       callback(lastSeen);
     } catch (e) {
       console.error("[Socket] Failed to get last seen:", e);

@@ -126,6 +126,7 @@ class ConversationRuntimeState {
     DateTime? lastMessageAt,
     String? lastMessageSenderId,
     String? lastMessageMediaType,
+    bool replaceLastMessageMediaType = false,
     MessageDeliveryStatus? deliveryState,
     bool? isPartnerOnline,
     DateTime? partnerLastSeen,
@@ -151,7 +152,9 @@ class ConversationRuntimeState {
         lastMessageSnippet: lastMessageSnippet ?? this.lastMessageSnippet,
         lastMessageAt: lastMessageAt ?? this.lastMessageAt,
         lastMessageSenderId: lastMessageSenderId ?? this.lastMessageSenderId,
-        lastMessageMediaType: lastMessageMediaType ?? this.lastMessageMediaType,
+        lastMessageMediaType: replaceLastMessageMediaType
+            ? lastMessageMediaType
+            : (lastMessageMediaType ?? this.lastMessageMediaType),
         deliveryState: deliveryState ?? this.deliveryState,
         isPartnerOnline: isPartnerOnline ?? this.isPartnerOnline,
         partnerLastSeen: partnerLastSeen ?? this.partnerLastSeen,
@@ -224,6 +227,8 @@ class ConversationRuntimeStore
           lastMessageSenderId: conv.lastMessage?.senderId,
           lastMessageId: conv.lastMessage?.id,
           lastMessageMediaType: conv.lastMessage?.mediaType,
+          isPartnerOnline: conv.isPartnerOnline,
+          partnerLastSeen: conv.partnerLastSeen,
         );
       } else {
         // Update metadata reference but preserve live runtime state
@@ -240,6 +245,27 @@ class ConversationRuntimeStore
   /// Upsert a single conversation runtime entry. Creates if absent.
   void upsert(ConversationRuntimeState runtimeState) {
     state = {...state, runtimeState.chatId: runtimeState};
+  }
+
+  /// Ensures a runtime entry exists for [conv] without clobbering live state.
+  void ensureFromConversation(ConversationEntity conv) {
+    if (state.containsKey(conv.chatId)) return;
+    upsert(
+      ConversationRuntimeState(
+        chatId: conv.chatId,
+        conversationType:
+            conv.isGroup ? ConversationType.group : ConversationType.direct,
+        metadata: conv,
+        unreadCount: conv.unreadCount,
+        lastMessageAt: conv.lastMessageAt,
+        lastMessageSnippet: conv.lastMessage?.text,
+        lastMessageSenderId: conv.lastMessage?.senderId,
+        lastMessageId: conv.lastMessage?.id,
+        lastMessageMediaType: conv.lastMessage?.mediaType,
+        isPartnerOnline: conv.isPartnerOnline,
+        partnerLastSeen: conv.partnerLastSeen,
+      ),
+    );
   }
 
   /// Update just the metadata reference for an existing runtime entry.
@@ -284,6 +310,7 @@ class ConversationRuntimeStore
         lastMessageAt: at,
         lastMessageSenderId: senderId,
         lastMessageMediaType: mediaType,
+        replaceLastMessageMediaType: true,
         deliveryState: deliveryState,
       ),
     };
@@ -352,7 +379,12 @@ class ConversationRuntimeStore
     DateTime? lastActivityAt,
   }) {
     final existing = state[chatId];
-    if (existing == null) return;
+    if (existing == null) {
+      AppLogger.w(
+        '[ConversationRuntimeStore] setPresence skipped: no entry for $chatId',
+      );
+      return;
+    }
     state = {
       ...state,
       chatId: existing.copyWith(
@@ -431,42 +463,23 @@ class ConversationRuntimeStore
               lastSeenStr != null ? DateTime.tryParse(lastSeenStr) : null,
         );
 
-      // --- Read Receipts ---
-      case 'messages_seen':
-        final lastSeenSeq = data['lastSeenSequence'] as int?;
-        if (lastSeenSeq != null) markSeenUpTo(chatId, lastSeenSeq);
+      // --- Read Receipts (outgoing delivery ticks handled in MessageStore) ---
 
       // --- Delivery Receipts ---
       case 'message_delivered_ack':
         final csn = data['conversationSequence'] as int?;
         if (csn != null) updateDeliveredWatermark(chatId, csn);
 
-      // --- Incoming Message (update snippet + server sequence) ---
+      // --- Incoming Message (update sequence & watermarks) ---
+      // Note: Last message updates and decryption are handled by ConversationStore's socket handler and propagated.
       case 'receive_message':
       case 'message_persisted':
         final msgData =
             (data['message'] as Map<String, dynamic>?) ?? data;
-        final snippet =
-            msgData['text'] as String? ?? msgData['encrypted_content'] as String?;
-        final senderId =
-            msgData['senderId'] as String? ?? msgData['sender_id'] as String?;
-        final msgId = msgData['id'] as String?;
-        final mediaType =
-            msgData['mediaType'] as String? ?? msgData['media_type'] as String?;
         final csn =
             msgData['conversationSequence'] as int? ??
             msgData['conversation_sequence'] as int?;
 
-        if (msgId != null && senderId != null) {
-          updateLastMessage(
-            chatId: chatId,
-            messageId: msgId,
-            snippet: snippet,
-            at: DateTime.now(),
-            senderId: senderId,
-            mediaType: mediaType,
-          );
-        }
         if (csn != null) {
           updateServerSequence(chatId, csn);
           updateDeliveredWatermark(chatId, csn);

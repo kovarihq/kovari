@@ -114,7 +114,7 @@ class ChatMediaService {
       // Save encrypted bytes to a temp file for upload
       final tempDir = await getTemporaryDirectory();
       final encryptedFile = File('${tempDir.path}/enc_$clientMessageId');
-      await encryptedFile.writeAsBytes(encrypted['cipherText'] as Uint8List);
+      await encryptedFile.writeAsBytes(encrypted['cipherText'] as List<int>);
 
       // 3. ☁️ Upload: Send encrypted binary to Cloudinary
       final cloudinary = _ref.read(cloudinaryServiceProvider);
@@ -168,6 +168,7 @@ class ChatMediaService {
       // Cleanup
       if (await encryptedFile.exists()) await encryptedFile.delete();
     } catch (e, stack) {
+      print('CRITICAL [ChatMediaService] Failed to send media: $e\n$stack');
       AppLogger.e(
         '[ChatMediaService] Failed to send media',
         error: e,

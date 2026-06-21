@@ -46,7 +46,11 @@ class UserProfile {
       following: json['following']?.toString() ?? '0',
       likes: json['likes']?.toString() ?? '0',
       coverImage: (json['cover_image'] as String?) ?? '',
-      profileImage: (json['avatar'] as String?) ?? (json['profile_photo'] as String?) ?? (json['profile_image'] as String?) ?? '',
+      profileImage: (json['profileImage'] as String?) ??
+          (json['avatar'] as String?) ??
+          (json['profile_photo'] as String?) ??
+          (json['profile_image'] as String?) ??
+          '',
       posts: (json['posts'] as List? ?? [])
           .map((p) => UserPost.fromJson(p as Map<String, dynamic>))
           .toList(),

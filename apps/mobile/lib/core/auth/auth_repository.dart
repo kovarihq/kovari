@@ -52,13 +52,7 @@ class AuthRepository {
       return;
     }
 
-    // 4. Severe Expiry Override
-    if (await _storage.isSeverelyExpired()) {
-      AppLogger.w('[$requestId] Session severely expired. Forcing logout.');
-      _sessionManager.clearWaiters(AuthFailure(AuthFailure.severeExpiry));
-      await logout(reason: 'SEVERE_EXPIRY');
-      throw AuthFailure(AuthFailure.severeExpiry);
-    }
+    // Severe Expiry Override removed to allow standard refresh token lifetime (7 days)
 
     _sessionManager.startRefreshing();
     final startTime = DateTime.now();
@@ -264,15 +258,9 @@ class AuthRepository {
         return;
       }
 
-      if (await _storage.isSeverelyExpired()) {
-        AppLogger.w('🔍 [Bootstrap] Tokens found but severely expired.');
-        await logout(reason: 'BOOTSTRAP_SEVERE_EXPIRY');
-        return;
-      }
-
-      // If expiring soon, try a silent refresh
-      if (await _storage.isExpiringSoon()) {
-        AppLogger.i('🔍 [Bootstrap] Tokens expiring soon. Attempting silent refresh...');
+      // If expired or expiring soon, try a silent refresh using the refresh token
+      if (await _storage.isExpired() || await _storage.isExpiringSoon()) {
+        AppLogger.i('🔍 [Bootstrap] Tokens expired or expiring soon. Attempting silent refresh...');
         try {
           await refreshToken(
             requestId: 'BOOTSTRAP-REFRESH',

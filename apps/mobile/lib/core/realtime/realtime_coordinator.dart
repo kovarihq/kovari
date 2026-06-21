@@ -1,10 +1,13 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:mobile/core/providers/auth_provider.dart';
 import 'package:mobile/core/realtime/socket_service.dart';
 import 'package:mobile/core/realtime/socket_state.dart';
 import 'package:mobile/core/utils/app_logger.dart';
 import 'package:mobile/features/chat/providers/chat_mutation_service.dart';
+import 'package:mobile/features/chat/providers/conversation_runtime_store.dart';
 import 'package:mobile/features/chat/providers/conversation_store.dart';
 import 'package:mobile/features/chat/providers/message_store.dart';
+import 'package:mobile/features/chat/utils/direct_chat_id.dart';
 
 /// Tracks which chat rooms the user is currently subscribed to.
 /// On reconnect, performs a sequence audit for each active room.
@@ -41,6 +44,14 @@ class RealtimeCoordinator extends Notifier<void> {
   /// Join a chat room. Records the last known sequence for gap detection on reconnect.
   void joinChat(String chatId, {int lastKnownSequence = 0}) {
     _activeChatLastKnownSeq[chatId] = lastKnownSequence;
+
+    final conv = ref.read(conversationStoreProvider)[chatId];
+    if (conv != null) {
+      ref
+          .read(conversationRuntimeStoreProvider.notifier)
+          .ensureFromConversation(conv);
+    }
+
     ref.read(socketServiceProvider.notifier).emit('join_chat', {
       'chatId': chatId,
       'lastKnownSequence': lastKnownSequence,
@@ -50,11 +61,87 @@ class RealtimeCoordinator extends Notifier<void> {
     ref.read(chatMutationServiceProvider).replayPendingMessages(chatId);
 
     // Eagerly refresh messages to pull any missed offline packets
-    ref.read(messageStoreProvider(chatId).notifier).resync();
+    ref
+        .read(messageStoreProvider(chatId).notifier)
+        .resync(forceRefresh: true);
+
+    if (chatId.contains('_')) {
+      _fetchPartnerLastSeen(chatId);
+    }
 
     AppLogger.i(
       '[RealtimeCoordinator] Joined chat: $chatId (lastSeq: $lastKnownSequence)',
     );
+  }
+
+  /// Fetches partner presence via socket ack (parity with web `get_last_seen`).
+  void _fetchPartnerLastSeen(String chatId) {
+    final conv = ref.read(conversationStoreProvider)[chatId];
+    var partnerId = conv?.partnerUserId;
+
+    if (partnerId == null) {
+      final user = ref.read(authProvider).user;
+      if (user == null) {
+        AppLogger.w(
+          '[RealtimeCoordinator] _fetchPartnerLastSeen: no auth user for $chatId',
+        );
+        return;
+      }
+      partnerId = directChatPartnerId(
+        chatId,
+        user.id,
+        myUserUuid: user.resolvedUuid ?? user.id,
+      );
+    }
+    if (partnerId == null) {
+      AppLogger.w(
+        '[RealtimeCoordinator] _fetchPartnerLastSeen: could not resolve partnerId for $chatId',
+      );
+      return;
+    }
+
+    ref.read(socketServiceProvider.notifier).emit(
+      'get_last_seen',
+      {'userId': partnerId},
+      (dynamic ack) => _applyLastSeenAck(chatId, ack),
+    );
+  }
+
+  void _applyLastSeenAck(String chatId, dynamic ack) {
+    if (ack == null) return;
+
+    final conv = ref.read(conversationStoreProvider)[chatId];
+    if (conv != null) {
+      ref
+          .read(conversationRuntimeStoreProvider.notifier)
+          .ensureFromConversation(conv);
+    }
+
+    if (ack is String && ack.toLowerCase() == 'online') {
+      ref
+          .read(conversationStoreProvider.notifier)
+          .setPartnerOnline(chatId, isOnline: true);
+      ref.read(conversationRuntimeStoreProvider.notifier).setPresence(
+            chatId,
+            isOnline: true,
+            lastActivityAt: DateTime.now(),
+          );
+      return;
+    }
+
+    if (ack is String) {
+      final parsed = DateTime.tryParse(ack);
+      ref.read(conversationStoreProvider.notifier).setPartnerOnline(
+            chatId,
+            isOnline: false,
+            lastSeen: parsed,
+          );
+      ref.read(conversationRuntimeStoreProvider.notifier).setPresence(
+            chatId,
+            isOnline: false,
+            lastSeen: parsed,
+          );
+    }
   }
 
   /// Leave a chat room. Updates the last known sequence before leaving.
@@ -90,9 +177,6 @@ class RealtimeCoordinator extends Notifier<void> {
     ref
         .read(conversationStoreProvider.notifier)
         .markSeenUpTo(chatId, lastSeenSequence);
-    ref
-        .read(messageStoreProvider(chatId).notifier)
-        .markSeenUpTo(lastSeenSequence);
     ref.read(socketServiceProvider.notifier).emit(
       'mark_seen',
       <String, dynamic>{

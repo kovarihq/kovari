@@ -17,6 +17,9 @@ import 'package:mobile/features/chat/providers/conversation_store.dart';
 import 'package:mobile/features/chat/utils/direct_chat_id.dart';
 import 'package:mobile/core/realtime/conversation_integrity_service.dart';
 
+import 'package:mobile/core/network/sync_engine.dart';
+import 'package:mobile/core/providers/cache_provider.dart';
+
 /// Max messages to keep HOT in memory per conversation.
 const _kHotWindowSize = 75;
 
@@ -51,16 +54,12 @@ class ConversationMessageState {
   /// A detected gap (fromSeq, toSeq) awaiting recovery.
   final (int, int)? pendingGap;
 
-  /// Ordered, renderable messages — sliding HOT window (tail of the list).
+  /// Ordered, renderable messages currently loaded in memory.
   List<MessageEntity> get hotMessages {
-    final all = orderedIds
+    return orderedIds
         .map((id) => messages[id])
         .whereType<MessageEntity>()
         .toList();
-    if (all.length > _kHotWindowSize) {
-      return all.sublist(all.length - _kHotWindowSize);
-    }
-    return all;
   }
 
   ConversationMessageState copyWith({
@@ -99,6 +98,46 @@ class MessageStore extends Notifier<ConversationMessageState> {
   ConversationType _conversationType = ConversationType.direct;
 
   bool _isActive = true;
+  bool _isDisposed = false;
+
+  String? get _myUserId {
+    final user = ref.read(authProvider).user;
+    return user?.resolvedUuid ?? user?.id;
+  }
+
+  /// Parses API/socket JSON and restores [MessageDeliveryStatus.seen] from
+  /// persisted [read_at] for the current user's outgoing messages.
+  MessageEntity _parseMessageJson(Map<String, dynamic> json) {
+    final entity = MessageEntity.fromSocket(
+      json,
+      _chatId,
+      currentUserId: _myUserId,
+    );
+    if (entity.deliveryStatus == MessageDeliveryStatus.seen) {
+      return entity;
+    }
+    if (_isOwnSentMessage(entity)) {
+      final readAt = json['readAt'] ?? json['read_at'];
+      if (readAt != null && readAt.toString().isNotEmpty) {
+        return entity.copyWith(deliveryStatus: MessageDeliveryStatus.seen);
+      }
+    }
+    return entity;
+  }
+
+  MessageDeliveryStatus _maxDeliveryStatus(
+    MessageDeliveryStatus current,
+    MessageDeliveryStatus incoming,
+  ) {
+    int rank(MessageDeliveryStatus status) => switch (status) {
+      MessageDeliveryStatus.seen => 4,
+      MessageDeliveryStatus.delivered => 3,
+      MessageDeliveryStatus.sent => 2,
+      MessageDeliveryStatus.pending => 1,
+      MessageDeliveryStatus.failed => 0,
+    };
+    return rank(current) >= rank(incoming) ? current : incoming;
+  }
 
   void init(String chatId) => _chatId = chatId;
   @override
@@ -111,21 +150,22 @@ class MessageStore extends Notifier<ConversationMessageState> {
     Timer? disposeTimer;
     ref.onDispose(() {
       disposeTimer?.cancel();
+      _isDisposed = true;
     });
-    
+
     ref.onCancel(() {
       _isActive = false;
       // Defer trim: modifying state inside onCancel violates Riverpod lifecycle
       Future.microtask(() => _trimMessages(50));
       disposeTimer = Timer(const Duration(minutes: 5), () => link.close());
     });
-    
+
     ref.onResume(() {
       _isActive = true;
       disposeTimer?.cancel();
     });
 
-    final events = ref.watch(socketServiceProvider.notifier).events;
+    final events = ref.read(socketServiceProvider.notifier).events;
     final sub = events.listen((SocketEvent event) => _handleSocketEvent(event));
     ref.onDispose(() => sub.cancel());
 
@@ -135,12 +175,15 @@ class MessageStore extends Notifier<ConversationMessageState> {
     return ConversationMessageState(chatId: _chatId);
   }
 
-  Future<void> _hydrate() async {
-    AppLogger.d('[MessageStore] HYDRATE START for $_chatId');
+  Future<void> _hydrate({bool forceRefresh = false}) async {
+    AppLogger.d(
+      '[MessageStore] HYDRATE START for $_chatId (forceRefresh: $forceRefresh)',
+    );
 
     // Only show loading state if we have ZERO messages in memory
     final isFirstLoad = state.messages.isEmpty;
     if (isFirstLoad) {
+      if (_isDisposed || !_isActive) return;
       state = state.copyWith(isHydrating: true);
     }
 
@@ -182,9 +225,14 @@ class MessageStore extends Notifier<ConversationMessageState> {
           );
         }).toList();
 
+        if (_isDisposed || !_isActive) return;
+        final updated = Map<String, MessageEntity>.from(state.messages);
+        for (final m in pendingEntities) {
+          updated[m.id] = m;
+        }
         state = state.copyWith(
-          messages: {for (var m in pendingEntities) m.id: m},
-          orderedIds: pendingEntities.map((m) => m.id).toList(),
+          messages: updated,
+          orderedIds: _buildOrderedIds(updated),
         );
       }
 
@@ -192,28 +240,43 @@ class MessageStore extends Notifier<ConversationMessageState> {
       // Determine conversation type from runtime store. If the runtime store
       // already has an entry with isGroup=true metadata, use group path.
       // Fallback: check whether chatId looks like a UUID pair (direct) or not.
-      final runtimeEntry =
-          ref.read(conversationRuntimeStoreProvider)[_chatId];
+      final runtimeEntry = ref.read(conversationRuntimeStoreProvider)[_chatId];
       final isGroupChat =
           runtimeEntry?.conversationType == ConversationType.group ||
           runtimeEntry?.metadata?.isGroup == true;
 
-      _conversationType =
-          isGroupChat ? ConversationType.group : ConversationType.direct;
+      _conversationType = isGroupChat
+          ? ConversationType.group
+          : ConversationType.direct;
 
-      final apiClient = ref.read(apiClientProvider);
-      List<dynamic> rawMessages = [];
+      final syncEngine = ref.read(syncEngineProvider);
 
       if (_conversationType == ConversationType.group) {
         // --- Group Chat Hydration ---
-        AppLogger.d('[MessageStore] Group hydration path for $_chatId');
-        final response = await apiClient.get<Map<String, dynamic>>(
-          'groups/$_chatId/messages',
+        AppLogger.d('[MessageStore] Group SWR hydration path for $_chatId');
+        final rawData = await syncEngine.swrFetch<Map<String, dynamic>>(
+          path: 'groups/$_chatId/messages',
           queryParameters: {'limit': _kHotWindowSize},
           parser: (data) => data as Map<String, dynamic>,
-          ignoreCache: true,
+          ignoreCache: forceRefresh,
+          onUpdate: (updatedData) {
+            if (!_isDisposed && _isActive) {
+              _processHistoryData(
+                updatedData,
+                path: 'groups/$_chatId/messages',
+                params: {'limit': _kHotWindowSize},
+              );
+            }
+          },
         );
-        rawMessages = response.data?['messages'] as List<dynamic>? ?? [];
+        if (_isDisposed || !_isActive) return;
+        if (rawData != null) {
+          await _processHistoryData(
+            rawData,
+            path: 'groups/$_chatId/messages',
+            params: {'limit': _kHotWindowSize},
+          );
+        }
       } else {
         // --- Direct Chat Hydration ---
         final partnerId = directChatPartnerId(
@@ -223,37 +286,38 @@ class MessageStore extends Notifier<ConversationMessageState> {
         );
         if (partnerId == null) {
           AppLogger.e('[MessageStore] FAILED: partnerId is NULL for $_chatId');
-          state = state.copyWith(isHydrating: false);
+          if (!_isDisposed && _isActive) {
+            state = state.copyWith(isHydrating: false);
+          }
           return;
         }
-        AppLogger.d('[MessageStore] Direct hydration path — partnerId: $partnerId');
-        final response = await apiClient.get<Map<String, dynamic>>(
-          'direct-chat/messages',
-          queryParameters: {'partnerId': partnerId},
-          parser: (data) => data as Map<String, dynamic>,
-          ignoreCache: true,
+        AppLogger.d(
+          '[MessageStore] Direct SWR hydration path — partnerId: $partnerId',
         );
-        rawMessages = response.data?['messages'] as List<dynamic>? ?? [];
-      }
-
-      final List<MessageEntity> entities = [];
-      for (final json in rawMessages) {
-        try {
-          final entity = MessageEntity.fromSocket(
-            json as Map<String, dynamic>,
-            _chatId,
+        final rawData = await syncEngine.swrFetch<Map<String, dynamic>>(
+          path: 'direct-chat/messages',
+          queryParameters: {'partnerId': partnerId, 'limit': _kHotWindowSize},
+          parser: (data) => data as Map<String, dynamic>,
+          ignoreCache: forceRefresh,
+          onUpdate: (updatedData) {
+            if (!_isDisposed && _isActive) {
+              _processHistoryData(
+                updatedData,
+                path: 'direct-chat/messages',
+                params: {'partnerId': partnerId, 'limit': _kHotWindowSize},
+              );
+            }
+          },
+        );
+        if (_isDisposed || !_isActive) return;
+        if (rawData != null) {
+          await _processHistoryData(
+            rawData,
+            path: 'direct-chat/messages',
+            params: {'partnerId': partnerId, 'limit': _kHotWindowSize},
           );
-          final decrypted = await _decryptIfNeeded(entity);
-          entities.add(decrypted ?? entity);
-        } catch (e) {
-          AppLogger.e('[MessageStore] Error parsing message', error: e);
         }
       }
-
-      hydrateFromHistory(
-        entities,
-        hasReachedTop: entities.length < _kHotWindowSize,
-      );
     } catch (e, stack) {
       AppLogger.e(
         '[MessageStore] Hydration failed',
@@ -261,8 +325,63 @@ class MessageStore extends Notifier<ConversationMessageState> {
         stackTrace: stack,
       );
     } finally {
-      state = state.copyWith(isHydrating: false);
+      if (!_isDisposed && _isActive) {
+        state = state.copyWith(isHydrating: false);
+      }
     }
+  }
+
+  Future<void> _processHistoryData(
+    Map<String, dynamic> data, {
+    required String path,
+    required Map<String, dynamic> params,
+  }) async {
+    if (_isDisposed || !_isActive) return;
+    final rawMessages = data['messages'] as List<dynamic>? ?? [];
+    final List<MessageEntity> entities = [];
+    var anyDecrypted = false;
+    for (final json in rawMessages) {
+      try {
+        final entity = _parseMessageJson(json as Map<String, dynamic>);
+        if (entity.isEncrypted) {
+          final decrypted = await _decryptIfNeeded(entity);
+          if (decrypted != null) {
+            entities.add(decrypted);
+            anyDecrypted = true;
+          } else {
+            entities.add(entity);
+          }
+        } else {
+          entities.add(entity);
+        }
+      } catch (e) {
+        AppLogger.e('[MessageStore] Error parsing message', error: e);
+      }
+    }
+
+    if (_isDisposed || !_isActive) return;
+
+    if (anyDecrypted) {
+      try {
+        final decryptedJson = {
+          'messages': entities.map((e) => e.toSocket()).toList(),
+        };
+        await ref
+            .read(localCacheProvider)
+            .set(path, decryptedJson, params: params);
+        AppLogger.d(
+          '🔒 [Cache] Saved decrypted history back to cache for $path',
+        );
+      } catch (e) {
+        AppLogger.e('Failed to save decrypted history back to cache', error: e);
+      }
+    }
+
+    final requestedLimit = params['limit'] as int? ?? _kHotWindowSize;
+    hydrateFromHistory(
+      entities,
+      hasReachedTop: entities.length < requestedLimit,
+    );
   }
 
   // ---------------------------------------------------------------------------
@@ -273,7 +392,137 @@ class MessageStore extends Notifier<ConversationMessageState> {
       state = state.copyWith(isHydrating: value);
 
   /// Trigger a full sync of the conversation messages from the server.
-  void resync() => _hydrate();
+  void resync({bool forceRefresh = false}) =>
+      _hydrate(forceRefresh: forceRefresh);
+
+  /// Loads the next page of older messages using the oldest message's timestamp as cursor.
+  Future<void> loadMore() async {
+    if (state.isHydrating || state.hasReachedTop || _isDisposed || !_isActive)
+      return;
+    if (state.orderedIds.isEmpty) return;
+
+    // The first message in orderedIds is the oldest loaded in memory.
+    final oldestId = state.orderedIds.first;
+    final oldestMsg = state.messages[oldestId];
+    if (oldestMsg == null) return;
+
+    final cursor = oldestMsg.createdAt.toUtc().toIso8601String();
+
+    // Set hydrating flag to prevent concurrent pagination calls
+    state = state.copyWith(isHydrating: true);
+
+    try {
+      final syncEngine = ref.read(syncEngineProvider);
+      final authUser = ref.read(authProvider).user;
+      if (authUser == null) return;
+
+      Map<String, dynamic>? rawData;
+      String path;
+      Map<String, dynamic> params;
+
+      if (_conversationType == ConversationType.group) {
+        path = 'groups/$_chatId/messages';
+        params = {'limit': 50, 'cursor': cursor};
+        rawData = await syncEngine.swrFetch<Map<String, dynamic>>(
+          path: path,
+          queryParameters: params,
+          parser: (data) => data as Map<String, dynamic>,
+          ignoreCache: true, // Pagination bypasses cache to get fresh history
+        );
+      } else {
+        final partnerId = directChatPartnerId(
+          _chatId,
+          authUser.id,
+          myUserUuid: authUser.resolvedUuid,
+        );
+        if (partnerId == null) return;
+
+        path = 'direct-chat/messages';
+        params = {'partnerId': partnerId, 'cursor': cursor, 'limit': 50};
+        rawData = await syncEngine.swrFetch<Map<String, dynamic>>(
+          path: path,
+          queryParameters: params,
+          parser: (data) => data as Map<String, dynamic>,
+          ignoreCache: true,
+        );
+      }
+
+      if (_isDisposed || !_isActive) return;
+
+      if (rawData != null) {
+        final rawMessages = rawData['messages'] as List<dynamic>? ?? [];
+        final List<MessageEntity> fetchedEntities = [];
+        var anyDecrypted = false;
+        for (final json in rawMessages) {
+          try {
+            final entity = _parseMessageJson(json as Map<String, dynamic>);
+            if (entity.isEncrypted) {
+              final decrypted = await _decryptIfNeeded(entity);
+              if (decrypted != null) {
+                fetchedEntities.add(decrypted);
+                anyDecrypted = true;
+              } else {
+                fetchedEntities.add(entity);
+              }
+            } else {
+              fetchedEntities.add(entity);
+            }
+          } catch (e) {
+            AppLogger.e(
+              '[MessageStore] Error parsing paginated message',
+              error: e,
+            );
+          }
+        }
+
+        if (_isDisposed || !_isActive) return;
+
+        if (fetchedEntities.isEmpty) {
+          state = state.copyWith(hasReachedTop: true, isHydrating: false);
+        } else {
+          // Merge paginated messages with current state
+          final updated = Map<String, MessageEntity>.from(state.messages);
+          for (final msg in fetchedEntities) {
+            updated[msg.id] = msg;
+          }
+
+          if (anyDecrypted) {
+            try {
+              final decryptedJson = {
+                'messages': fetchedEntities.map((e) => e.toSocket()).toList(),
+              };
+              await ref
+                  .read(localCacheProvider)
+                  .set(path, decryptedJson, params: params);
+            } catch (e) {
+              AppLogger.e(
+                'Failed to cache decrypted paginated messages',
+                error: e,
+              );
+            }
+          }
+
+          state = state.copyWith(
+            messages: updated,
+            orderedIds: _buildOrderedIds(updated),
+            isHydrating: false,
+            hasReachedTop: fetchedEntities.length < 50,
+          );
+          _enforceBudget();
+        }
+      }
+    } catch (e, stack) {
+      AppLogger.e(
+        '[MessageStore] Load more failed',
+        error: e,
+        stackTrace: stack,
+      );
+    } finally {
+      if (!_isDisposed && _isActive) {
+        state = state.copyWith(isHydrating: false);
+      }
+    }
+  }
 
   /// Bulk-insert messages from a history API response page.
   void hydrateFromHistory(
@@ -281,6 +530,7 @@ class MessageStore extends Notifier<ConversationMessageState> {
     String? nextCursor,
     bool hasReachedTop = false,
   }) {
+    if (_isDisposed) return;
     if (messages.isEmpty) {
       state = state.copyWith(isHydrating: false, hasReachedTop: hasReachedTop);
       return;
@@ -314,7 +564,10 @@ class MessageStore extends Notifier<ConversationMessageState> {
         updated[existingKey] = updated[existingKey]!.copyWith(
           id: msg.id, // Ensure we have the latest server ID
           conversationSequence: msg.conversationSequence,
-          deliveryStatus: msg.deliveryStatus,
+          deliveryStatus: _maxDeliveryStatus(
+            updated[existingKey]!.deliveryStatus,
+            msg.deliveryStatus,
+          ),
           serverSequence: msg.serverSequence,
         );
       } else {
@@ -358,14 +611,17 @@ class MessageStore extends Notifier<ConversationMessageState> {
     ref
         .read(conversationStoreProvider.notifier)
         .updateLastMessage(_chatId, optimistic);
-    ref.read(conversationRuntimeStoreProvider.notifier).updateLastMessage(
-      chatId: _chatId,
-      messageId: optimistic.id,
-      snippet: optimistic.text,
-      at: optimistic.createdAt,
-      senderId: optimistic.senderId,
-      deliveryState: optimistic.deliveryStatus,
-    );
+    ref
+        .read(conversationRuntimeStoreProvider.notifier)
+        .updateLastMessage(
+          chatId: _chatId,
+          messageId: optimistic.id,
+          snippet: optimistic.text,
+          at: optimistic.createdAt,
+          senderId: optimistic.senderId,
+          deliveryState: optimistic.deliveryStatus,
+          mediaType: optimistic.mediaType,
+        );
   }
 
   /// Reconcile optimistic → authoritative. Prevents duplicate renders.
@@ -413,17 +669,22 @@ class MessageStore extends Notifier<ConversationMessageState> {
     ref
         .read(conversationStoreProvider.notifier)
         .updateLastMessage(_chatId, authoritative);
-    ref.read(conversationRuntimeStoreProvider.notifier).updateLastMessage(
-      chatId: _chatId,
-      messageId: serverMessageId,
-      snippet: authoritative.text,
-      at: authoritative.createdAt,
-      senderId: authoritative.senderId,
-      deliveryState: MessageDeliveryStatus.sent,
-    );
+    ref
+        .read(conversationRuntimeStoreProvider.notifier)
+        .updateLastMessage(
+          chatId: _chatId,
+          messageId: serverMessageId,
+          snippet: authoritative.text,
+          at: authoritative.createdAt,
+          senderId: authoritative.senderId,
+          deliveryState: MessageDeliveryStatus.sent,
+          mediaType: authoritative.mediaType,
+        );
     ref
         .read(conversationRuntimeStoreProvider.notifier)
         .updateServerSequence(_chatId, conversationSequence);
+
+    unawaited(_persistMessageToHistoryCache(authoritative));
 
     AppLogger.d(
       '[MessageStore] Reconciled $clientMessageId → $serverMessageId (CSN: $conversationSequence)',
@@ -463,12 +724,41 @@ class MessageStore extends Notifier<ConversationMessageState> {
     return conversation?.partnerClerkId;
   }
 
-  /// Mark all messages with CSN ≤ [lastSeenSequence] as seen.
+  /// Mark explicit [messageIds] as seen (parity with web `handleMessagesSeen`).
+  void markSeenByMessageIds(List<String> messageIds) {
+    if (messageIds.isEmpty) return;
+    final idSet = messageIds.toSet();
+    final updated = Map<String, MessageEntity>.from(state.messages);
+    var changed = false;
+
+    for (final entry in updated.entries) {
+      final msg = entry.value;
+      if (!_isOwnSentMessage(msg)) continue;
+      if (msg.deliveryStatus == MessageDeliveryStatus.seen) continue;
+
+      final clientId = msg.clientMessageId;
+      final matches = idSet.contains(msg.id) ||
+          (clientId != null && idSet.contains(clientId)) ||
+          (clientId != null && idSet.contains('pending_$clientId'));
+
+      if (matches) {
+        updated[entry.key] = msg.copyWith(
+          deliveryStatus: MessageDeliveryStatus.seen,
+        );
+        changed = true;
+      }
+    }
+
+    if (changed) state = state.copyWith(messages: updated);
+  }
+
+  /// Mark all own sent messages with CSN ≤ [lastSeenSequence] as seen.
   void markSeenUpTo(int lastSeenSequence) {
     final updated = Map<String, MessageEntity>.from(state.messages);
     var changed = false;
     for (final entry in updated.entries) {
       final msg = entry.value;
+      if (!_isOwnSentMessage(msg)) continue;
       final csn = msg.conversationSequence;
       if (csn != null &&
           csn <= lastSeenSequence &&
@@ -480,6 +770,51 @@ class MessageStore extends Notifier<ConversationMessageState> {
       }
     }
     if (changed) state = state.copyWith(messages: updated);
+  }
+
+  bool _isOwnSentMessage(MessageEntity msg) {
+    final user = ref.read(authProvider).user;
+    if (user == null) return false;
+    final myIds = {user.id, user.resolvedUuid, user.uuid}
+        .whereType<String>()
+        .where((id) => id.isNotEmpty)
+        .toSet();
+    return myIds.contains(msg.senderId);
+  }
+
+  /// True when [readerUserId] is the chat partner (not the local user).
+  bool _isPartnerReadReceipt(String? readerUserId) {
+    if (readerUserId == null || readerUserId.isEmpty) return true;
+
+    final user = ref.read(authProvider).user;
+    if (user == null) return false;
+
+    final myIds = {user.id, user.resolvedUuid, user.uuid}
+        .whereType<String>()
+        .where((id) => id.isNotEmpty)
+        .toSet();
+    if (myIds.contains(readerUserId)) return false;
+
+    final partnerId =
+        ref.read(conversationProvider(_chatId))?.partnerUserId ??
+        directChatPartnerId(
+          _chatId,
+          user.id,
+          myUserUuid: user.resolvedUuid ?? user.id,
+        );
+    if (partnerId == null) return true;
+
+    return readerUserId == partnerId ||
+        readerUserId ==
+            ref.read(conversationProvider(_chatId))?.partnerClerkId;
+  }
+
+  int? _parseSocketInt(dynamic value) {
+    if (value == null) return null;
+    if (value is int) return value;
+    if (value is double) return value.toInt();
+    if (value is String) return int.tryParse(value);
+    return null;
   }
 
   /// Apply gap-fill messages from the server.
@@ -511,8 +846,7 @@ class MessageStore extends Notifier<ConversationMessageState> {
     if (data == null) return;
 
     // Support both direct (chatId) and group (groupId) event routing
-    final msgChatId =
-        data['chatId'] as String? ?? data['groupId'] as String?;
+    final msgChatId = data['chatId'] as String? ?? data['groupId'] as String?;
     if (msgChatId != _chatId) return;
 
     // --- Integrity Guard (Workstream 3) ---
@@ -532,12 +866,18 @@ class MessageStore extends Notifier<ConversationMessageState> {
       case 'message_persisted':
         _onMessagePersisted(data);
       case 'messages_seen':
-        final lastSeenSeq = data['lastSeenSequence'] as int?;
+        // Only the partner's read receipt should upgrade our outgoing ticks.
+        if (!_isPartnerReadReceipt(data['userId'] as String?)) break;
+
+        final messageIds = (data['messageIds'] as List<dynamic>?)
+            ?.map((id) => id.toString())
+            .toList();
+        if (messageIds != null && messageIds.isNotEmpty) {
+          markSeenByMessageIds(messageIds);
+        }
+        final lastSeenSeq = _parseSocketInt(data['lastSeenSequence']);
         if (lastSeenSeq != null) {
           markSeenUpTo(lastSeenSeq);
-          ref
-              .read(conversationRuntimeStoreProvider.notifier)
-              .markSeenUpTo(_chatId, lastSeenSeq);
         }
       case 'message_delivered_ack':
         final messageId = data['messageId'] as String?;
@@ -557,9 +897,26 @@ class MessageStore extends Notifier<ConversationMessageState> {
 
   void _onReceiveMessage(Map<String, dynamic> data) async {
     try {
-      final entity = MessageEntity.fromSocket(data, _chatId);
+      final entity = _parseMessageJson(data);
 
       // 1. Content-based deduplication for real-time race conditions
+      final pendingId = entity.clientMessageId != null
+          ? 'pending_${entity.clientMessageId}'
+          : null;
+      if (pendingId != null && state.messages.containsKey(pendingId)) {
+        final csn = entity.conversationSequence;
+        final ssn = entity.serverSequence;
+        if (csn != null && ssn != null) {
+          reconcileOptimistic(
+            clientMessageId: entity.clientMessageId!,
+            serverMessageId: entity.id,
+            conversationSequence: csn,
+            serverSequence: ssn,
+          );
+        }
+        return;
+      }
+
       final isDuplicate = state.messages.values.any(
         (e) =>
             (e.id == entity.id) ||
@@ -612,6 +969,7 @@ class MessageStore extends Notifier<ConversationMessageState> {
           snippet: finalEntity.text,
           at: finalEntity.createdAt,
           senderId: finalEntity.senderId,
+          mediaType: finalEntity.mediaType,
         )
         ..incrementUnread(_chatId);
 
@@ -624,10 +982,7 @@ class MessageStore extends Notifier<ConversationMessageState> {
       // Emit delivery receipt for incoming messages (Workstream 5)
       ref.read(socketServiceProvider.notifier).emit(
         'message_delivered',
-        <String, dynamic>{
-          'chatId': _chatId,
-          'messageId': finalEntity.id,
-        },
+        <String, dynamic>{'chatId': _chatId, 'messageId': finalEntity.id},
       );
     } catch (e, stack) {
       AppLogger.e(
@@ -652,7 +1007,8 @@ class MessageStore extends Notifier<ConversationMessageState> {
     // --- Group Chat Decryption (Workstream 8) ---
     // Detect group conversations by checking the runtime store entry.
     final runtimeEntry = ref.read(conversationRuntimeStoreProvider)[_chatId];
-    final isGroup = _conversationType == ConversationType.group ||
+    final isGroup =
+        _conversationType == ConversationType.group ||
         runtimeEntry?.conversationType == ConversationType.group;
 
     if (isGroup) {
@@ -667,7 +1023,9 @@ class MessageStore extends Notifier<ConversationMessageState> {
         if (plain != '[Encrypted message]' && plain != '[Failed to decrypt]') {
           return entity.copyWith(text: plain, isEncrypted: false);
         }
-        AppLogger.w('[MessageStore] Group decryption returned fallback for ${entity.id}');
+        AppLogger.w(
+          '[MessageStore] Group decryption returned fallback for ${entity.id}',
+        );
       } catch (e) {
         AppLogger.e('[MessageStore] Group decryption failed', error: e);
       }
@@ -734,9 +1092,10 @@ class MessageStore extends Notifier<ConversationMessageState> {
 
   void _onMessagePersisted(Map<String, dynamic> data) {
     final tempId = data['tempId'] as String?;
-    final serverMessageId = data['messageId'] as String?;
-    final csn = data['conversationSequence'] as int?;
-    final ssn = data['serverSequence'] as int?;
+    final serverMessageId =
+        data['messageId'] as String? ?? data['id'] as String?;
+    final csn = _parseSocketInt(data['conversationSequence']);
+    final ssn = _parseSocketInt(data['serverSequence']);
 
     if (tempId != null &&
         serverMessageId != null &&
@@ -747,6 +1106,110 @@ class MessageStore extends Notifier<ConversationMessageState> {
         serverMessageId: serverMessageId,
         conversationSequence: csn,
         serverSequence: ssn,
+      );
+    }
+  }
+
+  ({String path, Map<String, dynamic> params})? _historyCacheKey() {
+    final authUser = ref.read(authProvider).user;
+    if (authUser == null) return null;
+
+    if (_conversationType == ConversationType.group) {
+      return (
+        path: 'groups/$_chatId/messages',
+        params: {'limit': _kHotWindowSize},
+      );
+    }
+
+    final partnerId = directChatPartnerId(
+      _chatId,
+      authUser.id,
+      myUserUuid: authUser.resolvedUuid,
+    );
+    if (partnerId == null) return null;
+
+    return (
+      path: 'direct-chat/messages',
+      params: {'partnerId': partnerId, 'limit': _kHotWindowSize},
+    );
+  }
+
+  Future<void> _persistMessageToHistoryCache(MessageEntity message) async {
+    final cacheKey = _historyCacheKey();
+    if (cacheKey == null) return;
+
+    try {
+      final cache = ref.read(localCacheProvider);
+      final cached = cache.get(cacheKey.path, params: cacheKey.params);
+      final rawEnvelope = cached?.data;
+      final dynamic payload = rawEnvelope is Map &&
+              (rawEnvelope).containsKey('data')
+          ? (rawEnvelope as Map)['data']
+          : rawEnvelope;
+
+      final existingMessages = payload is Map
+          ? (payload['messages'] as List<dynamic>? ?? [])
+          : <dynamic>[];
+
+      final serialized = message.toSocket();
+      final updatedMessages = <Map<String, dynamic>>[];
+      var replaced = false;
+
+      for (final item in existingMessages) {
+        if (item is! Map) continue;
+        final map = Map<String, dynamic>.from(item);
+        final sameId = map['id'] == message.id;
+        final sameClientId = message.clientMessageId != null &&
+            (map['tempId'] == message.clientMessageId ||
+                map['client_id'] == message.clientMessageId);
+        if (sameId || sameClientId) {
+          updatedMessages.add(serialized);
+          replaced = true;
+        } else {
+          updatedMessages.add(map);
+        }
+      }
+
+      if (!replaced) {
+        updatedMessages.add(serialized);
+      }
+
+      updatedMessages.sort((a, b) {
+        final aSeq = a['conversationSequence'] as int? ?? 0;
+        final bSeq = b['conversationSequence'] as int? ?? 0;
+        if (aSeq != 0 || bSeq != 0) return aSeq.compareTo(bSeq);
+        final aAt = DateTime.tryParse(a['createdAt'] as String? ?? '') ??
+            DateTime.fromMillisecondsSinceEpoch(0);
+        final bAt = DateTime.tryParse(b['createdAt'] as String? ?? '') ??
+            DateTime.fromMillisecondsSinceEpoch(0);
+        return aAt.compareTo(bAt);
+      });
+
+      if (updatedMessages.length > _kHotWindowSize) {
+        updatedMessages.removeRange(
+          0,
+          updatedMessages.length - _kHotWindowSize,
+        );
+      }
+
+      final nextPayload = {'messages': updatedMessages};
+      final nextEnvelope = rawEnvelope is Map &&
+              (rawEnvelope).containsKey('data')
+          ? {...Map<String, dynamic>.from(rawEnvelope as Map), 'data': nextPayload}
+          : nextPayload;
+
+      await cache.set(
+        cacheKey.path,
+        nextEnvelope,
+        params: cacheKey.params,
+      );
+      AppLogger.d(
+        '[MessageStore] Persisted reconciled message ${message.id} to history cache',
+      );
+    } catch (e) {
+      AppLogger.e(
+        '[MessageStore] Failed to persist reconciled message to cache',
+        error: e,
       );
     }
   }
@@ -778,18 +1241,22 @@ class MessageStore extends Notifier<ConversationMessageState> {
       state = state.copyWith(pendingGap: (fromSeq, toSeq));
 
       // WS 11: Record gap fill request telemetry
-      ref.read(messagingTelemetryProvider).recordGapFillRequested(
-        chatId: _chatId,
-        fromSequence: fromSeq,
-        toSequence: toSeq,
-      );
+      ref
+          .read(messagingTelemetryProvider)
+          .recordGapFillRequested(
+            chatId: _chatId,
+            fromSequence: fromSeq,
+            toSequence: toSeq,
+          );
 
       // WS 11: Drift detection — anomalous jumps get a separate high-priority event
-      ref.read(messagingTelemetryProvider).recordSequenceDrift(
-        conversationId: _chatId,
-        expectedSequence: highest + 1,
-        receivedSequence: incomingCsn,
-      );
+      ref
+          .read(messagingTelemetryProvider)
+          .recordSequenceDrift(
+            conversationId: _chatId,
+            expectedSequence: highest + 1,
+            receivedSequence: incomingCsn,
+          );
 
       ref.read(socketServiceProvider.notifier).emit(
         'request_gap_fill',
@@ -807,9 +1274,8 @@ class MessageStore extends Notifier<ConversationMessageState> {
                 final List<MessageEntity> gapMessages = [];
                 for (final m in msgs) {
                   try {
-                    final entity = MessageEntity.fromSocket(
+                    final entity = _parseMessageJson(
                       Map<String, dynamic>.from(m as Map),
-                      _chatId,
                     );
                     gapMessages.add(entity);
                   } catch (e) {
@@ -818,20 +1284,26 @@ class MessageStore extends Notifier<ConversationMessageState> {
                 }
                 applyGapFill(gapMessages);
                 // WS 11: Record successful gap fill resolution
-                ref.read(messagingTelemetryProvider).recordGapFillResolved(
-                  chatId: _chatId,
-                  recoveredCount: gapMessages.length,
-                  fallbackToRest: false,
-                );
+                ref
+                    .read(messagingTelemetryProvider)
+                    .recordGapFillResolved(
+                      chatId: _chatId,
+                      recoveredCount: gapMessages.length,
+                      fallbackToRest: false,
+                    );
               }
             } else if (status == 'GAP_TOO_LARGE') {
-              AppLogger.w('[MessageStore] GAP_TOO_LARGE status returned. Falling back to REST hydration.');
-              // WS 11: Record fallback resolution
-              ref.read(messagingTelemetryProvider).recordGapFillResolved(
-                chatId: _chatId,
-                recoveredCount: gapSize,
-                fallbackToRest: true,
+              AppLogger.w(
+                '[MessageStore] GAP_TOO_LARGE status returned. Falling back to REST hydration.',
               );
+              // WS 11: Record fallback resolution
+              ref
+                  .read(messagingTelemetryProvider)
+                  .recordGapFillResolved(
+                    chatId: _chatId,
+                    recoveredCount: gapSize,
+                    fallbackToRest: true,
+                  );
               _hydrate();
             }
           }
@@ -869,7 +1341,9 @@ class MessageStore extends Notifier<ConversationMessageState> {
   void _trimMessages(int maxCount) {
     if (state.orderedIds.length <= maxCount) return;
 
-    final toKeepIds = state.orderedIds.sublist(state.orderedIds.length - maxCount);
+    final toKeepIds = state.orderedIds.sublist(
+      state.orderedIds.length - maxCount,
+    );
     final updatedMessages = <String, MessageEntity>{};
     for (final id in toKeepIds) {
       if (state.messages.containsKey(id)) {
@@ -877,11 +1351,10 @@ class MessageStore extends Notifier<ConversationMessageState> {
       }
     }
 
-    state = state.copyWith(
-      messages: updatedMessages,
-      orderedIds: toKeepIds,
+    state = state.copyWith(messages: updatedMessages, orderedIds: toKeepIds);
+    AppLogger.d(
+      '[MessageStore:$_chatId] Trimmed memory to $maxCount messages (isActive: $_isActive)',
     );
-    AppLogger.d('[MessageStore:$_chatId] Trimmed memory to $maxCount messages (isActive: $_isActive)');
   }
 
   void _enforceBudget() {

@@ -344,16 +344,29 @@ class ChatMutationService {
               AppLogger.d(
                 '[ChatMutationService] Level-1 ACK for $clientMessageId',
               );
-              // 💎 Instagram-Pro: Update UI to show one checkmark (sent)
-              _ref
-                  .read(messageStoreProvider(chatId).notifier)
-                  .updateDeliveryStatus(
-                    'pending_$clientMessageId',
-                    MessageDeliveryStatus.sent,
-                  );
+              final serverMessageId = ack['messageId'] as String?;
+              final csn = _parseAckInt(ack['conversationSequence']);
+              final ssn = _parseAckInt(ack['serverSequence']);
 
-              // 💎 Instagram-Pro: Resolve journal IMMEDIATELY on Level-1 ACK
-              // This prevents ReplayEngine from triggering redundant re-sends.
+              if (serverMessageId != null && csn != null && ssn != null) {
+                _ref
+                    .read(messageStoreProvider(chatId).notifier)
+                    .reconcileOptimistic(
+                      clientMessageId: clientMessageId,
+                      serverMessageId: serverMessageId,
+                      conversationSequence: csn,
+                      serverSequence: ssn,
+                    );
+              } else {
+                _ref
+                    .read(messageStoreProvider(chatId).notifier)
+                    .updateDeliveryStatus(
+                      'pending_$clientMessageId',
+                      MessageDeliveryStatus.sent,
+                    );
+              }
+
+              // Resolve journal on Level-1 ACK — server has accepted the message.
               _ref
                   .read(mutationJournalProvider)
                   .resolve(chatId, clientMessageId, MutationStatus.success);
@@ -440,6 +453,13 @@ class ChatMutationService {
     _ref
         .read(mutationJournalProvider)
         .resolve(chatId, clientMessageId, MutationStatus.success);
+  }
+
+  int? _parseAckInt(dynamic value) {
+    if (value is int) return value;
+    if (value is num) return value.toInt();
+    if (value is String) return int.tryParse(value);
+    return null;
   }
 }
 

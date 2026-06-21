@@ -10,6 +10,8 @@ import 'package:mobile/features/chat/models/conversation_entity.dart';
 import 'package:mobile/features/chat/models/message_entity.dart';
 import 'package:mobile/features/chat/providers/conversation_runtime_store.dart';
 
+import 'package:mobile/core/network/sync_engine.dart';
+
 /// Typing indicator TTL in seconds.
 const _kTypingTtlSeconds = 5;
 
@@ -45,124 +47,140 @@ class ConversationStore extends Notifier<Map<String, ConversationEntity>> {
   /// Upsert a conversation from the inbox API response.
   void upsertConversation(ConversationEntity entity) {
     state = {...state, entity.chatId: entity};
+    ref
+        .read(conversationRuntimeStoreProvider.notifier)
+        .ensureFromConversation(entity);
   }
 
   /// Fetch the latest inbox state from the server.
   Future<void> fetchInbox({bool forceRefresh = false}) async {
-    print(
+    AppLogger.d(
       '🛡️ [ConversationStore] 📥 Starting fetchInbox (forceRefresh: $forceRefresh)...',
     );
-    ref.read(inboxLoadingProvider.notifier).state = true;
+    // Only show loading state if we have zero conversations in memory
+    if (state.isEmpty) {
+      ref.read(inboxLoadingProvider.notifier).state = true;
+    }
     try {
-      final apiClient = ref.read(apiClientProvider);
-      final response = await apiClient.get<Map<String, dynamic>>(
-        'direct-chat/inbox',
+      final syncEngine = ref.read(syncEngineProvider);
+      final rawData = await syncEngine.swrFetch<Map<String, dynamic>>(
+        path: 'direct-chat/inbox',
         parser: (data) => data as Map<String, dynamic>,
         ignoreCache: forceRefresh,
+        onUpdate: (updatedData) {
+          _processInboxData(updatedData);
+        },
       );
 
-      final rawData = response.data ?? {};
-      // Support both DM-only inbox ('messages') and unified inbox ('conversations')
-      final messages =
-          rawData['conversations'] as List<dynamic>? ??
-          rawData['messages'] as List<dynamic>? ??
-          [];
-      AppLogger.d('[ConversationStore] Fetched inbox: ${messages.length} conversations');
-
-      if (messages.isNotEmpty) {
-        final Map<String, ConversationEntity> newConversations = {};
-        final myUser = ref.read(authProvider).user;
-        if (myUser == null) {
-          AppLogger.w('[ConversationStore] Cannot process inbox: myUser is null');
-          return;
-        }
-
-        final myUuid = myUser.uuid ?? myUser.id;
-
-        for (final msg in messages) {
-          // --- Group Conversation Detection ---
-          final isGroup = msg['is_group'] as bool? ?? false;
-          final groupId = msg['group_id'] as String?;
-
-          if (isGroup && groupId != null) {
-            // Group conversation entry
-            if (!newConversations.containsKey(groupId)) {
-              final lastMsgRaw = MessageEntity.fromSocket(
-                msg as Map<String, dynamic>,
-                groupId,
-              );
-              final conv = ConversationEntity(
-                chatId: groupId,
-                participantIds: const [],
-                isGroup: true,
-                groupName: msg['group_name'] as String? ?? 'Group',
-                groupAvatar: msg['group_avatar'] as String?,
-                lastMessageAt: lastMsgRaw.createdAt,
-                lastMessage: lastMsgRaw,
-              );
-              newConversations[groupId] = conv;
-            }
-            continue;
-          }
-
-          // --- Direct Conversation Entry ---
-          final senderId = msg['sender_id'] as String? ?? '';
-          final receiverId = msg['receiver_id'] as String? ?? '';
-          final serverChatId = msg['chat_id'] as String?;
-
-          final partnerId =
-              msg['partner_id'] as String? ??
-              (senderId == myUuid ? receiverId : senderId);
-
-          final partnerClerkId = (senderId == myUuid)
-              ? msg['receiver_clerk_id'] as String?
-              : msg['sender_clerk_id'] as String?;
-
-          final canonicalChatId =
-              serverChatId ??
-              (() {
-                final sortedIds = [myUuid, partnerId]..sort();
-                return '${sortedIds[0]}_${sortedIds[1]}';
-              })();
-
-          if (!newConversations.containsKey(canonicalChatId)) {
-            final lastMsgRaw = MessageEntity.fromSocket(
-              msg as Map<String, dynamic>,
-              canonicalChatId,
-            );
-
-            final conv = ConversationEntity(
-              chatId: canonicalChatId,
-              participantIds: [senderId, receiverId],
-              partnerUserId: partnerId,
-              partnerClerkId: partnerClerkId,
-              partnerName: msg['partner_name'] as String? ?? 'User',
-              partnerAvatar: msg['partner_avatar'] as String?,
-              lastMessageAt: lastMsgRaw.createdAt,
-              lastMessage: lastMsgRaw,
-            );
-
-            // 🔓 Zero-Flicker Decryption: Unlock BEFORE adding to the map
-            final decrypted = await _decryptMessageEntity(lastMsgRaw, conv);
-            newConversations[canonicalChatId] = conv.copyWith(
-              lastMessage: decrypted ?? lastMsgRaw,
-            );
-          }
-        }
-
-        state = {...state, ...newConversations};
-
-        // --- Workstream 2.5: Bootstrap ConversationRuntimeStore ---
-        // Seed the runtime store so background socket events can instantly
-        // update metadata without requiring manual REST re-fetches.
-        ref
-            .read(conversationRuntimeStoreProvider.notifier)
-            .seedFromInbox(newConversations.values.toList());
+      if (rawData != null) {
+        await _processInboxData(rawData);
       }
     } catch (e) {
       AppLogger.e('[ConversationStore] Failed to fetch inbox', error: e);
     } finally {
       ref.read(inboxLoadingProvider.notifier).state = false;
+    }
+  }
+
+  Future<void> _processInboxData(Map<String, dynamic> rawData) async {
+    // Support both DM-only inbox ('messages') and unified inbox ('conversations')
+    final messages =
+        rawData['conversations'] as List<dynamic>? ??
+        rawData['messages'] as List<dynamic>? ??
+        [];
+    AppLogger.d(
+      '[ConversationStore] Processing inbox data: ${messages.length} conversations',
+    );
+
+    if (messages.isNotEmpty) {
+      final Map<String, ConversationEntity> newConversations = {};
+      final myUser = ref.read(authProvider).user;
+      if (myUser == null) {
+        AppLogger.w('[ConversationStore] Cannot process inbox: myUser is null');
+        return;
+      }
+
+      final myUuid = myUser.uuid ?? myUser.id;
+
+      for (final msg in messages) {
+        // --- Group Conversation Detection ---
+        final isGroup = msg['is_group'] as bool? ?? false;
+        final groupId = msg['group_id'] as String?;
+
+        if (isGroup && groupId != null) {
+          // Group conversation entry
+          if (!newConversations.containsKey(groupId)) {
+            final lastMsgRaw = MessageEntity.fromSocket(
+              msg as Map<String, dynamic>,
+              groupId,
+            );
+            final conv = ConversationEntity(
+              chatId: groupId,
+              participantIds: const [],
+              isGroup: true,
+              groupName: msg['group_name'] as String? ?? 'Group',
+              groupAvatar: msg['group_avatar'] as String?,
+              lastMessageAt: lastMsgRaw.createdAt,
+              lastMessage: lastMsgRaw,
+            );
+            newConversations[groupId] = conv;
+          }
+          continue;
+        }
+
+        // --- Direct Conversation Entry ---
+        final senderId = msg['sender_id'] as String? ?? '';
+        final receiverId = msg['receiver_id'] as String? ?? '';
+        final serverChatId = msg['chat_id'] as String?;
+
+        final partnerId =
+            msg['partner_id'] as String? ??
+            (senderId == myUuid ? receiverId : senderId);
+
+        final partnerClerkId = (senderId == myUuid)
+            ? msg['receiver_clerk_id'] as String?
+            : msg['sender_clerk_id'] as String?;
+
+        final canonicalChatId =
+            serverChatId ??
+            (() {
+              final sortedIds = [myUuid, partnerId]..sort();
+              return '${sortedIds[0]}_${sortedIds[1]}';
+            })();
+
+        if (!newConversations.containsKey(canonicalChatId)) {
+          final lastMsgRaw = MessageEntity.fromSocket(
+            msg as Map<String, dynamic>,
+            canonicalChatId,
+          );
+
+          final conv = ConversationEntity(
+            chatId: canonicalChatId,
+            participantIds: [senderId, receiverId],
+            partnerUserId: partnerId,
+            partnerClerkId: partnerClerkId,
+            partnerName: msg['partner_name'] as String? ?? 'User',
+            partnerAvatar: msg['partner_avatar'] as String?,
+            lastMessageAt: lastMsgRaw.createdAt,
+            lastMessage: lastMsgRaw,
+          );
+
+          // 🔓 Zero-Flicker Decryption: Unlock BEFORE adding to the map
+          final decrypted = await _decryptMessageEntity(lastMsgRaw, conv);
+          newConversations[canonicalChatId] = conv.copyWith(
+            lastMessage: decrypted ?? lastMsgRaw,
+          );
+        }
+      }
+
+      state = {...state, ...newConversations};
+
+      // --- Workstream 2.5: Bootstrap ConversationRuntimeStore ---
+      // Seed the runtime store so background socket events can instantly
+      // update metadata without requiring manual REST re-fetches.
+      ref
+          .read(conversationRuntimeStoreProvider.notifier)
+          .seedFromInbox(newConversations.values.toList());
     }
   }
 
@@ -269,6 +287,17 @@ class ConversationStore extends Notifier<Map<String, ConversationEntity>> {
         lastMessageAt: finalMsg.createdAt,
       ),
     };
+
+    // Propagate to ConversationRuntimeStore to ensure inbox UI updates instantly
+    ref.read(conversationRuntimeStoreProvider.notifier).updateLastMessage(
+          chatId: chatId,
+          messageId: finalMsg.id,
+          snippet: finalMsg.text,
+          at: finalMsg.createdAt,
+          senderId: finalMsg.senderId,
+          mediaType: finalMsg.mediaType,
+          deliveryState: finalMsg.deliveryStatus,
+        );
   }
 
   /// Increment unread count for a conversation not currently active.
@@ -292,6 +321,11 @@ class ConversationStore extends Notifier<Map<String, ConversationEntity>> {
       ...state,
       chatId: existing.copyWith(unreadCount: 0, lastSeenSequence: sequence),
     };
+
+    // Propagate to ConversationRuntimeStore to reset unread count and set watermark
+    ref
+        .read(conversationRuntimeStoreProvider.notifier)
+        .markSeenUpTo(chatId, sequence);
   }
 
   // ---------------------------------------------------------------------------
@@ -331,12 +365,17 @@ class ConversationStore extends Notifier<Map<String, ConversationEntity>> {
     DateTime? lastSeen,
   }) {
     final existing = state[chatId];
-    if (existing == null) return;
+    if (existing == null) {
+      AppLogger.w(
+        '[ConversationStore] setPartnerOnline skipped: no entry for $chatId',
+      );
+      return;
+    }
     state = {
       ...state,
       chatId: existing.copyWith(
         isPartnerOnline: isOnline,
-        partnerLastSeen: lastSeen,
+        partnerLastSeen: lastSeen ?? existing.partnerLastSeen,
       ),
     };
   }
@@ -369,15 +408,11 @@ class ConversationStore extends Notifier<Map<String, ConversationEntity>> {
           lastSeen: lastSeenStr != null ? DateTime.tryParse(lastSeenStr) : null,
         );
       case 'receive_message':
-      case 'message_persisted':
         final msgData = data['message'] ?? data;
         if (msgData is Map<String, dynamic>) {
           final message = MessageEntity.fromSocket(msgData, chatId);
           updateLastMessage(chatId, message);
         }
-      case 'messages_seen':
-        final lastSeenSeq = data['lastSeenSequence'] as int?;
-        if (lastSeenSeq != null) markSeenUpTo(chatId, lastSeenSeq);
       default:
         break;
     }

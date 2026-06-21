@@ -32,6 +32,7 @@ import 'package:mobile/shared/widgets/kovari_avatar.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:dio/dio.dart';
 import 'package:mobile/core/security/encryption_service.dart';
+import 'package:path_provider/path_provider.dart';
 
 /// Individual chat screen. Receives [chatId] and loads everything from
 /// [MessageStore] + [ConversationStore]. Wires the input bar to
@@ -82,6 +83,12 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         }
         if (offset < 50 && _showNewMessageBanner) {
           setState(() => _showNewMessageBanner = false);
+        }
+
+        // 💎 Instagram/Telegram pagination: load older messages when reaching near the top (maxScrollExtent in reverse ListView)
+        final maxScroll = _scrollController.position.maxScrollExtent;
+        if (offset >= maxScroll - 200) {
+          ref.read(messageStoreProvider(_chatId).notifier).loadMore();
         }
       }
     });
@@ -178,8 +185,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     if (_scrollController.hasClients) {
       _scrollController.animateTo(
         0, // reverse list — 0 = bottom
-        duration: const Duration(milliseconds: 200),
-        curve: Curves.easeOut,
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeOutCubic,
       );
     }
   }
@@ -197,7 +204,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     print(
       '📺 [ChatScreen] MsgState: ${msgState.messages.length} msgs | Loading: ${msgState.isHydrating}',
     );
-    final currentUserId = ref.watch(authProvider).user?.id ?? '';
+    final authUserObj = ref.watch(authProvider).user;
+    final currentUserId = authUserObj?.resolvedUuid ?? authUserObj?.id ?? '';
     final isDark = AppColors.isDark(context);
 
     // Auto-scroll when new messages arrive
@@ -387,40 +395,58 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
           ),
 
           // Scroll Anchor Button & New Messages Banner
-          if (_showScrollToBottom || _showNewMessageBanner)
-            Positioned(
-              bottom: 80,
-              right: 16,
-              child: FloatingActionButton.small(
-                onPressed: () {
-                  _scrollToBottom();
-                  setState(() {
-                    _showNewMessageBanner = false;
-                  });
-                },
-                backgroundColor: AppColors.primary,
-                foregroundColor: Colors.white,
-                child: Stack(
-                  alignment: Alignment.center,
-                  children: [
-                    const Icon(LucideIcons.arrowDown, size: 18),
-                    if (_showNewMessageBanner)
-                      Positioned(
-                        right: 0,
-                        top: 0,
-                        child: Container(
-                          width: 8,
-                          height: 8,
-                          decoration: const BoxDecoration(
-                            color: Colors.red,
-                            shape: BoxShape.circle,
+          Positioned(
+            bottom: 80,
+            right: 16,
+            child: IgnorePointer(
+              ignoring: !(_showScrollToBottom || _showNewMessageBanner),
+              child: AnimatedScale(
+                scale: (_showScrollToBottom || _showNewMessageBanner)
+                    ? 1.0
+                    : 0.0,
+                duration: const Duration(milliseconds: 250),
+                curve: Curves.easeOutBack, // Fluid pop-in
+                child: AnimatedOpacity(
+                  opacity: (_showScrollToBottom || _showNewMessageBanner)
+                      ? 1.0
+                      : 0.0,
+                  duration: const Duration(milliseconds: 200),
+                  child: Stack(
+                    clipBehavior: Clip.none,
+                    children: [
+                      _ActionPod(
+                        icon: LucideIcons.arrowDown,
+                        onPressed: () {
+                          _scrollToBottom();
+                          setState(() {
+                            _showNewMessageBanner = false;
+                          });
+                        },
+                        backgroundColor: AppColors.cardColor(
+                          context,
+                        ).withValues(alpha: 0.5),
+                        iconColor: AppColors.text(context, isMuted: true),
+                        iconSize: 20,
+                      ),
+                      if (_showNewMessageBanner)
+                        Positioned(
+                          right: -2,
+                          top: -2,
+                          child: Container(
+                            width: 8,
+                            height: 8,
+                            decoration: const BoxDecoration(
+                              color: Colors.red,
+                              shape: BoxShape.circle,
+                            ),
                           ),
                         ),
-                      ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
             ),
+          ),
 
           if (_showNewMessageBanner)
             Positioned(
@@ -523,11 +549,34 @@ class _ChatAppBar extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final runtimeState = ref.watch(conversationRuntimeProvider(chatId));
+    final msgState = ref.watch(messageStoreProvider(chatId));
     final isOnline =
         runtimeState?.isPartnerOnline ?? conversation?.isPartnerOnline ?? false;
     final lastSeen =
         runtimeState?.partnerLastSeen ?? conversation?.partnerLastSeen;
-    final lastActivity = runtimeState?.partnerLastActivityAt;
+
+    // Fallback: derive activity from partner's most recent message when
+    // Redis/socket presence has no timestamp (common on first chat open).
+    DateTime? partnerMessageAt;
+    final partnerId = conversation?.partnerUserId;
+    if (partnerId != null) {
+      final inboxLast = conversation?.lastMessage;
+      if (inboxLast?.senderId == partnerId) {
+        partnerMessageAt = inboxLast!.createdAt;
+      }
+      for (final m in msgState.hotMessages) {
+        if (m.senderId == partnerId && m.mediaType != 'init') {
+          if (partnerMessageAt == null ||
+              m.createdAt.isAfter(partnerMessageAt)) {
+            partnerMessageAt = m.createdAt;
+          }
+        }
+      }
+    }
+
+    final lastActivity = runtimeState?.partnerLastActivityAt ??
+        partnerMessageAt ??
+        conversation?.lastMessageAt;
 
     final pState = PresenceFormatter.classify(
       isOnline: isOnline,
@@ -716,8 +765,16 @@ class _MessageList extends StatelessWidget {
         messages.where((m) => m.mediaType != 'init').toList()
           ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
 
+    final mediaMessages = displayMessages
+        .where((m) => m.localFilePath != null || m.mediaUrl != null)
+        .toList()
+        .reversed
+        .toList();
+
     return ListView.builder(
-      key: PageStorageKey('chat_list_${displayMessages.isNotEmpty ? displayMessages.first.chatId : "default"}'),
+      key: PageStorageKey(
+        'chat_list_${displayMessages.isNotEmpty ? displayMessages.first.chatId : "default"}',
+      ),
       controller: scrollController,
       reverse: true, // index 0 is bottom (newest).
       keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
@@ -760,6 +817,7 @@ class _MessageList extends StatelessWidget {
                 isDark: isDark,
                 isGroup: isGroup,
                 isConsecutive: isConsecutive,
+                mediaMessages: mediaMessages,
               ),
             ),
           ],
@@ -814,6 +872,7 @@ class _MessageBubble extends ConsumerWidget {
     required this.isDark,
     required this.isGroup,
     required this.isConsecutive,
+    required this.mediaMessages,
   });
 
   final MessageEntity message;
@@ -821,6 +880,7 @@ class _MessageBubble extends ConsumerWidget {
   final bool isDark;
   final bool isGroup;
   final bool isConsecutive;
+  final List<MessageEntity> mediaMessages;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -886,8 +946,28 @@ class _MessageBubble extends ConsumerWidget {
           onTap: () {
             Navigator.push(
               context,
-              MaterialPageRoute<void>(
-                builder: (_) => _FullscreenMediaViewer(message: message),
+              PageRouteBuilder<void>(
+                opaque: false,
+                barrierColor: Colors.black.withValues(alpha: 0.7),
+                pageBuilder: (context, _, __) => _FullscreenMediaViewer(
+                  initialMessage: message,
+                  mediaMessages: mediaMessages,
+                ),
+                transitionsBuilder:
+                    (context, animation, secondaryAnimation, child) {
+                      return FadeTransition(
+                        opacity: animation,
+                        child: ScaleTransition(
+                          scale: Tween<double>(begin: 0.9, end: 1.0).animate(
+                            CurvedAnimation(
+                              parent: animation,
+                              curve: Curves.easeOutBack,
+                            ),
+                          ),
+                          child: child,
+                        ),
+                      );
+                    },
               ),
             );
           },
@@ -961,37 +1041,56 @@ class _MessageBubble extends ConsumerWidget {
                     ),
 
                   // 🕒 Timestamp & Status Overlay
-                  Container(
-                    margin: const EdgeInsets.all(8),
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 4,
-                    ),
-                    decoration: BoxDecoration(
-                      color: Colors.black.withValues(alpha: 0.5),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(
-                          timeString,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 10,
-                            fontWeight: FontWeight.w500,
+                  GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap:
+                        (message.deliveryStatus ==
+                                MessageDeliveryStatus.failed &&
+                            isMe)
+                        ? () {
+                            print(
+                              'DEBUG: Overlay Tap to retry clicked for message: ${message.id}',
+                            );
+                            final clientMessageId =
+                                message.clientMessageId ??
+                                message.id.replaceFirst('pending_', '');
+                            ref
+                                .read(chatMediaServiceProvider)
+                                .resumeUpload(
+                                  message.chatId,
+                                  clientMessageId,
+                                  message.localFilePath!,
+                                  message.mediaType ?? 'image',
+                                );
+                          }
+                        : null,
+                    child: Container(
+                      margin: const EdgeInsets.all(8),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 4,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.black.withValues(alpha: 0.5),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            timeString,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 10,
+                              fontWeight: FontWeight.w500,
+                            ),
                           ),
-                        ),
-                        if (isMe) ...[
-                          const SizedBox(width: 4),
-                          _DeliveryIcon(
-                            status: message.deliveryStatus,
-                            isMe: true,
-                            chatId: message.chatId,
-                            clientMessageId: message.clientMessageId,
-                          ),
+                          if (isMe) ...[
+                            const SizedBox(width: 4),
+                            _DeliveryIcon(message: message, isMe: true),
+                          ],
                         ],
-                      ],
+                      ),
                     ),
                   ),
                 ],
@@ -1059,12 +1158,7 @@ class _MessageBubble extends ConsumerWidget {
                     ),
                     if (isMe) ...[
                       const SizedBox(width: 4),
-                      _DeliveryIcon(
-                        status: message.deliveryStatus,
-                        isMe: isMe,
-                        chatId: message.chatId,
-                        clientMessageId: message.clientMessageId,
-                      ),
+                      _DeliveryIcon(message: message, isMe: isMe),
                     ],
                   ],
                 ),
@@ -1123,20 +1217,17 @@ class _MessageBubble extends ConsumerWidget {
 // ── Delivery Status Icon ────────────────────────────────────────────────────
 
 class _DeliveryIcon extends ConsumerWidget {
-  const _DeliveryIcon({
-    required this.status,
-    required this.isMe,
-    required this.chatId,
-    required this.clientMessageId,
-  });
+  const _DeliveryIcon({required this.message, required this.isMe});
 
-  final MessageDeliveryStatus status;
+  final MessageEntity message;
   final bool isMe;
-  final String chatId;
-  final String? clientMessageId;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final status = message.deliveryStatus;
+    final clientMessageId =
+        message.clientMessageId ?? message.id.replaceFirst('pending_', '');
+
     final (icon, color) = switch (status) {
       MessageDeliveryStatus.pending => (
         LucideIcons.clock,
@@ -1152,7 +1243,7 @@ class _DeliveryIcon extends ConsumerWidget {
       ),
       MessageDeliveryStatus.seen => (
         LucideIcons.checkCheck,
-        const Color(0xFF00B2FF),
+        Colors.white,
       ),
       MessageDeliveryStatus.failed => (
         LucideIcons.circleAlert,
@@ -1160,14 +1251,30 @@ class _DeliveryIcon extends ConsumerWidget {
       ),
     };
 
-    if (status == MessageDeliveryStatus.failed &&
-        isMe &&
-        clientMessageId != null) {
+    if (status == MessageDeliveryStatus.failed && isMe) {
       return GestureDetector(
         onTap: () {
-          ref
-              .read(chatMutationServiceProvider)
-              .retryMessage(chatId, clientMessageId!);
+          print(
+            'DEBUG: Tap to retry clicked for message: ${message.id}, localFilePath: ${message.localFilePath}',
+          );
+          try {
+            if (message.localFilePath != null && message.mediaUrl == null) {
+              ref
+                  .read(chatMediaServiceProvider)
+                  .resumeUpload(
+                    message.chatId,
+                    clientMessageId,
+                    message.localFilePath!,
+                    message.mediaType ?? 'image',
+                  );
+            } else {
+              ref
+                  .read(chatMutationServiceProvider)
+                  .retryMessage(message.chatId, clientMessageId);
+            }
+          } catch (e, s) {
+            print('DEBUG: Error in Tap to retry onTap: $e\n$s');
+          }
         },
         child: MouseRegion(
           cursor: SystemMouseCursors.click,
@@ -1712,7 +1819,26 @@ class _EncryptedImageState extends State<_EncryptedImage> {
 
   Future<void> _loadAndDecrypt() async {
     try {
-      // 1. Download encrypted bytes
+      // 1. Check local storage cache first
+      final filename = widget.url.replaceAll(RegExp(r'[^a-zA-Z0-9]'), '_');
+      final tempDir = await getTemporaryDirectory();
+      final localPath = '${tempDir.path}/$filename';
+      final file = File(localPath);
+
+      if (await file.exists()) {
+        final cachedBytes = await file.readAsBytes();
+        if (mounted) {
+          setState(() {
+            _imageBytes = cachedBytes;
+          });
+        }
+        AppLogger.i(
+          '📦 [_EncryptedImage] Loaded media from local cache: $localPath',
+        );
+        return;
+      }
+
+      // 2. Download encrypted bytes if not cached
       final response = await Dio().get<List<int>>(
         widget.url,
         options: Options(responseType: ResponseType.bytes),
@@ -1722,23 +1848,8 @@ class _EncryptedImageState extends State<_EncryptedImage> {
 
       final dataLength = response.data!.length;
       AppLogger.i('🛡️ [_EncryptedImage] Downloaded $dataLength bytes');
-      if (dataLength > 0) {
-        final sampleSize = dataLength > 100 ? 100 : dataLength;
-        final sampleBytes = response.data!.sublist(0, sampleSize);
-        AppLogger.i('🛡️ [_EncryptedImage] Sample bytes: $sampleBytes');
-        try {
-          final sampleString = utf8.decode(sampleBytes);
-          AppLogger.i(
-            '🛡️ [_EncryptedImage] Sample string (UTF-8): "$sampleString"',
-          );
-        } catch (_) {
-          AppLogger.i(
-            '🛡️ [_EncryptedImage] Sample bytes are not a valid UTF-8 string',
-          );
-        }
-      }
 
-      // 2. Decrypt or bypass
+      // 3. Decrypt or bypass
       final rawBytes = Uint8List.fromList(response.data!);
 
       bool isUnencrypted = false;
@@ -1798,6 +1909,16 @@ class _EncryptedImageState extends State<_EncryptedImage> {
         }
       }
 
+      // 4. Save decrypted bytes to local cache directory for future hits
+      try {
+        await file.writeAsBytes(decrypted);
+        AppLogger.d(
+          '🔒 [_EncryptedImage] Saved decrypted media to local cache: $localPath',
+        );
+      } catch (e) {
+        AppLogger.e('Failed to write media to local cache storage', error: e);
+      }
+
       if (mounted) {
         setState(() {
           _imageBytes = decrypted;
@@ -1852,40 +1973,159 @@ class _EncryptedImageState extends State<_EncryptedImage> {
 
 // ── Fullscreen Media Viewer ──────────────────────────────────────────────────
 
-class _FullscreenMediaViewer extends StatelessWidget {
-  const _FullscreenMediaViewer({required this.message});
+class _FullscreenMediaViewer extends StatefulWidget {
+  const _FullscreenMediaViewer({
+    required this.initialMessage,
+    required this.mediaMessages,
+  });
 
-  final MessageEntity message;
+  final MessageEntity initialMessage;
+  final List<MessageEntity> mediaMessages;
+
+  @override
+  State<_FullscreenMediaViewer> createState() => _FullscreenMediaViewerState();
+}
+
+class _FullscreenMediaViewerState extends State<_FullscreenMediaViewer> {
+  late final PageController _pageController;
+  late int _currentIndex;
+
+  @override
+  void initState() {
+    super.initState();
+    final index = widget.mediaMessages.indexOf(widget.initialMessage);
+    _currentIndex = index != -1 ? index : 0;
+    _pageController = PageController(initialPage: _currentIndex);
+  }
+
+  @override
+  void dispose() {
+    _pageController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
+    final bottomPad = MediaQuery.of(context).padding.bottom;
+    final topPad = MediaQuery.of(context).padding.top;
+
     return Scaffold(
-      backgroundColor: Colors.black,
-      extendBodyBehindAppBar: true,
-      appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        leading: IconButton(
-          icon: const Icon(LucideIcons.x, color: Colors.white),
-          onPressed: () => Navigator.pop(context),
-        ),
-      ),
-      body: Center(
-        child: InteractiveViewer(
-          minScale: 0.5,
-          maxScale: 4.0,
-          child: message.localFilePath != null
-              ? Image.file(File(message.localFilePath!), fit: BoxFit.contain)
-              : _EncryptedImage(
-                  url: message.mediaUrl!,
-                  iv: message.encryptionIv ?? '',
-                  salt: message.encryptionSalt ?? '',
-                  chatId: message.chatId,
-                  placeholder: const Center(
-                    child: CircularProgressIndicator(color: Colors.white),
+      backgroundColor: Colors.transparent, // Controlled by route barrierColor
+      body: Stack(
+        children: [
+          // Swipeable PageView of floating media cards
+          PageView.builder(
+            controller: _pageController,
+            itemCount: widget.mediaMessages.length,
+            onPageChanged: (index) {
+              setState(() {
+                _currentIndex = index;
+              });
+            },
+            itemBuilder: (context, index) {
+              final message = widget.mediaMessages[index];
+              return Center(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 48.0,
+                    vertical: 24.0,
+                  ),
+                  child: ConstrainedBox(
+                    constraints: BoxConstraints(
+                      maxHeight: MediaQuery.of(context).size.height * 0.65,
+                    ),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(24),
+                      child: Container(
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(24),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withValues(alpha: 0.4),
+                              blurRadius: 25,
+                              spreadRadius: 2,
+                            ),
+                          ],
+                        ),
+                        child: InteractiveViewer(
+                          minScale: 0.5,
+                          maxScale: 4.0,
+                          child: message.localFilePath != null
+                              ? Image.file(
+                                  File(message.localFilePath!),
+                                  fit: BoxFit.contain,
+                                )
+                              : _EncryptedImage(
+                                  url: message.mediaUrl!,
+                                  iv: message.encryptionIv ?? '',
+                                  salt: message.encryptionSalt ?? '',
+                                  chatId: message.chatId,
+                                  placeholder: Container(
+                                    height: 300,
+                                    color: AppColors.surface(context, level: 2),
+                                    child: const Center(
+                                      child: CircularProgressIndicator(
+                                        color: Colors.white,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                        ),
+                      ),
+                    ),
                   ),
                 ),
-        ),
+              );
+            },
+          ),
+
+          // Top Center Gallery Indicator / Counter Pill
+          if (widget.mediaMessages.length > 1)
+            Positioned(
+              top: topPad + 24,
+              left: 0,
+              right: 0,
+              child: Center(
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(20),
+                  child: BackdropFilter(
+                    filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 14,
+                        vertical: 6,
+                      ),
+                      color: Colors.black.withValues(alpha: 0.5),
+                      child: Text(
+                        '${_currentIndex + 1} of ${widget.mediaMessages.length}',
+                        style: AppTextStyles.bodySmall.copyWith(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w600,
+                          letterSpacing: 0.5,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+
+          // Close button positioned bottom center (on top of media)
+          Positioned(
+            bottom: bottomPad + 32,
+            left: 0,
+            right: 0,
+            child: Center(
+              child: _ActionPod(
+                icon: LucideIcons.x,
+                onPressed: () => Navigator.pop(context),
+                backgroundColor: Colors.black.withValues(alpha: 0.5),
+                iconColor: Colors.white,
+                iconSize: 20,
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

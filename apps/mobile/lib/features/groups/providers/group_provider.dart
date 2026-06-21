@@ -46,7 +46,7 @@ class MyGroupsNotifier extends StateNotifier<GroupState> {
 
     // 2. Fetch Fresh Data
     try {
-      final freshGroups = await service.getMyGroups();
+      final freshGroups = await service.getMyGroups(ignoreCache: true);
       _ref.read(groupStoreProvider.notifier).updateFromList(freshGroups);
       state = state.copyWith(
         groups: freshGroups,

@@ -169,7 +169,14 @@ class MessageEntity {
     );
   }
 
-  factory MessageEntity.fromSocket(Map<String, dynamic> data, String chatId) {
+  factory MessageEntity.fromSocket(
+    Map<String, dynamic> data,
+    String chatId, {
+    String? currentUserId,
+  }) {
+    final senderId =
+        data['senderId'] as String? ?? data['sender_id'] as String? ?? '';
+
     return MessageEntity(
       id:
           data['id'] as String? ??
@@ -177,8 +184,7 @@ class MessageEntity {
           data['tempId'] as String? ??
           '',
       chatId: chatId,
-      senderId:
-          data['senderId'] as String? ?? data['sender_id'] as String? ?? '',
+      senderId: senderId,
       senderClerkId: data['senderClerkId'] as String?,
       receiverClerkId: data['receiverClerkId'] as String?,
       clientMessageId:
@@ -215,7 +221,51 @@ class MessageEntity {
       blurHash: data['blurHash'] as String? ?? data['blur_hash'] as String?,
       thumbnailUrl:
           data['thumbnailUrl'] as String? ?? data['thumbnail_url'] as String?,
-      deliveryStatus: MessageDeliveryStatus.delivered,
+      deliveryStatus: _deliveryStatusFromPayload(data, senderId, currentUserId),
     );
   }
+
+  static MessageDeliveryStatus _deliveryStatusFromPayload(
+    Map<String, dynamic> data,
+    String senderId,
+    String? currentUserId,
+  ) {
+    final cachedStatus = data['deliveryStatus'] as String?;
+    if (cachedStatus == 'seen') {
+      return MessageDeliveryStatus.seen;
+    }
+
+    if (currentUserId != null && senderId == currentUserId) {
+      final readAt = data['readAt'] ?? data['read_at'];
+      if (readAt != null && readAt.toString().isNotEmpty) {
+        return MessageDeliveryStatus.seen;
+      }
+    }
+    return MessageDeliveryStatus.delivered;
+  }
+
+  Map<String, dynamic> toSocket() {
+    return {
+      'id': id,
+      'chatId': chatId,
+      'senderId': senderId,
+      'senderClerkId': senderClerkId,
+      'receiverClerkId': receiverClerkId,
+      'tempId': clientMessageId,
+      'createdAt': createdAt.toIso8601String(),
+      'text': text,
+      'encryptedContent': encryptedContent,
+      'encryptionIv': encryptionIv,
+      'encryptionSalt': encryptionSalt,
+      'isEncrypted': isEncrypted,
+      'conversationSequence': conversationSequence,
+      'serverSequence': serverSequence,
+      'mediaUrl': mediaUrl,
+      'mediaType': mediaType,
+      'blurHash': blurHash,
+      'thumbnailUrl': thumbnailUrl,
+      'deliveryStatus': deliveryStatus.name,
+    };
+  }
 }
+
