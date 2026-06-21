@@ -164,17 +164,17 @@ class SocketService extends Notifier<SocketState> {
 
     _socket!.onConnect((_) {
       AppLogger.i('✅ [Socket] Connected: ${_socket!.id}');
-      state = SocketState.connected;
+      Future.microtask(() => state = SocketState.connected);
     });
 
     _socket!.onDisconnect((reason) {
       AppLogger.w('🔌 [Socket] Disconnected: $reason');
-      state = SocketState.disconnected;
+      Future.microtask(() => state = SocketState.disconnected);
     });
 
     _socket!.onConnectError((err) async {
       AppLogger.e('⚠️ [Socket] Connection error', error: err);
-      state = SocketState.error;
+      Future.microtask(() => state = SocketState.error);
 
       // Handle invalid token / authentication error from socket server.
       // IMPORTANT: We do NOT propagate auth failures up to logout() from here.
@@ -189,8 +189,7 @@ class SocketService extends Notifier<SocketState> {
         try {
           // Attempt a single silent refresh. authRepositoryProvider will NOT
           // logout for SOCKET-CONN-REFRESH requests — it enters degraded mode
-          // instead. If the refresh succeeds we reconnect; if not we simply
-          // wait for the socket's built-in reconnect loop (up to 10 attempts).
+          // instead.
           await ref
               .read(authRepositoryProvider)
               .refreshToken(requestId: 'SOCKET-CONN-REFRESH');
@@ -200,23 +199,27 @@ class SocketService extends Notifier<SocketState> {
           await reconnectWithToken();
         } catch (e) {
           AppLogger.w(
-            '🔑 [Socket] Silent refresh skipped or failed — socket reconnect loop will retry.',
+            '🔑 [Socket] Silent refresh failed: $e. Retrying connection in 5 seconds...',
           );
-          // Deliberately do NOT rethrow or call logout().
-          // The socket's built-in reconnection (10 attempts, 2 s delay) will
-          // keep retrying and pick up the new token when it's available.
+          // If token refresh fails (e.g. offline transition), retry a full reconnect cycle
+          // after a short delay to fetch a fresh token instead of using the socket's stale token auth options.
+          Future.delayed(const Duration(seconds: 5), () {
+            if (state == SocketState.error || state == SocketState.disconnected) {
+              reconnectWithToken();
+            }
+          });
         }
       }
     });
 
     _socket!.onError((err) {
       AppLogger.e('⚠️ [Socket] Error', error: err);
-      state = SocketState.error;
+      Future.microtask(() => state = SocketState.error);
     });
 
     _socket!.on('reconnect_attempt', (attempt) {
       AppLogger.d('🔄 Socket reconnection attempt #$attempt');
-      state = SocketState.recovering;
+      Future.microtask(() => state = SocketState.recovering);
     });
 
     // --- Core Messaging Events ---

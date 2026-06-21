@@ -128,11 +128,13 @@ class AuthNotifier extends Notifier<AuthState> {
     if (state.isDegraded != session.isDegraded ||
         state.isRefreshing != session.isRefreshing ||
         state.isAuthenticated != session.isAuthenticated) {
-      state = state.copyWith(
-        isDegraded: session.isDegraded,
-        isRefreshing: session.isRefreshing,
-        isAuthenticated: session.isAuthenticated,
-      );
+      Future.microtask(() {
+        state = state.copyWith(
+          isDegraded: session.isDegraded,
+          isRefreshing: session.isRefreshing,
+          isAuthenticated: session.isAuthenticated,
+        );
+      });
     }
   }
 }
