@@ -50,6 +50,7 @@ class _ExploreScreenState extends ConsumerState<ExploreScreen>
     });
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
       final state = ref.read(exploreProvider);
       _tabController.index = state.searchData.travelMode == TravelMode.solo
           ? 0

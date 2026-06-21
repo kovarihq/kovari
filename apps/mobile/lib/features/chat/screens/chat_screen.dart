@@ -64,6 +64,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       if (!mounted) return;
 
       Future.microtask(() {
+        if (!mounted) return;
         ref.read(activeConversationProvider.notifier).set(_chatId);
       });
       ref.read(realtimeCoordinatorProvider.notifier).joinChat(_chatId);

@@ -31,6 +31,7 @@ class _ChatInboxScreenState extends ConsumerState<ChatInboxScreen> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
       ref.read(conversationStoreProvider.notifier).fetchInbox();
     });
   }
