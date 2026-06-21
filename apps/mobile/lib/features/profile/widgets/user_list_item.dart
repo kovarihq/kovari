@@ -6,7 +6,6 @@ import 'package:mobile/features/profile/models/user_connection.dart';
 import 'package:mobile/shared/widgets/kovari_avatar.dart';
 
 class UserListItem extends StatelessWidget {
-
   const UserListItem({
     super.key,
     required this.user,
@@ -126,56 +125,55 @@ class UserListItem extends StatelessWidget {
     VoidCallback? onPressed,
     bool isPrimary = false,
   }) => SizedBox(
-      height: 32,
-      child: TextButton(
-        onPressed: isLoading ? null : onPressed,
-        style: TextButton.styleFrom(
-          backgroundColor: isPrimary
-              ? AppColors.primary
-              : AppColors.mutedColor(context),
-          padding: const EdgeInsets.symmetric(horizontal: 16),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
-          ),
-        ),
-        child: isLoading
-            ? const SizedBox(
-                width: 14,
-                height: 14,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2,
-                  valueColor: AlwaysStoppedAnimation<Color>(
-                    AppColors.primaryForeground,
-                  ),
-                ),
-              )
-            : Text(
-                label,
-                style: AppTextStyles.button.copyWith(
-                  color: isPrimary
-                      ? AppColors.primaryForeground
-                      : AppColors.text(context),
-                  fontSize: 12,
-                  fontWeight: FontWeight.w500,
+    height: 32,
+    child: TextButton(
+      onPressed: isLoading ? null : onPressed,
+      style: TextButton.styleFrom(
+        backgroundColor: isPrimary
+            ? AppColors.primary
+            : AppColors.secondaryColor(context),
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      ),
+      child: isLoading
+          ? const SizedBox(
+              width: 14,
+              height: 14,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                valueColor: AlwaysStoppedAnimation<Color>(
+                  AppColors.primaryForeground,
                 ),
               ),
-      ),
-    );
+            )
+          : Text(
+              label,
+              style: AppTextStyles.button.copyWith(
+                color: isPrimary
+                    ? AppColors.primaryForeground
+                    : AppColors.text(context),
+                fontSize: 12,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+    ),
+  );
 
-  Widget _buildRemoveButton(BuildContext context, VoidCallback onPressed) => SizedBox(
-      width: 32,
-      height: 32,
-      child: IconButton(
-        onPressed: isLoading ? null : onPressed,
-        icon: const Icon(LucideIcons.x, size: 16),
-        style: IconButton.styleFrom(
-          backgroundColor: AppColors.mutedColor(context),
-          foregroundColor: AppColors.text(context, isMuted: true),
-          padding: EdgeInsets.zero,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
+  Widget _buildRemoveButton(BuildContext context, VoidCallback onPressed) =>
+      SizedBox(
+        width: 32,
+        height: 32,
+        child: IconButton(
+          onPressed: isLoading ? null : onPressed,
+          icon: const Icon(LucideIcons.x, size: 16),
+          style: IconButton.styleFrom(
+            backgroundColor: AppColors.secondaryColor(context),
+            foregroundColor: AppColors.text(context, isMuted: true),
+            padding: EdgeInsets.zero,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
           ),
         ),
-      ),
-    );
+      );
 }

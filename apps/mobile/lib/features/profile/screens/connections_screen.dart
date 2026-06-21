@@ -17,7 +17,8 @@ import 'package:mobile/features/profile/widgets/user_list_item.dart';
 import 'package:mobile/shared/widgets/kovari_confirm_dialog.dart';
 import 'package:mobile/shared/widgets/kovari_snackbar.dart';
 
-class ConnectionsScreen extends ConsumerStatefulWidget { // 'followers' or 'following'
+class ConnectionsScreen extends ConsumerStatefulWidget {
+  // 'followers' or 'following'
 
   const ConnectionsScreen({
     super.key,
@@ -320,291 +321,284 @@ class _ConnectionsScreenState extends ConsumerState<ConnectionsScreen>
 
   @override
   Widget build(BuildContext context) => Scaffold(
-      body: NestedScrollView(
-        headerSliverBuilder: (context, innerBoxIsScrolled) => [
-            // Premium App Bar & Tabs
-            SliverOverlapAbsorber(
-              handle: NestedScrollView.sliverOverlapAbsorberHandleFor(context),
-              sliver: SliverAppBar(
-                pinned: true,
-                elevation: 0,
-                backgroundColor: AppColors.surface(context),
-                leading: IconButton(
-                  icon: Icon(
-                    LucideIcons.arrowLeft,
-                    color: AppColors.text(context),
-                    size: 20,
-                  ),
-                  onPressed: () => context.pop(),
-                ),
-                centerTitle: false,
-                titleSpacing: 0, // Tighten gap between back icon and title
-                title: _isLoading && widget.username.isEmpty
-                    ? const KovariSkeletonCard(width: 80, height: 14)
-                    : Text(
-                        widget.username,
-                        style: AppTextStyles.h3.copyWith(
-                          color: AppColors.text(context),
-                          fontSize: 14, // Maintaining exact size as requested
-                        ),
-                      ),
-                bottom: PreferredSize(
-                  preferredSize: const Size.fromHeight(48),
-                  child: DecoratedBox(
-                    decoration: BoxDecoration(
-                      color: AppColors.surface(context),
-                    ),
-                    child: TabBar(
-                      controller: _tabController,
-                      overlayColor: WidgetStateProperty.all(Colors.transparent),
-                      indicatorColor: AppColors.primary,
-                      indicatorSize: TabBarIndicatorSize.tab,
-                      dividerColor: AppColors.borderColor(context),
-                      dividerHeight: 1,
-                      onTap: (index) {
-                        HapticService.selection();
-                        // Clear search when switching tabs
-                        if (_searchQuery.isNotEmpty) {
-                          _searchController.clear();
-                          setState(() => _searchQuery = '');
-                        }
-                      },
-                      labelColor: AppColors.primary,
-                      unselectedLabelColor: AppColors.text(context),
-                      labelStyle: AppTextStyles.button.copyWith(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
-                      ),
-                      unselectedLabelStyle: AppTextStyles.button.copyWith(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w500,
-                      ),
-                      tabs: [
-                        Tab(
-                          child: Text(
-                            '${_followers.length} followers',
-                            style: AppTextStyles.button.copyWith(
-                              fontSize: 13,
-                              fontWeight: _tabController.index == 0
-                                  ? FontWeight.w600
-                                  : FontWeight.w500,
-                              color: _tabController.index == 0
-                                  ? AppColors.primary
-                                  : AppColors.text(context),
-                            ),
-                          ),
-                        ),
-                        Tab(
-                          child: Text(
-                            '${_following.length} following',
-                            style: AppTextStyles.button.copyWith(
-                              fontSize: 13,
-                              fontWeight: _tabController.index == 1
-                                  ? FontWeight.w600
-                                  : FontWeight.w500,
-                              color: _tabController.index == 1
-                                  ? AppColors.primary
-                                  : AppColors.text(context),
-                            ),
-                          ),
-                        ),
-                      ],
+    body: NestedScrollView(
+      headerSliverBuilder: (context, innerBoxIsScrolled) => [
+        // Premium App Bar & Tabs
+        SliverOverlapAbsorber(
+          handle: NestedScrollView.sliverOverlapAbsorberHandleFor(context),
+          sliver: SliverAppBar(
+            pinned: true,
+            elevation: 0,
+            backgroundColor: AppColors.surface(context),
+            leading: IconButton(
+              icon: Icon(
+                LucideIcons.arrowLeft,
+                color: AppColors.text(context),
+                size: 20,
+              ),
+              onPressed: () => context.pop(),
+            ),
+            centerTitle: false,
+            titleSpacing: 0, // Tighten gap between back icon and title
+            title: _isLoading && widget.username.isEmpty
+                ? const KovariSkeletonCard(width: 80, height: 14)
+                : Text(
+                    widget.username,
+                    style: AppTextStyles.h3.copyWith(
+                      color: AppColors.text(context),
+                      fontSize: 14, // Maintaining exact size as requested
                     ),
                   ),
+            bottom: PreferredSize(
+              preferredSize: const Size.fromHeight(48),
+              child: DecoratedBox(
+                decoration: BoxDecoration(color: AppColors.surface(context)),
+                child: TabBar(
+                  controller: _tabController,
+                  overlayColor: WidgetStateProperty.all(Colors.transparent),
+                  indicatorColor: AppColors.primary,
+                  indicatorSize: TabBarIndicatorSize.tab,
+                  dividerColor: AppColors.borderColor(context),
+                  dividerHeight: 1,
+                  onTap: (index) {
+                    HapticService.selection();
+                    // Clear search when switching tabs
+                    if (_searchQuery.isNotEmpty) {
+                      _searchController.clear();
+                      setState(() => _searchQuery = '');
+                    }
+                  },
+                  labelColor: AppColors.primary,
+                  unselectedLabelColor: AppColors.text(context),
+                  labelStyle: AppTextStyles.button.copyWith(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                  ),
+                  unselectedLabelStyle: AppTextStyles.button.copyWith(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500,
+                  ),
+                  tabs: [
+                    Tab(
+                      child: Text(
+                        '${_followers.length} followers',
+                        style: AppTextStyles.button.copyWith(
+                          fontSize: 13,
+                          fontWeight: _tabController.index == 0
+                              ? FontWeight.w600
+                              : FontWeight.w500,
+                          color: _tabController.index == 0
+                              ? AppColors.primary
+                              : AppColors.text(context),
+                        ),
+                      ),
+                    ),
+                    Tab(
+                      child: Text(
+                        '${_following.length} following',
+                        style: AppTextStyles.button.copyWith(
+                          fontSize: 13,
+                          fontWeight: _tabController.index == 1
+                              ? FontWeight.w600
+                              : FontWeight.w500,
+                          color: _tabController.index == 1
+                              ? AppColors.primary
+                              : AppColors.text(context),
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ),
-          ],
-        body: TabBarView(
-          controller: _tabController,
-          children: [
-            _buildUserList(_followers, 'followers'),
-            _buildUserList(_following, 'following'),
-          ],
+          ),
         ),
+      ],
+      body: TabBarView(
+        controller: _tabController,
+        children: [
+          _buildUserList(_followers, 'followers'),
+          _buildUserList(_following, 'following'),
+        ],
       ),
-    );
+    ),
+  );
 
   Widget _buildUserList(List<UserConnection> users, String type) => Builder(
-      builder: (context) => CustomScrollView(
-          key: PageStorageKey<String>(type),
-          controller: type == 'followers'
-              ? _followersScrollController
-              : _followingScrollController,
-          slivers: [
-            SliverOverlapInjector(
-              handle: NestedScrollView.sliverOverlapAbsorberHandleFor(context),
-            ),
-            // Search Bar (Always visible)
-            SliverToBoxAdapter(
-              child: ClipRRect(
-                child: BackdropFilter(
-                  filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
-                  child: Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: Colors.transparent,
-                      border: Border(
-                        bottom: BorderSide(
-                          color: AppColors.borderColor(context),
-                        ),
-                      ),
-                    ),
-                    child: SizedBox(
-                      height: 38,
-                      child: TextField(
-                        controller: _searchController,
-                        enabled: !_isLoading,
-                        style: AppTextStyles.bodyMedium.copyWith(
-                          fontSize: 13,
-                          color: AppColors.text(context),
-                        ),
-                        onChanged: (value) {
-                          setState(() {
-                            _searchQuery = value;
-                          });
-                        },
-                        decoration: InputDecoration(
-                          filled: true,
-                          fillColor: AppColors.mutedColor(context),
-                          hintText: 'Search',
-                          hintStyle: AppTextStyles.bodyMedium.copyWith(
-                            color: AppColors.text(context, isMuted: true),
-                            fontSize: 13,
-                          ),
-                          suffixIcon: _searchQuery.isNotEmpty
-                              ? IconButton(
-                                  icon: const Icon(LucideIcons.x, size: 16),
-                                  onPressed: () {
-                                    _searchController.clear();
-                                    setState(() {
-                                      _searchQuery = '';
-                                    });
-                                  },
-                                )
-                              : Icon(
-                                  LucideIcons.search,
-                                  size: 18,
-                                  color: AppColors.text(context, isMuted: true),
-                                ),
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                            borderSide: BorderSide.none,
-                          ),
-                          enabledBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                            borderSide: BorderSide.none,
-                          ),
-                          focusedBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                            borderSide: BorderSide.none,
-                          ),
-                          contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 12,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-            if (_isLoading)
-              SliverToBoxAdapter(child: _buildSkeletonList())
-            else if (_error != null)
-              SliverFillRemaining(
-                hasScrollBody: false,
-                child: Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      const Icon(
-                        LucideIcons.info,
-                        color: AppColors.destructive,
-                        size: 40,
-                      ),
-                      const SizedBox(height: 12),
-                      Text(
-                        _error!,
-                        textAlign: TextAlign.center,
-                        style: AppTextStyles.bodyMedium,
-                      ),
-                      TextButton(
-                        onPressed: _loadData,
-                        child: const Text('Retry'),
-                      ),
-                    ],
-                  ),
-                ),
-              )
-            else if (_getFilteredList(users).isEmpty)
-              SliverFillRemaining(
-                hasScrollBody: false,
-                child: _buildEmptyState(type),
-              )
-            else ...[
-              SliverList(
-                delegate: SliverChildBuilderDelegate((context, index) {
-                  final filteredUsers = _getFilteredList(users);
-                  final user = filteredUsers[index];
-                  final currentUserId = ref.watch(profileProvider)?.userId;
-                  final isMe = user.id == currentUserId;
-                  final isViewingOwnConnections =
-                      widget.userId == currentUserId;
-
-                  return UserListItem(
-                    user: user,
-                    type: type,
-                    isOwnProfile: isViewingOwnConnections,
-                      onTap: isMe
-                          ? null
-                          : () => PublicProfileRouteData(userId: user.id)
-                              .push<void>(context),
-                    onActionPressed: () {
-                      if (isViewingOwnConnections) {
-                        if (type == 'followers' && !user.isFollowing) {
-                          _handleFollowToggle(user);
-                        } else {
-                          KovariSnackbar.info(context, 'Chat coming soon!');
-                        }
-                      } else {
-                        if (user.isFollowing) {
-                          KovariSnackbar.info(context, 'Chat coming soon!');
-                        } else {
-                          _handleFollowToggle(user);
-                        }
-                      }
-                    },
-                    onRemovePressed: isViewingOwnConnections
-                        ? (type == 'followers'
-                              ? () => _handleRemoveFollower(user)
-                              : () => _handleUnfollow(user))
-                        : null,
-                  );
-                }, childCount: _getFilteredList(users).length),
-              ),
-              if ((type == 'followers' && _isFetchingMoreFollowers) ||
-                  (type == 'following' && _isFetchingMoreFollowing))
-                const SliverToBoxAdapter(
-                  child: Padding(
-                    padding: EdgeInsets.symmetric(vertical: 20),
-                    child: Center(
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: AppColors.primary,
-                      ),
-                    ),
-                  ),
-                ),
-              const SliverToBoxAdapter(child: SizedBox(height: 40)),
-            ],
-          ],
+    builder: (context) => CustomScrollView(
+      key: PageStorageKey<String>(type),
+      controller: type == 'followers'
+          ? _followersScrollController
+          : _followingScrollController,
+      slivers: [
+        SliverOverlapInjector(
+          handle: NestedScrollView.sliverOverlapAbsorberHandleFor(context),
         ),
-    );
+        // Search Bar (Always visible)
+        SliverToBoxAdapter(
+          child: ClipRRect(
+            child: BackdropFilter(
+              filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
+              child: Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.transparent,
+                  border: Border(
+                    bottom: BorderSide(color: AppColors.borderColor(context)),
+                  ),
+                ),
+                child: SizedBox(
+                  height: 38,
+                  child: TextField(
+                    controller: _searchController,
+                    enabled: !_isLoading,
+                    style: AppTextStyles.bodyMedium.copyWith(
+                      fontSize: 13,
+                      color: AppColors.text(context),
+                    ),
+                    onChanged: (value) {
+                      setState(() {
+                        _searchQuery = value;
+                      });
+                    },
+                    decoration: InputDecoration(
+                      filled: true,
+                      fillColor: AppColors.secondaryColor(context),
+                      hintText: 'Search',
+                      hintStyle: AppTextStyles.bodyMedium.copyWith(
+                        color: AppColors.text(context, isMuted: true),
+                        fontSize: 13,
+                      ),
+                      suffixIcon: _searchQuery.isNotEmpty
+                          ? IconButton(
+                              icon: const Icon(LucideIcons.x, size: 16),
+                              onPressed: () {
+                                _searchController.clear();
+                                setState(() {
+                                  _searchQuery = '';
+                                });
+                              },
+                            )
+                          : Icon(
+                              LucideIcons.search,
+                              size: 18,
+                              color: AppColors.text(context, isMuted: true),
+                            ),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: BorderSide.none,
+                      ),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: BorderSide.none,
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: BorderSide.none,
+                      ),
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+        if (_isLoading)
+          SliverToBoxAdapter(child: _buildSkeletonList())
+        else if (_error != null)
+          SliverFillRemaining(
+            hasScrollBody: false,
+            child: Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Icon(
+                    LucideIcons.info,
+                    color: AppColors.destructive,
+                    size: 40,
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    _error!,
+                    textAlign: TextAlign.center,
+                    style: AppTextStyles.bodyMedium,
+                  ),
+                  TextButton(onPressed: _loadData, child: const Text('Retry')),
+                ],
+              ),
+            ),
+          )
+        else if (_getFilteredList(users).isEmpty)
+          SliverFillRemaining(
+            hasScrollBody: false,
+            child: _buildEmptyState(type),
+          )
+        else ...[
+          SliverList(
+            delegate: SliverChildBuilderDelegate((context, index) {
+              final filteredUsers = _getFilteredList(users);
+              final user = filteredUsers[index];
+              final currentUserId = ref.watch(profileProvider)?.userId;
+              final isMe = user.id == currentUserId;
+              final isViewingOwnConnections = widget.userId == currentUserId;
+
+              return UserListItem(
+                user: user,
+                type: type,
+                isOwnProfile: isViewingOwnConnections,
+                onTap: isMe
+                    ? null
+                    : () => PublicProfileRouteData(
+                        userId: user.id,
+                      ).push<void>(context),
+                onActionPressed: () {
+                  if (isViewingOwnConnections) {
+                    if (type == 'followers' && !user.isFollowing) {
+                      _handleFollowToggle(user);
+                    } else {
+                      KovariSnackbar.info(context, 'Chat coming soon!');
+                    }
+                  } else {
+                    if (user.isFollowing) {
+                      KovariSnackbar.info(context, 'Chat coming soon!');
+                    } else {
+                      _handleFollowToggle(user);
+                    }
+                  }
+                },
+                onRemovePressed: isViewingOwnConnections
+                    ? (type == 'followers'
+                          ? () => _handleRemoveFollower(user)
+                          : () => _handleUnfollow(user))
+                    : null,
+              );
+            }, childCount: _getFilteredList(users).length),
+          ),
+          if ((type == 'followers' && _isFetchingMoreFollowers) ||
+              (type == 'following' && _isFetchingMoreFollowing))
+            const SliverToBoxAdapter(
+              child: Padding(
+                padding: EdgeInsets.symmetric(vertical: 20),
+                child: Center(
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: AppColors.primary,
+                  ),
+                ),
+              ),
+            ),
+          const SliverToBoxAdapter(child: SizedBox(height: 40)),
+        ],
+      ],
+    ),
+  );
 
   Widget _buildSkeletonList() => Column(
-      children: List.generate(8, (index) => const KovariSkeletonUserListItem()),
-    );
+    children: List.generate(8, (index) => const KovariSkeletonUserListItem()),
+  );
 
   Widget _buildEmptyState(String type) {
     final title = _searchQuery.isNotEmpty

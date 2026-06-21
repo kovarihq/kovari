@@ -24,7 +24,6 @@ import 'package:mobile/shared/widgets/kovari_confirm_dialog.dart';
 import 'package:mobile/shared/widgets/kovari_image_modal.dart';
 
 class PublicProfileScreen extends ConsumerStatefulWidget {
-
   const PublicProfileScreen({super.key, required this.userId});
   final String userId;
 
@@ -105,8 +104,9 @@ class _PublicProfileScreenState extends ConsumerState<PublicProfileScreen> {
       );
       return;
     }
-    final partnerId =
-        profile.userId.isNotEmpty ? profile.userId : widget.userId;
+    final partnerId = profile.userId.isNotEmpty
+        ? profile.userId
+        : widget.userId;
     if (partnerId.isEmpty || partnerId == myId) {
       return;
     }
@@ -114,22 +114,22 @@ class _PublicProfileScreenState extends ConsumerState<PublicProfileScreen> {
     final chatId = directChatId(myId, partnerId);
     final avatar = UrlUtils.getFullImageUrl(profile.profileImage);
 
-    ref.read(conversationStoreProvider.notifier).upsertConversation(
-      ConversationEntity(
-        chatId: chatId,
-        participantIds: [myId, partnerId],
-        partnerName: profile.name,
-        partnerAvatar: avatar,
-        partnerUserId: partnerId,
-        partnerClerkId: partnerId,
-      ),
-    );
+    ref
+        .read(conversationStoreProvider.notifier)
+        .upsertConversation(
+          ConversationEntity(
+            chatId: chatId,
+            participantIds: [myId, partnerId],
+            partnerName: profile.name,
+            partnerAvatar: avatar,
+            partnerUserId: partnerId,
+            partnerClerkId: partnerId,
+          ),
+        );
 
     unawaited(
       Navigator.of(context, rootNavigator: true).push<void>(
-        MaterialPageRoute<void>(
-          builder: (_) => ChatScreen(chatId: chatId),
-        ),
+        MaterialPageRoute<void>(builder: (_) => ChatScreen(chatId: chatId)),
       ),
     );
   }
@@ -257,148 +257,149 @@ class _PublicProfileScreenState extends ConsumerState<PublicProfileScreen> {
     UserProfile profile,
     bool isMe,
   ) => AppCard(
-      padding: const EdgeInsets.all(AppSpacing.md),
-      borderRadius: BorderRadius.circular(24),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
+    padding: const EdgeInsets.all(AppSpacing.md),
+    borderRadius: BorderRadius.circular(24),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            GestureDetector(
+              onTap: () {
+                if (profile.profileImage.isNotEmpty) {
+                  KovariImageModal.show(
+                    context,
+                    UrlUtils.getFullImageUrl(profile.profileImage)!,
+                  );
+                }
+              },
+              child: KovariAvatar(
+                imageUrl: UrlUtils.getFullImageUrl(profile.profileImage),
+                size: 65,
+                fullName: profile.name,
+              ),
+            ),
+            const SizedBox(width: AppSpacing.md),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    profile.name,
+                    style: AppTextStyles.bodyMedium.copyWith(
+                      color: AppColors.text(context),
+                      fontWeight: FontWeight.w600,
+                      fontSize: 14,
+                    ),
+                  ),
+                  Text(
+                    '@${profile.username}',
+                    style: AppTextStyles.bodySmall.copyWith(
+                      color: AppColors.text(context, isMuted: true),
+                      fontSize: 12,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      _buildStatItem(
+                        profile.followers,
+                        'Followers',
+                        onTap: profile.isOwnProfile
+                            ? () => ConnectionsRouteData(
+                                userId: profile.userId,
+                                username: profile.username,
+                                initialTab: 'followers',
+                              ).push<void>(context)
+                            : null,
+                      ),
+                      const SizedBox(width: 16),
+                      _buildStatItem(
+                        profile.following,
+                        'Following',
+                        onTap: profile.isOwnProfile
+                            ? () => ConnectionsRouteData(
+                                userId: profile.userId,
+                                username: profile.username,
+                                initialTab: 'following',
+                              ).push<void>(context)
+                            : null,
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: AppSpacing.md),
+        Text(
+          profile.bio.isEmpty ? 'No bio added.' : profile.bio,
+          style: AppTextStyles.bodySmall.copyWith(
+            color: AppColors.text(context, isMuted: true),
+            fontSize: 12,
+          ),
+        ),
+        if (!isMe) ...[
+          const SizedBox(height: AppSpacing.md),
           Row(
             children: [
-              GestureDetector(
-                onTap: () {
-                  if (profile.profileImage.isNotEmpty) {
-                    KovariImageModal.show(
-                      context,
-                      UrlUtils.getFullImageUrl(profile.profileImage)!,
-                    );
-                  }
-                },
-                child: KovariAvatar(
-                  imageUrl: UrlUtils.getFullImageUrl(profile.profileImage),
-                  size: 65,
-                  fullName: profile.name,
+              Expanded(
+                child: _buildActionButton(
+                  profile.isFollowing
+                      ? 'Following'
+                      : (profile.isFollowingMe ? 'Follow Back' : 'Follow'),
+                  onPressed: _toggleFollow,
+                  backgroundColor: profile.isFollowing
+                      ? AppColors.secondaryColor(context)
+                      : AppColors.primary,
+                  textColor: profile.isFollowing
+                      ? AppColors.text(context)
+                      : AppColors.primaryForeground,
                 ),
               ),
-              const SizedBox(width: AppSpacing.md),
+              const SizedBox(width: 8),
               Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      profile.name,
-                      style: AppTextStyles.bodyMedium.copyWith(
-                        color: AppColors.text(context),
-                        fontWeight: FontWeight.w600,
-                        fontSize: 14,
-                      ),
-                    ),
-                    Text(
-                      '@${profile.username}',
-                      style: AppTextStyles.bodySmall.copyWith(
-                        color: AppColors.text(context, isMuted: true),
-                        fontSize: 12,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Row(
-                      children: [
-                        _buildStatItem(
-                          profile.followers,
-                          'Followers',
-                          onTap: profile.isOwnProfile
-                              ? () => ConnectionsRouteData(
-                                    userId: profile.userId,
-                                    username: profile.username,
-                                    initialTab: 'followers',
-                                  ).push<void>(context)
-                              : null,
-                        ),
-                        const SizedBox(width: 16),
-                        _buildStatItem(
-                          profile.following,
-                          'Following',
-                          onTap: profile.isOwnProfile
-                              ? () => ConnectionsRouteData(
-                                    userId: profile.userId,
-                                    username: profile.username,
-                                    initialTab: 'following',
-                                  ).push<void>(context)
-                              : null,
-                        ),
-                      ],
-                    ),
-                  ],
+                child: _buildActionButton(
+                  'Message',
+                  onPressed: () => _openDirectMessage(profile),
+                  backgroundColor: AppColors.secondaryColor(context),
+                  textColor: AppColors.text(context),
                 ),
               ),
             ],
           ),
-          const SizedBox(height: AppSpacing.md),
-          Text(
-            profile.bio.isEmpty ? 'No bio added.' : profile.bio,
-            style: AppTextStyles.bodySmall.copyWith(
-              color: AppColors.text(context, isMuted: true),
-              fontSize: 12,
+        ],
+      ],
+    ),
+  );
+
+  Widget _buildStatItem(String count, String label, {VoidCallback? onTap}) =>
+      GestureDetector(
+        onTap: onTap,
+        behavior: HitTestBehavior.opaque,
+        child: Row(
+          children: [
+            Text(
+              count,
+              style: TextStyle(
+                fontWeight: FontWeight.w600,
+                fontSize: 12,
+                color: AppColors.text(context),
+              ),
             ),
-          ),
-          if (!isMe) ...[
-            const SizedBox(height: AppSpacing.md),
-            Row(
-              children: [
-                Expanded(
-                  child: _buildActionButton(
-                    profile.isFollowing
-                        ? 'Following'
-                        : (profile.isFollowingMe ? 'Follow Back' : 'Follow'),
-                    onPressed: _toggleFollow,
-                    backgroundColor: profile.isFollowing
-                        ? AppColors.mutedColor(context)
-                        : AppColors.primary,
-                    textColor: profile.isFollowing
-                        ? AppColors.text(context)
-                        : AppColors.primaryForeground,
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: _buildActionButton(
-                    'Message',
-                    onPressed: () => _openDirectMessage(profile),
-                    backgroundColor: AppColors.mutedColor(context),
-                    textColor: AppColors.text(context),
-                  ),
-                ),
-              ],
+            const SizedBox(width: 4),
+            Text(
+              label,
+              style: TextStyle(
+                color: AppColors.text(context),
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+              ),
             ),
           ],
-        ],
-      ),
-    );
-
-  Widget _buildStatItem(String count, String label, {VoidCallback? onTap}) => GestureDetector(
-      onTap: onTap,
-      behavior: HitTestBehavior.opaque,
-      child: Row(
-        children: [
-          Text(
-            count,
-            style: TextStyle(
-              fontWeight: FontWeight.w600,
-              fontSize: 12,
-              color: AppColors.text(context),
-            ),
-          ),
-          const SizedBox(width: 4),
-          Text(
-            label,
-            style: TextStyle(
-              color: AppColors.text(context),
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-        ],
-      ),
-    );
+        ),
+      );
 
   Widget _buildActionButton(
     String label, {
@@ -406,201 +407,202 @@ class _PublicProfileScreenState extends ConsumerState<PublicProfileScreen> {
     required Color backgroundColor,
     required Color textColor,
   }) => SizedBox(
-      height: 36,
-      child: TextButton(
-        onPressed: onPressed,
-        style: TextButton.styleFrom(
-          backgroundColor: backgroundColor,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
-          ),
-          padding: const EdgeInsets.symmetric(horizontal: 16),
-        ),
-        child: Text(
-          label,
-          style: TextStyle(
-            color: textColor,
-            fontSize: 13,
-            fontWeight: FontWeight.bold,
-          ),
+    height: 36,
+    child: TextButton(
+      onPressed: onPressed,
+      style: TextButton.styleFrom(
+        backgroundColor: backgroundColor,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          color: textColor,
+          fontSize: 13,
+          fontWeight: FontWeight.bold,
         ),
       ),
-    );
+    ),
+  );
 
   Widget _buildContentCard(UserProfile profile) => AppCard(
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(
-        horizontal: AppSpacing.md,
-        vertical: AppSpacing.lg,
-      ),
-      borderRadius: BorderRadius.circular(24),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const SizedBox(
-            width: 50,
-            child: Text(
-              'About',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.bold,
-                color: AppColors.primary,
-              ),
-            ),
-          ),
-          const SizedBox(height: 4),
-          Container(
-            width: 50,
-            height: 2,
-            decoration: BoxDecoration(
+    width: double.infinity,
+    padding: const EdgeInsets.symmetric(
+      horizontal: AppSpacing.md,
+      vertical: AppSpacing.lg,
+    ),
+    borderRadius: BorderRadius.circular(24),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SizedBox(
+          width: 50,
+          child: Text(
+            'About',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.bold,
               color: AppColors.primary,
-              borderRadius: BorderRadius.circular(1),
             ),
           ),
-          const SizedBox(height: AppSpacing.lg),
-          _buildInfoRow(
-            _buildInfoItem(
-              'AGE',
-              profile.age.isEmpty ? 'Not specified' : profile.age,
-            ),
-            _buildInfoItem(
-              'GENDER',
-              profile.gender.isEmpty ? 'Not specified' : profile.gender,
-            ),
+        ),
+        const SizedBox(height: 4),
+        Container(
+          width: 50,
+          height: 2,
+          decoration: BoxDecoration(
+            color: AppColors.primary,
+            borderRadius: BorderRadius.circular(1),
           ),
-          const SizedBox(height: 16),
-          _buildInfoRow(
-            _buildInfoItem(
-              'NATIONALITY',
-              profile.nationality.isEmpty
-                  ? 'Not specified'
-                  : profile.nationality,
-            ),
-            _buildInfoItem(
-              'LOCATION',
-              profile.location.isEmpty ? 'Not specified' : profile.location,
-            ),
+        ),
+        const SizedBox(height: AppSpacing.lg),
+        _buildInfoRow(
+          _buildInfoItem(
+            'AGE',
+            profile.age.isEmpty ? 'Not specified' : profile.age,
           ),
-          const SizedBox(height: 16),
-          _buildInfoRow(
-            _buildInfoItem(
-              'PROFESSION',
-              profile.profession.isEmpty ? 'Not specified' : profile.profession,
-            ),
-            _buildInfoItem(
-              'RELIGION',
-              profile.religion.isEmpty ? 'Not specified' : profile.religion,
-            ),
+          _buildInfoItem(
+            'GENDER',
+            profile.gender.isEmpty ? 'Not specified' : profile.gender,
           ),
+        ),
+        const SizedBox(height: 16),
+        _buildInfoRow(
+          _buildInfoItem(
+            'NATIONALITY',
+            profile.nationality.isEmpty ? 'Not specified' : profile.nationality,
+          ),
+          _buildInfoItem(
+            'LOCATION',
+            profile.location.isEmpty ? 'Not specified' : profile.location,
+          ),
+        ),
+        const SizedBox(height: 16),
+        _buildInfoRow(
+          _buildInfoItem(
+            'PROFESSION',
+            profile.profession.isEmpty ? 'Not specified' : profile.profession,
+          ),
+          _buildInfoItem(
+            'RELIGION',
+            profile.religion.isEmpty ? 'Not specified' : profile.religion,
+          ),
+        ),
+        const SizedBox(height: 20),
+        Divider(height: 1, color: AppColors.borderColor(context)),
+        const SizedBox(height: 20),
+        _buildInfoRow(
+          _buildInfoItem(
+            'PERSONALITY',
+            profile.personality.isEmpty ? 'Not specified' : profile.personality,
+          ),
+          _buildInfoItem(
+            'FOOD PREFERENCE',
+            profile.foodPreference.isEmpty
+                ? 'Not specified'
+                : profile.foodPreference,
+          ),
+        ),
+        const SizedBox(height: 16),
+        _buildInfoRow(
+          _buildInfoItem(
+            'SMOKING',
+            profile.smoking.isEmpty ? 'Not specified' : profile.smoking,
+          ),
+          _buildInfoItem(
+            'DRINKING',
+            profile.drinking.isEmpty ? 'Not specified' : profile.drinking,
+          ),
+        ),
+        if (profile.interests.isNotEmpty || profile.languages.isNotEmpty) ...[
           const SizedBox(height: 20),
           Divider(height: 1, color: AppColors.borderColor(context)),
           const SizedBox(height: 20),
-          _buildInfoRow(
-            _buildInfoItem(
-              'PERSONALITY',
-              profile.personality.isEmpty
-                  ? 'Not specified'
-                  : profile.personality,
-            ),
-            _buildInfoItem(
-              'FOOD PREFERENCE',
-              profile.foodPreference.isEmpty
-                  ? 'Not specified'
-                  : profile.foodPreference,
-            ),
-          ),
-          const SizedBox(height: 16),
-          _buildInfoRow(
-            _buildInfoItem(
-              'SMOKING',
-              profile.smoking.isEmpty ? 'Not specified' : profile.smoking,
-            ),
-            _buildInfoItem(
-              'DRINKING',
-              profile.drinking.isEmpty ? 'Not specified' : profile.drinking,
-            ),
-          ),
-          if (profile.interests.isNotEmpty || profile.languages.isNotEmpty) ...[
-            const SizedBox(height: 20),
-            Divider(height: 1, color: AppColors.borderColor(context)),
-            const SizedBox(height: 20),
-            if (profile.interests.isNotEmpty) ...[
-              _buildChipsSection('INTERESTS', profile.interests),
-              if (profile.languages.isNotEmpty) const SizedBox(height: 20),
-            ],
-            if (profile.languages.isNotEmpty) ...[
-              _buildChipsSection('LANGUAGES', profile.languages),
-            ],
+          if (profile.interests.isNotEmpty) ...[
+            _buildChipsSection('INTERESTS', profile.interests),
+            if (profile.languages.isNotEmpty) const SizedBox(height: 20),
+          ],
+          if (profile.languages.isNotEmpty) ...[
+            _buildChipsSection('LANGUAGES', profile.languages),
           ],
         ],
-      ),
-    );
+      ],
+    ),
+  );
 
   Widget _buildInfoItem(String label, String value) => Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          label,
-          style: TextStyle(
-            fontSize: 10,
-            color: AppColors.text(context, isMuted: true),
-            fontWeight: FontWeight.w600,
-            letterSpacing: 0.5,
-          ),
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Text(
+        label,
+        style: TextStyle(
+          fontSize: 10,
+          color: AppColors.text(context, isMuted: true),
+          fontWeight: FontWeight.w600,
+          letterSpacing: 0.5,
         ),
-        const SizedBox(height: 2),
-        Text(
-          value,
-          style: TextStyle(
-            fontSize: 12,
-            fontWeight: FontWeight.w500,
-            color: AppColors.text(context),
-          ),
+      ),
+      const SizedBox(height: 2),
+      Text(
+        value,
+        style: TextStyle(
+          fontSize: 12,
+          fontWeight: FontWeight.w500,
+          color: AppColors.text(context),
         ),
-      ],
-    );
+      ),
+    ],
+  );
 
   Widget _buildInfoRow(Widget item1, Widget item2) => Row(
-      children: [
-        Expanded(child: item1),
-        const SizedBox(width: 16),
-        Expanded(child: item2),
-      ],
-    );
+    children: [
+      Expanded(child: item1),
+      const SizedBox(width: 16),
+      Expanded(child: item2),
+    ],
+  );
 
   Widget _buildChipsSection(String label, List<String> items) => Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          label,
-          style: TextStyle(
-            fontSize: 10,
-            color: AppColors.text(context, isMuted: true),
-            fontWeight: FontWeight.w600,
-            letterSpacing: 0.5,
-          ),
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Text(
+        label,
+        style: TextStyle(
+          fontSize: 10,
+          color: AppColors.text(context, isMuted: true),
+          fontWeight: FontWeight.w600,
+          letterSpacing: 0.5,
         ),
-        const SizedBox(height: 8),
-        Wrap(
-          spacing: 8,
-          runSpacing: 4,
-          children: items.map((item) => Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-              decoration: BoxDecoration(
-                color: AppColors.mutedColor(context),
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: Text(
-                item,
-                style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w500,
-                  color: AppColors.text(context),
+      ),
+      const SizedBox(height: 8),
+      Wrap(
+        spacing: 8,
+        runSpacing: 4,
+        children: items
+            .map(
+              (item) => Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 4,
+                ),
+                decoration: BoxDecoration(
+                  color: AppColors.secondaryColor(context),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Text(
+                  item,
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w500,
+                    color: AppColors.text(context),
+                  ),
                 ),
               ),
-            )).toList(),
-        ),
-      ],
-    );
+            )
+            .toList(),
+      ),
+    ],
+  );
 }
