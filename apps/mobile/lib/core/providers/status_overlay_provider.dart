@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
+import 'package:mobile/core/theme/app_colors.dart';
 
 enum StatusType {
   success,
@@ -31,13 +32,13 @@ enum StatusType {
   Color? get defaultAccentColor {
     switch (this) {
       case StatusType.success:
-        return const Color(0xFF34C759); // Apple Success Green
+        return AppColors.primary; // Apple Success Green
       case StatusType.error:
-        return const Color(0xFFFF3B30); // Apple Error Red
+        return AppColors.destructive; // Apple Error Red
       case StatusType.info:
-        return const Color(0xFF0A84FF); // Apple Info Blue
+        return AppColors.primary; // Apple Info Blue
       case StatusType.syncing:
-        return const Color(0xFF0A84FF);
+        return AppColors.primary;
       case StatusType.degraded:
         return const Color(0xFFFF9F0A); // Apple Warning Orange
       case StatusType.offline:

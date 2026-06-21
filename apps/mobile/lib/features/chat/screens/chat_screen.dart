@@ -293,28 +293,58 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
             left: 0,
             right: 0,
             bottom: 0,
-            height: 100,
+            height: 90 + MediaQuery.of(context).padding.bottom,
             child: IgnorePointer(
               child: Container(
                 decoration: BoxDecoration(
                   gradient: LinearGradient(
                     begin: Alignment.topCenter,
                     end: Alignment.bottomCenter,
-                    stops: const [0.0, 0.2, 0.5, 0.8, 1.0],
+                    stops: const [0.0, 0.3, 0.6, 0.85, 1.0],
                     colors: [
                       Colors.transparent,
                       AppColors.backgroundColor(
                         context,
-                      ).withValues(alpha: isDark ? 0.1 : 0.05),
+                      ).withValues(alpha: isDark ? 0.08 : 0.05),
                       AppColors.backgroundColor(
                         context,
-                      ).withValues(alpha: isDark ? 0.4 : 0.3),
+                      ).withValues(alpha: isDark ? 0.3 : 0.25),
                       AppColors.backgroundColor(
                         context,
-                      ).withValues(alpha: isDark ? 0.8 : 0.8),
+                      ).withValues(alpha: isDark ? 0.75 : 0.7),
+                      AppColors.backgroundColor(context),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+
+          // Layer 2 (Top): Top Content Mask Gradient to prevent text colliding with header pods
+          Positioned(
+            left: 0,
+            right: 0,
+            top: 0,
+            height: MediaQuery.of(context).padding.top + 75,
+            child: IgnorePointer(
+              child: Container(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.bottomCenter,
+                    end: Alignment.topCenter,
+                    stops: const [0.0, 0.3, 0.6, 0.85, 1.0],
+                    colors: [
+                      Colors.transparent,
                       AppColors.backgroundColor(
                         context,
-                      ).withValues(alpha: isDark ? 0.9 : 1.0),
+                      ).withValues(alpha: isDark ? 0.08 : 0.05),
+                      AppColors.backgroundColor(
+                        context,
+                      ).withValues(alpha: isDark ? 0.3 : 0.25),
+                      AppColors.backgroundColor(
+                        context,
+                      ).withValues(alpha: isDark ? 0.75 : 0.7),
+                      AppColors.backgroundColor(context),
                     ],
                   ),
                 ),
@@ -830,7 +860,7 @@ class _MessageList extends StatelessWidget {
       physics: const BouncingScrollPhysics(
         parent: AlwaysScrollableScrollPhysics(),
       ),
-      padding: EdgeInsets.fromLTRB(16, 80 + topPad, 16, 60 + bottomPad),
+      padding: EdgeInsets.fromLTRB(16, 92 + topPad, 16, 60 + bottomPad),
       itemCount: displayMessages.length,
       itemBuilder: (context, index) {
         final msg = displayMessages[index];
@@ -935,7 +965,7 @@ class _MessageBubble extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final bubbleColor = isMe
         ? AppColors.primary
-        : (isDark ? AppColors.mutedDark : const Color(0xFFF1F5F9));
+        : AppColors.secondaryColor(context);
 
     final textColor = isMe
         ? Colors.white
@@ -993,6 +1023,8 @@ class _MessageBubble extends ConsumerWidget {
         alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
         child: GestureDetector(
           onTap: () {
+            // Unfocus any active text field to prevent keyboard auto-opening on route dismissal
+            FocusManager.instance.primaryFocus?.unfocus();
             Navigator.push(
               context,
               PageRouteBuilder<void>(
@@ -2141,11 +2173,11 @@ class _FullscreenMediaViewerState extends State<_FullscreenMediaViewer> {
                         horizontal: 14,
                         vertical: 6,
                       ),
-                      color: Colors.black.withValues(alpha: 0.5),
+                      color: AppColors.mutedColor(context),
                       child: Text(
                         '${_currentIndex + 1} of ${widget.mediaMessages.length}',
                         style: AppTextStyles.bodySmall.copyWith(
-                          color: Colors.white,
+                          color: AppColors.mutedForegroundColor(context),
                           fontWeight: FontWeight.w600,
                           letterSpacing: 0.5,
                         ),
@@ -2165,8 +2197,8 @@ class _FullscreenMediaViewerState extends State<_FullscreenMediaViewer> {
               child: _ActionPod(
                 icon: LucideIcons.x,
                 onPressed: () => Navigator.pop(context),
-                backgroundColor: Colors.black.withValues(alpha: 0.5),
-                iconColor: Colors.white,
+                backgroundColor: AppColors.mutedColor(context),
+                iconColor: AppColors.mutedForegroundColor(context),
                 iconSize: 20,
               ),
             ),
