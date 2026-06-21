@@ -109,13 +109,13 @@ class LocalCache {
     }
   }
 
-  CacheEntry? get(String endpoint, {Map<String, dynamic>? params}) {
+  CacheEntry? get(String endpoint, {Map<String, dynamic>? params, bool allowExpired = false}) {
     final key = _generateKey(endpoint, params);
 
     // 1. Memory Cache
     if (_memoryCache.containsKey(key)) {
       final entry = _memoryCache[key]!;
-      if (!entry.isExpired) return entry;
+      if (allowExpired || !entry.isExpired) return entry;
       _memoryCache.remove(key);
     }
 
@@ -126,9 +126,13 @@ class LocalCache {
         final entry = CacheEntry.fromJson(
           jsonDecode(stored) as Map<String, dynamic>,
         );
-        if (!entry.isExpired && entry.version == _currentVersion) {
-          _memoryCache[key] = entry;
-          return entry;
+        if (entry.version == _currentVersion) {
+          if (allowExpired || !entry.isExpired) {
+            _memoryCache[key] = entry;
+            return entry;
+          } else {
+            _box?.delete(key);
+          }
         } else {
           _box?.delete(key);
         }

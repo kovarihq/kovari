@@ -4,6 +4,7 @@ import 'package:mobile/core/auth/auth_repository.dart';
 import 'package:mobile/core/auth/token_storage.dart';
 import 'package:mobile/core/config/env.dart';
 import 'package:mobile/core/providers/auth_provider.dart';
+import 'package:mobile/core/providers/connectivity_provider.dart';
 import 'package:mobile/core/realtime/socket_state.dart';
 import 'package:mobile/core/utils/app_logger.dart';
 import 'package:socket_io_client/socket_io_client.dart' as io;
@@ -40,6 +41,13 @@ class SocketService extends Notifier<SocketState> {
     final isBootstrapping = ref.watch(
       authProvider.select((s) => s.isBootstrapping),
     );
+
+    ref.listen(connectivityProvider, (previous, next) {
+      if (next.isOnline && state.isDisconnected) {
+        AppLogger.i('🌐 [SocketService] Connection restored. Reconnecting...');
+        Future.microtask(() => reconnectWithToken());
+      }
+    });
 
     // Register dispose logic only once for this Notifier instance
     ref.onDispose(() {
@@ -131,7 +139,7 @@ class SocketService extends Notifier<SocketState> {
               'websocket',
             ]) // Force websocket - more stable on mobile
             .enableAutoConnect()
-            .setReconnectionAttempts(10)
+            .setReconnectionAttempts(999) // Infinite-like reconnection attempts in production
             .setReconnectionDelay(2000)
             .setAuth({
               'userId': user.id,

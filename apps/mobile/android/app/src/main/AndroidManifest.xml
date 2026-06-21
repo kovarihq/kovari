@@ -48,6 +48,10 @@
                     android:scheme="https"
                     android:host="kovari.in"
                     android:pathPrefix="/invite"/>
+                <data
+                    android:scheme="https"
+                    android:host="www.kovari.in"
+                    android:pathPrefix="/invite"/>
             </intent-filter>
             <!-- Dev Links (Non-verified HTTP) -->
             <intent-filter>

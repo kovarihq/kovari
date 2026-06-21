@@ -206,6 +206,7 @@ class DioApiClient implements ApiClient {
               final cached = _cache.get(
                 options.path,
                 params: options.queryParameters,
+                allowExpired: true,
               );
               if (cached != null) {
                 AppLogger.d(
