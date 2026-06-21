@@ -162,17 +162,17 @@ class _InteractiveWrapperState extends State<InteractiveWrapper>
       _isDebouncing = true;
     });
 
+    // Fixed short debounce (200ms) to prevent rapid double clicks
+    Future<void>.delayed(const Duration(milliseconds: 200), () {
+      if (mounted) setState(() => _isDebouncing = false);
+    });
+
     try {
       if (action is Future) {
         await action;
       }
-    } finally {
-      if (mounted) {
-        // Short debounce (100ms) to prevent rapid double clicks while keeping buttons fully clickable
-        Future<void>.delayed(const Duration(milliseconds: 100), () {
-          if (mounted) setState(() => _isDebouncing = false);
-        });
-      }
+    } catch (_) {
+      // Ignored here, handled by caller
     }
   }
 }

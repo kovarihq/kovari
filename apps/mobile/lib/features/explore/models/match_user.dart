@@ -6,7 +6,6 @@
 /// - Lists are always non-null
 /// - No raw json field exposed to UI
 class MatchUser {
-
   const MatchUser({
     required this.id,
     required this.name,
@@ -38,47 +37,45 @@ class MatchUser {
         ? json['user'] as Map<String, dynamic>
         : json;
 
+    // Helper to resolve value from either root json or userMap
+    dynamic val(String key) => json[key] ?? userMap[key];
+
     return MatchUser(
-      id: (userMap['userId'] ?? userMap['id'] ?? json['userId'] ?? 'unknown')
-          .toString(),
-      name: (userMap['name'] ?? userMap['username'] ?? 'Traveler').toString(),
-      image: (userMap['avatar'] ?? userMap['profilePhoto'] ?? '').toString(),
+      id: (val('userId') ?? val('id') ?? 'unknown').toString(),
+      name: (val('name') ?? val('username') ?? 'Traveler').toString(),
+      image:
+          (val('avatar') ?? val('profilePhoto') ?? val('profile_photo') ?? '')
+              .toString(),
       location:
-          (userMap['locationDisplay'] ??
-                  userMap['location'] ??
-                  'Unknown location')
+          (val('locationDisplay') ?? val('location') ?? 'Unknown location')
               .toString(),
       destination:
-          (json['destination'] ??
-                  json['destination_id'] ??
-                  'Unknown destination')
+          (val('destination') ?? val('destination_id') ?? 'Unknown destination')
               .toString(),
-      age: _asInt(userMap['age']),
-      score: _asDouble(json['score'] ?? json['compatibility_score'] ?? json['compatibility']),
-      bio: _asStringOrNull(userMap['bio']),
-      gender: _asStringOrNull(userMap['gender']),
-      nationality: _asStringOrNull(userMap['nationality']),
-      personality: _asStringOrNull(userMap['personality']),
-      religion: _asStringOrNull(userMap['religion']),
-      smoking: _asStringOrNull(userMap['smoking']),
-      drinking: _asStringOrNull(userMap['drinking']),
-      foodPreference: _asStringOrNull(userMap['foodPreference']),
-      profession: _asStringOrNull(userMap['profession']),
-      interests: _asStringList(userMap['interests']),
-      languages: _asStringList(userMap['languages']),
-      startDate: _asDateTime(
-        json['startDate'] ?? json['start_date'] ?? userMap['start_date'],
+      age: _asInt(val('age')),
+      score: _asDouble(
+        val('score') ?? val('compatibility_score') ?? val('compatibility'),
       ),
-      endDate: _asDateTime(
-        json['endDate'] ?? json['end_date'] ?? userMap['end_date'],
+      bio: _asStringOrNull(val('bio')),
+      gender: _asStringOrNull(val('gender')),
+      nationality: _asStringOrNull(val('nationality')),
+      personality: _asStringOrNull(val('personality')),
+      religion: _asStringOrNull(val('religion')),
+      smoking: _asStringOrNull(val('smoking')),
+      drinking: _asStringOrNull(val('drinking')),
+      foodPreference: _asStringOrNull(
+        val('foodPreference') ?? val('food_preference'),
       ),
-      budget: _asDouble(json['budget'] ?? userMap['budget']),
-      travelIntentions: (userMap['travel_intentions'] ??
-              userMap['travelIntentions'] ??
-              json['travel_intentions'] ??
-              json['travelIntentions'] ??
-              const [])
-          as List<dynamic>,
+      profession: _asStringOrNull(val('profession') ?? val('job')),
+      interests: _asStringList(val('interests')),
+      languages: _asStringList(val('languages')),
+      startDate: _asDateTime(val('startDate') ?? val('start_date')),
+      endDate: _asDateTime(val('endDate') ?? val('end_date')),
+      budget: _asDouble(val('budget')),
+      travelIntentions: List<dynamic>.from(
+        (val('travel_intentions') ?? val('travelIntentions') ?? const [])
+            as Iterable<dynamic>,
+      ),
     );
   }
   final String id;
@@ -107,29 +104,29 @@ class MatchUser {
   final List<dynamic> travelIntentions;
 
   Map<String, dynamic> toJson() => {
-      'id': id,
-      'name': name,
-      'image': image,
-      'location': location,
-      'destination': destination,
-      'age': age,
-      'score': score,
-      'bio': bio,
-      'gender': gender,
-      'nationality': nationality,
-      'personality': personality,
-      'religion': religion,
-      'smoking': smoking,
-      'drinking': drinking,
-      'foodPreference': foodPreference,
-      'profession': profession,
-      'interests': interests,
-      'languages': languages,
-      'startDate': startDate?.toIso8601String(),
-      'endDate': endDate?.toIso8601String(),
-      'budget': budget,
-      'travelIntentions': travelIntentions,
-    };
+    'id': id,
+    'name': name,
+    'image': image,
+    'location': location,
+    'destination': destination,
+    'age': age,
+    'score': score,
+    'bio': bio,
+    'gender': gender,
+    'nationality': nationality,
+    'personality': personality,
+    'religion': religion,
+    'smoking': smoking,
+    'drinking': drinking,
+    'foodPreference': foodPreference,
+    'profession': profession,
+    'interests': interests,
+    'languages': languages,
+    'startDate': startDate?.toIso8601String(),
+    'endDate': endDate?.toIso8601String(),
+    'budget': budget,
+    'travelIntentions': travelIntentions,
+  };
 
   // ── Safe coercion helpers ──────────────────
 

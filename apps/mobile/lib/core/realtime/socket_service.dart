@@ -139,7 +139,10 @@ class SocketService extends Notifier<SocketState> {
               'websocket',
             ]) // Force websocket - more stable on mobile
             .enableAutoConnect()
-            .setReconnectionAttempts(999) // Infinite-like reconnection attempts in production
+            .enableForceNew() // 🔄 Force a new connection to apply refreshed token
+            .setReconnectionAttempts(
+              999,
+            ) // Infinite-like reconnection attempts in production
             .setReconnectionDelay(2000)
             .setAuth({
               'userId': user.id,
@@ -204,7 +207,8 @@ class SocketService extends Notifier<SocketState> {
           // If token refresh fails (e.g. offline transition), retry a full reconnect cycle
           // after a short delay to fetch a fresh token instead of using the socket's stale token auth options.
           Future.delayed(const Duration(seconds: 5), () {
-            if (state == SocketState.error || state == SocketState.disconnected) {
+            if (state == SocketState.error ||
+                state == SocketState.disconnected) {
               reconnectWithToken();
             }
           });

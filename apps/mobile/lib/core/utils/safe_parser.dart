@@ -1,5 +1,3 @@
-
-
 /// 🛡️ Safe list parser — drops malformed items without crashing.
 ///
 /// Rules:
@@ -21,8 +19,8 @@ List<T> safeParseList<T>(
     if (item is! Map<String, dynamic>) continue;
     try {
       result.add(parser(item));
-    } catch (_) {
-      // Silently drop malformed items
+    } catch (e, stack) {
+      print('❌ [safeParseList] Parsing error for $T: $e\n$stack');
     }
   }
 

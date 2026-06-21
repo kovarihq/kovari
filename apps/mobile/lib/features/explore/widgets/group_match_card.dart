@@ -82,356 +82,177 @@ class _GroupMatchCardState extends ConsumerState<GroupMatchCard> {
       borderRadius: BorderRadius.circular(24),
       border: const Border(),
       boxShadow: const [],
-      child: GestureDetector(
-        onHorizontalDragEnd: (details) {
-          if (details.primaryVelocity == null) return;
-          if (details.primaryVelocity! < 0) {
-            if (_activeTab == 'left') {
-              setState(() => _activeTab = 'right');
-            }
-          } else if (details.primaryVelocity! > 0) {
-            if (_activeTab == 'right') {
-              setState(() => _activeTab = 'left');
-            }
-          }
-        },
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Story Indicators
-            Row(
-              children: [
-                Expanded(
-                  child: GestureDetector(
-                    onTap: () => setState(() => _activeTab = 'left'),
-                    child: Container(
-                      height: 4,
-                      decoration: BoxDecoration(
-                        color: _activeTab == 'left'
-                            ? AppColors.activeIndicatorColor(context)
-                            : AppColors.secondaryColor(context),
-                        borderRadius: BorderRadius.circular(2),
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: GestureDetector(
-                    onTap: () => setState(() => _activeTab = 'right'),
-                    child: Container(
-                      height: 4,
-                      decoration: BoxDecoration(
-                        color: _activeTab == 'right'
-                            ? AppColors.activeIndicatorColor(context)
-                            : AppColors.secondaryColor(context),
-                        borderRadius: BorderRadius.circular(2),
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-
-            // Header: tab-dependent title
-            if (_activeTab == 'left') ...[
-              Text(
-                name,
-                style: AppTextStyles.h3.copyWith(
-                  fontWeight: FontWeight.w800,
-                  color: AppColors.text(context),
-                ),
-              ),
-              Text(
-                description != null && description.isNotEmpty
-                    ? description
-                    : 'No description provided.',
-                style: AppTextStyles.bodyMedium.copyWith(
-                  color: AppColors.text(context, isMuted: true),
-                  fontStyle: description != null && description.isNotEmpty
-                      ? FontStyle.normal
-                      : FontStyle.italic,
-                ),
-              ),
-            ] else ...[
-              Text(
-                'Created by ${creator.name}',
-                style: AppTextStyles.h3.copyWith(
-                  fontWeight: FontWeight.w800,
-                  color: AppColors.text(context),
-                ),
-              ),
-              Text(
-                creator.age != null
-                    ? '${creator.age}, $creatorLocationDisplay'
-                    : creatorLocationDisplay,
-                style: AppTextStyles.bodyMedium.copyWith(
-                  fontWeight: FontWeight.w500,
-                  color: AppColors.text(context, isMuted: true),
-                ),
-              ),
-            ],
-            const SizedBox(height: 12),
-
-            // Active Tab Content
-            Expanded(
-              child: SingleChildScrollView(
-                physics: const BouncingScrollPhysics(),
-                child: _activeTab == 'left'
-                    ? Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          // Cover Image (Centered & Aspect Ratio 4:3)
-                          Center(
-                            child: Container(
-                              width: double.infinity,
-                              constraints: const BoxConstraints(maxHeight: 280),
-                              decoration: BoxDecoration(
-                                color: AppColors.surface(context, level: 2),
-                                borderRadius: BorderRadius.circular(16),
-                                border: Border.all(
-                                  color: AppColors.borderColor(context),
-                                ),
-                              ),
-                              child: ClipRRect(
-                                borderRadius: BorderRadius.circular(15),
-                                child: AspectRatio(
-                                  aspectRatio: 4 / 3,
-                                  child:
-                                      coverImage != null &&
-                                          coverImage.isNotEmpty
-                                      ? KovariImage(
-                                          imageUrl: coverImage,
-                                          fit: BoxFit.cover,
-                                          borderRadius: BorderRadius.circular(
-                                            15,
-                                          ),
-                                          placeholder: const UserAvatarFallback(
-                                            shape: BoxShape.rectangle,
-                                            borderRadius: BorderRadius.all(
-                                              Radius.circular(16),
-                                            ),
-                                            size: 100,
-                                          ),
-                                        )
-                                      : UserAvatarFallback(
-                                          shape: BoxShape.rectangle,
-                                          borderRadius: BorderRadius.circular(
-                                            16,
-                                          ),
-                                          size: 100,
-                                        ),
-                                ),
-                              ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onHorizontalDragEnd: (details) {
+                if (details.primaryVelocity == null) return;
+                if (details.primaryVelocity! < 0) {
+                  if (_activeTab == 'left') {
+                    setState(() => _activeTab = 'right');
+                  }
+                } else if (details.primaryVelocity! > 0) {
+                  if (_activeTab == 'right') {
+                    setState(() => _activeTab = 'left');
+                  }
+                }
+              },
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Story Indicators
+                  Row(
+                    children: [
+                      Expanded(
+                        child: GestureDetector(
+                          onTap: () => setState(() => _activeTab = 'left'),
+                          child: Container(
+                            height: 4,
+                            decoration: BoxDecoration(
+                              color: _activeTab == 'left'
+                                  ? AppColors.activeIndicatorColor(context)
+                                  : AppColors.secondaryColor(context),
+                              borderRadius: BorderRadius.circular(2),
                             ),
                           ),
-                          const SizedBox(height: 16),
-                          if (group.score != null) ...[
-                            Row(
-                              crossAxisAlignment: CrossAxisAlignment.baseline,
-                              textBaseline: TextBaseline.alphabetic,
-                              children: [
-                                Text(
-                                  '${(group.score! <= 1 ? group.score! * 100 : group.score!).round()}%',
-                                  style: AppTextStyles.h2.copyWith(
-                                    fontWeight: FontWeight.bold,
-                                    color: AppColors.text(context),
-                                  ),
-                                ),
-                                const SizedBox(width: 6),
-                                Text(
-                                  'similar',
-                                  style: AppTextStyles.bodyMedium.copyWith(
-                                    fontWeight: FontWeight.bold,
-                                    color: AppColors.text(context),
-                                  ),
-                                ),
-                              ],
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: GestureDetector(
+                          onTap: () => setState(() => _activeTab = 'right'),
+                          child: Container(
+                            height: 4,
+                            decoration: BoxDecoration(
+                              color: _activeTab == 'right'
+                                  ? AppColors.activeIndicatorColor(context)
+                                  : AppColors.secondaryColor(context),
+                              borderRadius: BorderRadius.circular(2),
                             ),
-                            const SizedBox(height: 12),
-                          ],
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
 
-                          _buildGroupedSection(
-                            title: 'Trip Details',
-                            content: Column(
+                  // Header: tab-dependent title
+                  if (_activeTab == 'left') ...[
+                    Text(
+                      name,
+                      style: AppTextStyles.h3.copyWith(
+                        fontWeight: FontWeight.w800,
+                        color: AppColors.text(context),
+                      ),
+                    ),
+                    Text(
+                      description != null && description.isNotEmpty
+                          ? description
+                          : 'No description provided.',
+                      style: AppTextStyles.bodyMedium.copyWith(
+                        color: AppColors.text(context, isMuted: true),
+                        fontStyle: description != null && description.isNotEmpty
+                            ? FontStyle.normal
+                            : FontStyle.italic,
+                      ),
+                    ),
+                  ] else ...[
+                    Text(
+                      'Created by ${creator.name}',
+                      style: AppTextStyles.h3.copyWith(
+                        fontWeight: FontWeight.w800,
+                        color: AppColors.text(context),
+                      ),
+                    ),
+                    Text(
+                      creator.age != null
+                          ? '${creator.age}, $creatorLocationDisplay'
+                          : creatorLocationDisplay,
+                      style: AppTextStyles.bodyMedium.copyWith(
+                        fontWeight: FontWeight.w500,
+                        color: AppColors.text(context, isMuted: true),
+                      ),
+                    ),
+                  ],
+                  const SizedBox(height: 12),
+
+                  // Active Tab Content
+                  Expanded(
+                    child: SingleChildScrollView(
+                      physics: const BouncingScrollPhysics(),
+                      child: _activeTab == 'left'
+                          ? Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Text(
-                                  "${group.destination.split(',')[0].trim()}${group.budget != null ? ' • ₹${NumberFormat.decimalPattern('en_IN').format(group.budget)}' : ''}",
-                                  style: AppTextStyles.bodyMedium.copyWith(
-                                    fontWeight: FontWeight.bold,
-                                    color: AppColors.text(context),
-                                  ),
-                                ),
-                                const SizedBox(height: 4),
-                                Text(
-                                  _formatDateRange(),
-                                  style: AppTextStyles.bodyMedium.copyWith(
-                                    fontWeight: FontWeight.bold,
-                                    color: AppColors.text(context),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                          const SizedBox(height: 12),
-
-                          // Group Members
-                          _buildGroupedSection(
-                            title: 'Group Members',
-                            content: Wrap(
-                              spacing: 8,
-                              runSpacing: 4,
-                              children: [
-                                Text(
-                                  'Created by ${creator.name}',
-                                  style: AppTextStyles.bodyMedium.copyWith(
-                                    fontWeight: FontWeight.bold,
-                                    color: AppColors.text(context),
-                                  ),
-                                ),
-                                Text(
-                                  '•',
-                                  style: AppTextStyles.bodyMedium.copyWith(
-                                    color: AppColors.text(
-                                      context,
-                                      isMuted: true,
+                                // Cover Image (Centered & Aspect Ratio 4:3)
+                                Center(
+                                  child: Container(
+                                    width: double.infinity,
+                                    constraints: const BoxConstraints(
+                                      maxHeight: 280,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: AppColors.surface(
+                                        context,
+                                        level: 2,
+                                      ),
+                                      borderRadius: BorderRadius.circular(16),
+                                      border: Border.all(
+                                        color: AppColors.borderColor(context),
+                                      ),
+                                    ),
+                                    child: ClipRRect(
+                                      borderRadius: BorderRadius.circular(15),
+                                      child: AspectRatio(
+                                        aspectRatio: 4 / 3,
+                                        child:
+                                            coverImage != null &&
+                                                coverImage.isNotEmpty
+                                            ? KovariImage(
+                                                imageUrl: coverImage,
+                                                fit: BoxFit.cover,
+                                                borderRadius:
+                                                    BorderRadius.circular(15),
+                                                placeholder:
+                                                    const UserAvatarFallback(
+                                                      shape: BoxShape.rectangle,
+                                                      borderRadius:
+                                                          BorderRadius.all(
+                                                            Radius.circular(16),
+                                                          ),
+                                                      size: 100,
+                                                    ),
+                                              )
+                                            : UserAvatarFallback(
+                                                shape: BoxShape.rectangle,
+                                                borderRadius:
+                                                    BorderRadius.circular(16),
+                                                size: 100,
+                                              ),
+                                      ),
                                     ),
                                   ),
                                 ),
-                                Text(
-                                  '$memberCount members',
-                                  style: AppTextStyles.bodyMedium.copyWith(
-                                    fontWeight: FontWeight.bold,
-                                    color: AppColors.text(context),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                          const SizedBox(height: 12),
-
-                          // Group Interests
-                          if (group.tags != null && group.tags!.isNotEmpty) ...[
-                            _buildGroupedSection(
-                              title: 'Group Interests',
-                              content: Wrap(
-                                spacing: 8,
-                                runSpacing: 4,
-                                children: [
-                                  for (
-                                    var i = 0;
-                                    i < group.tags!.length;
-                                    i++
-                                  ) ...[
-                                    if (i > 0)
+                                const SizedBox(height: 16),
+                                if (group.score != null) ...[
+                                  Row(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.baseline,
+                                    textBaseline: TextBaseline.alphabetic,
+                                    children: [
                                       Text(
-                                        '•',
-                                        style: AppTextStyles.bodyMedium
-                                            .copyWith(
-                                              color: AppColors.text(
-                                                context,
-                                                isMuted: true,
-                                              ),
-                                            ),
-                                      ),
-                                    Text(
-                                      group.tags![i][0].toUpperCase() +
-                                          group.tags![i].substring(1),
-                                      style: AppTextStyles.bodyMedium.copyWith(
-                                        fontWeight: FontWeight.bold,
-                                        color: AppColors.text(context),
-                                      ),
-                                    ),
-                                  ],
-                                ],
-                              ),
-                            ),
-                            const SizedBox(height: 12),
-                          ],
-
-                          // Languages
-                          if (group.languages != null &&
-                              group.languages!.isNotEmpty) ...[
-                            _buildGroupedSection(
-                              title: 'Languages',
-                              content: Wrap(
-                                spacing: 8,
-                                runSpacing: 4,
-                                children: [
-                                  for (
-                                    var i = 0;
-                                    i < group.languages!.length;
-                                    i++
-                                  ) ...[
-                                    if (i > 0)
-                                      Text(
-                                        '•',
-                                        style: AppTextStyles.bodyMedium
-                                            .copyWith(
-                                              color: AppColors.text(
-                                                context,
-                                                isMuted: true,
-                                              ),
-                                            ),
-                                      ),
-                                    Text(
-                                      group.languages![i],
-                                      style: AppTextStyles.bodyMedium.copyWith(
-                                        fontWeight: FontWeight.bold,
-                                        color: AppColors.text(context),
-                                      ),
-                                    ),
-                                  ],
-                                ],
-                              ),
-                            ),
-                            const SizedBox(height: 12),
-                          ],
-
-                          // Lifestyle
-                          if ((group.smokingPolicy != null &&
-                                  !_isPreferNotToSay(group.smokingPolicy)) ||
-                              (group.drinkingPolicy != null &&
-                                  !_isPreferNotToSay(
-                                    group.drinkingPolicy,
-                                  ))) ...[
-                            _buildGroupedSection(
-                              title: 'Lifestyle',
-                              content: (() {
-                                final smokingVal = _formatSmokingPolicy(
-                                  group.smokingPolicy,
-                                );
-                                final drinkingVal = _formatDrinkingPolicy(
-                                  group.drinkingPolicy,
-                                );
-
-                                final items = [
-                                  if (smokingVal != null)
-                                    "Smoking: $smokingVal",
-                                  if (drinkingVal != null)
-                                    "Drinking: $drinkingVal",
-                                ];
-
-                                return Wrap(
-                                  spacing: 8,
-                                  runSpacing: 4,
-                                  children: [
-                                    for (var i = 0; i < items.length; i++) ...[
-                                      if (i > 0)
-                                        Text(
-                                          '•',
-                                          style: AppTextStyles.bodyMedium
-                                              .copyWith(
-                                                color: AppColors.text(
-                                                  context,
-                                                  isMuted: true,
-                                                ),
-                                              ),
+                                        '${(group.score! <= 1 ? group.score! * 100 : group.score!).round()}%',
+                                        style: AppTextStyles.h2.copyWith(
+                                          fontWeight: FontWeight.bold,
+                                          color: AppColors.text(context),
                                         ),
+                                      ),
+                                      const SizedBox(width: 6),
                                       Text(
-                                        items[i],
+                                        'similar',
                                         style: AppTextStyles.bodyMedium
                                             .copyWith(
                                               fontWeight: FontWeight.bold,
@@ -439,133 +260,375 @@ class _GroupMatchCardState extends ConsumerState<GroupMatchCard> {
                                             ),
                                       ),
                                     ],
-                                  ],
-                                );
-                              })(),
-                            ),
-                          ],
-                        ],
-                      )
-                    : Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          // Creator Avatar Image (Centered & Aspect Ratio 4:3)
-                          Center(
-                            child: Container(
-                              width: double.infinity,
-                              constraints: const BoxConstraints(maxHeight: 280),
-                              decoration: BoxDecoration(
-                                color: AppColors.surface(context, level: 2),
-                                borderRadius: BorderRadius.circular(16),
-                                border: Border.all(
-                                  color: AppColors.borderColor(context),
-                                ),
-                              ),
-                              child: ClipRRect(
-                                borderRadius: BorderRadius.circular(15),
-                                child: AspectRatio(
-                                  aspectRatio: 4 / 3,
-                                  child:
-                                      creator.avatar != null &&
-                                          creator.avatar!.isNotEmpty
-                                      ? KovariImage(
-                                          imageUrl: creator.avatar!,
-                                          fit: BoxFit.cover,
-                                          borderRadius: BorderRadius.circular(
-                                            15,
-                                          ),
-                                          placeholder: const UserAvatarFallback(
-                                            shape: BoxShape.rectangle,
-                                            borderRadius: BorderRadius.all(
-                                              Radius.circular(16),
-                                            ),
-                                            size: 100,
-                                          ),
-                                        )
-                                      : UserAvatarFallback(
-                                          shape: BoxShape.rectangle,
-                                          borderRadius: BorderRadius.circular(
-                                            16,
-                                          ),
-                                          size: 100,
-                                        ),
-                                ),
-                              ),
-                            ),
-                          ),
-                          const SizedBox(height: 16),
-
-                          // Creator About Me Section
-                          _buildGroupedSection(
-                            title: 'About Creator',
-                            content: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                if (creator.gender != null &&
-                                    !_isPreferNotToSay(creator.gender)) ...[
-                                  Text(
-                                    creator.gender![0].toUpperCase() +
-                                        creator.gender!.substring(1),
-                                    style: AppTextStyles.bodyMedium.copyWith(
-                                      fontWeight: FontWeight.bold,
-                                      color: AppColors.text(context),
-                                    ),
                                   ),
-                                  const SizedBox(height: 4),
+                                  const SizedBox(height: 12),
                                 ],
-                                (() {
-                                  final items =
-                                      [
-                                            if (creator.profession != null &&
-                                                !_isPreferNotToSay(
-                                                  creator.profession,
-                                                ))
-                                              creator.profession!
-                                                  .replaceAll('_', ' ')
-                                                  .trim(),
-                                            if (creator.religion != null &&
-                                                !_isPreferNotToSay(
-                                                  creator.religion,
-                                                ))
-                                              creator.religion!.trim(),
-                                            if (creator.personality != null &&
-                                                !_isPreferNotToSay(
-                                                  creator.personality,
-                                                ))
-                                              creator.personality!.trim(),
-                                          ]
-                                          .map(
-                                            (item) =>
-                                                item[0].toUpperCase() +
-                                                item.substring(1),
-                                          )
-                                          .toList();
 
-                                  if (items.isEmpty)
-                                    return const SizedBox.shrink();
+                                _buildGroupedSection(
+                                  title: 'Trip Details',
+                                  content: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        "${group.destination.split(',')[0].trim()}${group.budget != null ? ' • ₹${NumberFormat.decimalPattern('en_IN').format(group.budget)}' : ''}",
+                                        style: AppTextStyles.bodyMedium
+                                            .copyWith(
+                                              fontWeight: FontWeight.bold,
+                                              color: AppColors.text(context),
+                                            ),
+                                      ),
+                                      const SizedBox(height: 4),
+                                      Text(
+                                        _formatDateRange(),
+                                        style: AppTextStyles.bodyMedium
+                                            .copyWith(
+                                              fontWeight: FontWeight.bold,
+                                              color: AppColors.text(context),
+                                            ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                const SizedBox(height: 12),
 
-                                  return Wrap(
+                                // Group Members
+                                _buildGroupedSection(
+                                  title: 'Group Members',
+                                  content: Wrap(
                                     spacing: 8,
                                     runSpacing: 4,
                                     children: [
-                                      for (
-                                        var i = 0;
-                                        i < items.length;
-                                        i++
-                                      ) ...[
-                                        if (i > 0)
+                                      Text(
+                                        'Created by ${creator.name}',
+                                        style: AppTextStyles.bodyMedium
+                                            .copyWith(
+                                              fontWeight: FontWeight.bold,
+                                              color: AppColors.text(context),
+                                            ),
+                                      ),
+                                      Text(
+                                        '•',
+                                        style: AppTextStyles.bodyMedium
+                                            .copyWith(
+                                              color: AppColors.text(
+                                                context,
+                                                isMuted: true,
+                                              ),
+                                            ),
+                                      ),
+                                      Text(
+                                        '$memberCount members',
+                                        style: AppTextStyles.bodyMedium
+                                            .copyWith(
+                                              fontWeight: FontWeight.bold,
+                                              color: AppColors.text(context),
+                                            ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                const SizedBox(height: 12),
+
+                                // Group Interests
+                                if (group.tags != null &&
+                                    group.tags!.isNotEmpty) ...[
+                                  _buildGroupedSection(
+                                    title: 'Group Interests',
+                                    content: Wrap(
+                                      spacing: 8,
+                                      runSpacing: 4,
+                                      children: [
+                                        for (
+                                          var i = 0;
+                                          i < group.tags!.length;
+                                          i++
+                                        ) ...[
+                                          if (i > 0)
+                                            Text(
+                                              '•',
+                                              style: AppTextStyles.bodyMedium
+                                                  .copyWith(
+                                                    color: AppColors.text(
+                                                      context,
+                                                      isMuted: true,
+                                                    ),
+                                                  ),
+                                            ),
                                           Text(
-                                            '•',
+                                            group.tags![i][0].toUpperCase() +
+                                                group.tags![i].substring(1),
                                             style: AppTextStyles.bodyMedium
                                                 .copyWith(
+                                                  fontWeight: FontWeight.bold,
                                                   color: AppColors.text(
                                                     context,
-                                                    isMuted: true,
                                                   ),
                                                 ),
                                           ),
+                                        ],
+                                      ],
+                                    ),
+                                  ),
+                                  const SizedBox(height: 12),
+                                ],
+
+                                // Languages
+                                if (group.languages != null &&
+                                    group.languages!.isNotEmpty) ...[
+                                  _buildGroupedSection(
+                                    title: 'Languages',
+                                    content: Wrap(
+                                      spacing: 8,
+                                      runSpacing: 4,
+                                      children: [
+                                        for (
+                                          var i = 0;
+                                          i < group.languages!.length;
+                                          i++
+                                        ) ...[
+                                          if (i > 0)
+                                            Text(
+                                              '•',
+                                              style: AppTextStyles.bodyMedium
+                                                  .copyWith(
+                                                    color: AppColors.text(
+                                                      context,
+                                                      isMuted: true,
+                                                    ),
+                                                  ),
+                                            ),
+                                          Text(
+                                            group.languages![i],
+                                            style: AppTextStyles.bodyMedium
+                                                .copyWith(
+                                                  fontWeight: FontWeight.bold,
+                                                  color: AppColors.text(
+                                                    context,
+                                                  ),
+                                                ),
+                                          ),
+                                        ],
+                                      ],
+                                    ),
+                                  ),
+                                  const SizedBox(height: 12),
+                                ],
+
+                                // Lifestyle
+                                if ((group.smokingPolicy != null &&
+                                        !_isPreferNotToSay(
+                                          group.smokingPolicy,
+                                        )) ||
+                                    (group.drinkingPolicy != null &&
+                                        !_isPreferNotToSay(
+                                          group.drinkingPolicy,
+                                        ))) ...[
+                                  _buildGroupedSection(
+                                    title: 'Lifestyle',
+                                    content: (() {
+                                      final smokingVal = _formatSmokingPolicy(
+                                        group.smokingPolicy,
+                                      );
+                                      final drinkingVal = _formatDrinkingPolicy(
+                                        group.drinkingPolicy,
+                                      );
+
+                                      final items = [
+                                        if (smokingVal != null)
+                                          "Smoking: $smokingVal",
+                                        if (drinkingVal != null)
+                                          "Drinking: $drinkingVal",
+                                      ];
+
+                                      return Wrap(
+                                        spacing: 8,
+                                        runSpacing: 4,
+                                        children: [
+                                          for (
+                                            var i = 0;
+                                            i < items.length;
+                                            i++
+                                          ) ...[
+                                            if (i > 0)
+                                              Text(
+                                                '•',
+                                                style: AppTextStyles.bodyMedium
+                                                    .copyWith(
+                                                      color: AppColors.text(
+                                                        context,
+                                                        isMuted: true,
+                                                      ),
+                                                    ),
+                                              ),
+                                            Text(
+                                              items[i],
+                                              style: AppTextStyles.bodyMedium
+                                                  .copyWith(
+                                                    fontWeight: FontWeight.bold,
+                                                    color: AppColors.text(
+                                                      context,
+                                                    ),
+                                                  ),
+                                            ),
+                                          ],
+                                        ],
+                                      );
+                                    })(),
+                                  ),
+                                ],
+                              ],
+                            )
+                          : Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                // Creator Avatar Image (Centered & Aspect Ratio 4:3)
+                                Center(
+                                  child: Container(
+                                    width: double.infinity,
+                                    constraints: const BoxConstraints(
+                                      maxHeight: 280,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: AppColors.surface(
+                                        context,
+                                        level: 2,
+                                      ),
+                                      borderRadius: BorderRadius.circular(16),
+                                      border: Border.all(
+                                        color: AppColors.borderColor(context),
+                                      ),
+                                    ),
+                                    child: ClipRRect(
+                                      borderRadius: BorderRadius.circular(15),
+                                      child: AspectRatio(
+                                        aspectRatio: 4 / 3,
+                                        child:
+                                            creator.avatar != null &&
+                                                creator.avatar!.isNotEmpty
+                                            ? KovariImage(
+                                                imageUrl: creator.avatar!,
+                                                fit: BoxFit.cover,
+                                                borderRadius:
+                                                    BorderRadius.circular(15),
+                                                placeholder:
+                                                    const UserAvatarFallback(
+                                                      shape: BoxShape.rectangle,
+                                                      borderRadius:
+                                                          BorderRadius.all(
+                                                            Radius.circular(16),
+                                                          ),
+                                                      size: 100,
+                                                    ),
+                                              )
+                                            : UserAvatarFallback(
+                                                shape: BoxShape.rectangle,
+                                                borderRadius:
+                                                    BorderRadius.circular(16),
+                                                size: 100,
+                                              ),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(height: 16),
+
+                                // Creator About Me Section
+                                _buildGroupedSection(
+                                  title: 'About Creator',
+                                  content: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      if (creator.gender != null &&
+                                          !_isPreferNotToSay(
+                                            creator.gender,
+                                          )) ...[
                                         Text(
-                                          items[i],
+                                          creator.gender![0].toUpperCase() +
+                                              creator.gender!.substring(1),
+                                          style: AppTextStyles.bodyMedium
+                                              .copyWith(
+                                                fontWeight: FontWeight.bold,
+                                                color: AppColors.text(context),
+                                              ),
+                                        ),
+                                        const SizedBox(height: 4),
+                                      ],
+                                      (() {
+                                        final items =
+                                            [
+                                                  if (creator.profession !=
+                                                          null &&
+                                                      !_isPreferNotToSay(
+                                                        creator.profession,
+                                                      ))
+                                                    creator.profession!
+                                                        .replaceAll('_', ' ')
+                                                        .trim(),
+                                                  if (creator.religion !=
+                                                          null &&
+                                                      !_isPreferNotToSay(
+                                                        creator.religion,
+                                                      ))
+                                                    creator.religion!.trim(),
+                                                  if (creator.personality !=
+                                                          null &&
+                                                      !_isPreferNotToSay(
+                                                        creator.personality,
+                                                      ))
+                                                    creator.personality!.trim(),
+                                                ]
+                                                .map(
+                                                  (item) =>
+                                                      item[0].toUpperCase() +
+                                                      item.substring(1),
+                                                )
+                                                .toList();
+
+                                        if (items.isEmpty)
+                                          return const SizedBox.shrink();
+
+                                        return Wrap(
+                                          spacing: 8,
+                                          runSpacing: 4,
+                                          children: [
+                                            for (
+                                              var i = 0;
+                                              i < items.length;
+                                              i++
+                                            ) ...[
+                                              if (i > 0)
+                                                Text(
+                                                  '•',
+                                                  style: AppTextStyles
+                                                      .bodyMedium
+                                                      .copyWith(
+                                                        color: AppColors.text(
+                                                          context,
+                                                          isMuted: true,
+                                                        ),
+                                                      ),
+                                                ),
+                                              Text(
+                                                items[i],
+                                                style: AppTextStyles.bodyMedium
+                                                    .copyWith(
+                                                      fontWeight:
+                                                          FontWeight.bold,
+                                                      color: AppColors.text(
+                                                        context,
+                                                      ),
+                                                    ),
+                                              ),
+                                            ],
+                                          ],
+                                        );
+                                      })(),
+                                      if (creator.languages.isNotEmpty) ...[
+                                        const SizedBox(height: 4),
+                                        Text(
+                                          creator.languages.join(', '),
                                           style: AppTextStyles.bodyMedium
                                               .copyWith(
                                                 fontWeight: FontWeight.bold,
@@ -574,166 +637,178 @@ class _GroupMatchCardState extends ConsumerState<GroupMatchCard> {
                                         ),
                                       ],
                                     ],
-                                  );
-                                })(),
-                                if (creator.languages.isNotEmpty) ...[
-                                  const SizedBox(height: 4),
-                                  Text(
-                                    creator.languages.join(', '),
-                                    style: AppTextStyles.bodyMedium.copyWith(
-                                      fontWeight: FontWeight.bold,
-                                      color: AppColors.text(context),
+                                  ),
+                                ),
+                                const SizedBox(height: 12),
+
+                                // Creator Interests Section
+                                if (creator.interests.isNotEmpty) ...[
+                                  _buildGroupedSection(
+                                    title: 'Creator Interests',
+                                    content: Wrap(
+                                      spacing: 8,
+                                      runSpacing: 4,
+                                      children: [
+                                        for (
+                                          var i = 0;
+                                          i < creator.interests.length;
+                                          i++
+                                        ) ...[
+                                          if (i > 0)
+                                            Text(
+                                              '•',
+                                              style: AppTextStyles.bodyMedium
+                                                  .copyWith(
+                                                    color: AppColors.text(
+                                                      context,
+                                                      isMuted: true,
+                                                    ),
+                                                  ),
+                                            ),
+                                          Text(
+                                            creator.interests[i][0]
+                                                    .toUpperCase() +
+                                                creator.interests[i].substring(
+                                                  1,
+                                                ),
+                                            style: AppTextStyles.bodyMedium
+                                                .copyWith(
+                                                  fontWeight: FontWeight.bold,
+                                                  color: AppColors.text(
+                                                    context,
+                                                  ),
+                                                ),
+                                          ),
+                                        ],
+                                      ],
                                     ),
+                                  ),
+                                  const SizedBox(height: 12),
+                                ],
+
+                                // Creator Lifestyle Section
+                                if ((creator.foodPreference != null &&
+                                        !_isPreferNotToSay(
+                                          creator.foodPreference,
+                                        )) ||
+                                    (creator.smoking != null &&
+                                        !_isPreferNotToSay(creator.smoking)) ||
+                                    (creator.drinking != null &&
+                                        !_isPreferNotToSay(
+                                          creator.drinking,
+                                        ))) ...[
+                                  _buildGroupedSection(
+                                    title: 'Creator Lifestyle',
+                                    content: (() {
+                                      final foodText =
+                                          creator.foodPreference != null &&
+                                              !_isPreferNotToSay(
+                                                creator.foodPreference,
+                                              )
+                                          ? creator.foodPreference!.replaceAll(
+                                              '_',
+                                              ' ',
+                                            )
+                                          : null;
+                                      final smokingText =
+                                          creator.smoking != null &&
+                                              !_isPreferNotToSay(
+                                                creator.smoking,
+                                              )
+                                          ? "Smoking: ${creator.smoking}"
+                                          : null;
+                                      final drinkingText =
+                                          creator.drinking != null &&
+                                              !_isPreferNotToSay(
+                                                creator.drinking,
+                                              )
+                                          ? "Drinking: ${creator.drinking}"
+                                          : null;
+
+                                      final items =
+                                          [foodText, smokingText, drinkingText]
+                                              .whereType<String>()
+                                              .map(
+                                                (s) =>
+                                                    s[0].toUpperCase() +
+                                                    s.substring(1),
+                                              )
+                                              .toList();
+
+                                      return Wrap(
+                                        spacing: 8,
+                                        runSpacing: 4,
+                                        children: [
+                                          for (
+                                            var i = 0;
+                                            i < items.length;
+                                            i++
+                                          ) ...[
+                                            if (i > 0)
+                                              Text(
+                                                '•',
+                                                style: AppTextStyles.bodyMedium
+                                                    .copyWith(
+                                                      color: AppColors.text(
+                                                        context,
+                                                        isMuted: true,
+                                                      ),
+                                                    ),
+                                              ),
+                                            Text(
+                                              items[i],
+                                              style: AppTextStyles.bodyMedium
+                                                  .copyWith(
+                                                    fontWeight: FontWeight.bold,
+                                                    color: AppColors.text(
+                                                      context,
+                                                    ),
+                                                  ),
+                                            ),
+                                          ],
+                                        ],
+                                      );
+                                    })(),
                                   ),
                                 ],
                               ],
                             ),
-                          ),
-                          const SizedBox(height: 12),
-
-                          // Creator Interests Section
-                          if (creator.interests.isNotEmpty) ...[
-                            _buildGroupedSection(
-                              title: 'Creator Interests',
-                              content: Wrap(
-                                spacing: 8,
-                                runSpacing: 4,
-                                children: [
-                                  for (
-                                    var i = 0;
-                                    i < creator.interests.length;
-                                    i++
-                                  ) ...[
-                                    if (i > 0)
-                                      Text(
-                                        '•',
-                                        style: AppTextStyles.bodyMedium
-                                            .copyWith(
-                                              color: AppColors.text(
-                                                context,
-                                                isMuted: true,
-                                              ),
-                                            ),
-                                      ),
-                                    Text(
-                                      creator.interests[i][0].toUpperCase() +
-                                          creator.interests[i].substring(1),
-                                      style: AppTextStyles.bodyMedium.copyWith(
-                                        fontWeight: FontWeight.bold,
-                                        color: AppColors.text(context),
-                                      ),
-                                    ),
-                                  ],
-                                ],
-                              ),
-                            ),
-                            const SizedBox(height: 12),
-                          ],
-
-                          // Creator Lifestyle Section
-                          if ((creator.foodPreference != null &&
-                                  !_isPreferNotToSay(creator.foodPreference)) ||
-                              (creator.smoking != null &&
-                                  !_isPreferNotToSay(creator.smoking)) ||
-                              (creator.drinking != null &&
-                                  !_isPreferNotToSay(creator.drinking))) ...[
-                            _buildGroupedSection(
-                              title: 'Creator Lifestyle',
-                              content: (() {
-                                final foodText =
-                                    creator.foodPreference != null &&
-                                        !_isPreferNotToSay(
-                                          creator.foodPreference,
-                                        )
-                                    ? creator.foodPreference!.replaceAll(
-                                        '_',
-                                        ' ',
-                                      )
-                                    : null;
-                                final smokingText =
-                                    creator.smoking != null &&
-                                        !_isPreferNotToSay(creator.smoking)
-                                    ? "Smoking: ${creator.smoking}"
-                                    : null;
-                                final drinkingText =
-                                    creator.drinking != null &&
-                                        !_isPreferNotToSay(creator.drinking)
-                                    ? "Drinking: ${creator.drinking}"
-                                    : null;
-
-                                final items =
-                                    [foodText, smokingText, drinkingText]
-                                        .whereType<String>()
-                                        .map(
-                                          (s) =>
-                                              s[0].toUpperCase() +
-                                              s.substring(1),
-                                        )
-                                        .toList();
-
-                                return Wrap(
-                                  spacing: 8,
-                                  runSpacing: 4,
-                                  children: [
-                                    for (var i = 0; i < items.length; i++) ...[
-                                      if (i > 0)
-                                        Text(
-                                          '•',
-                                          style: AppTextStyles.bodyMedium
-                                              .copyWith(
-                                                color: AppColors.text(
-                                                  context,
-                                                  isMuted: true,
-                                                ),
-                                              ),
-                                        ),
-                                      Text(
-                                        items[i],
-                                        style: AppTextStyles.bodyMedium
-                                            .copyWith(
-                                              fontWeight: FontWeight.bold,
-                                              color: AppColors.text(context),
-                                            ),
-                                      ),
-                                    ],
-                                  ],
-                                );
-                              })(),
-                            ),
-                          ],
-                        ],
-                      ),
+                    ),
+                  ),
+                ],
               ),
             ),
+          ),
 
-            // Actions Row
-            const SizedBox(height: 14),
-            Row(
-              children: [
-                Expanded(
-                  child: PrimaryButton(
-                    text: 'Interested',
-                    height: 48,
-                    borderRadius: 16,
-                    onPressed: () => ref
-                        .read(exploreProvider.notifier)
-                        .handleInterested(group.id),
-                  ),
+          // Actions Row
+          const SizedBox(height: 14),
+          Row(
+            children: [
+              Expanded(
+                child: PrimaryButton(
+                  key: ValueKey('interested_${group.id}'),
+                  text: 'Interested',
+                  height: 48,
+                  borderRadius: 16,
+                  onPressed: () => ref
+                      .read(exploreProvider.notifier)
+                      .handleInterested(group.id),
                 ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: SecondaryButton(
-                    text: 'Skip',
-                    height: 48,
-                    borderRadius: 16,
-                    onPressed: () =>
-                        ref.read(exploreProvider.notifier).handlePass(group.id),
-                  ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: SecondaryButton(
+                  key: ValueKey('skip_${group.id}'),
+                  text: 'Skip',
+                  height: 48,
+                  borderRadius: 16,
+                  onPressed: () =>
+                      ref.read(exploreProvider.notifier).handlePass(group.id),
                 ),
-              ],
-            ),
-          ],
-        ),
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }

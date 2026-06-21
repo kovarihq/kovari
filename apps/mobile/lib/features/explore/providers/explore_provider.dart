@@ -141,6 +141,10 @@ class ExploreNotifier extends Notifier<ExploreState> {
       var newHasMore = state.hasMore;
       var newPage = state.page;
 
+      if (!isLoadMore) {
+        await ref.read(localCacheProvider).clearSeenUsers();
+      }
+
       // Load the local seen-ledger once per fetch for O(1) lookups below.
       final seenIds = ref.read(localCacheProvider).getSeenUsers();
 
