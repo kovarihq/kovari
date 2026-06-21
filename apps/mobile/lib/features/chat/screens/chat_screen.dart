@@ -39,10 +39,16 @@ import 'package:path_provider/path_provider.dart';
 /// [MessageStore] + [ConversationStore]. Wires the input bar to
 /// [ChatMutationService.sendMessage] for offline-resilient sends.
 class ChatScreen extends ConsumerStatefulWidget {
-  const ChatScreen({super.key, required this.chatId, this.hideHeader = false});
+  const ChatScreen({
+    super.key,
+    required this.chatId,
+    this.hideHeader = false,
+    this.isCompact = false,
+  });
 
   final String chatId;
   final bool hideHeader;
+  final bool isCompact;
 
   @override
   ConsumerState<ChatScreen> createState() => _ChatScreenState();
@@ -58,6 +64,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   bool _showNewMessageBanner = false;
 
   String get _chatId => widget.chatId;
+  bool get _isCompact => widget.isCompact || widget.hideHeader;
 
   @override
   void initState() {
@@ -291,6 +298,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                       conversation?.lastSeenSequence ??
                       0,
                   hideHeader: widget.hideHeader,
+                  isCompact: _isCompact,
                 ),
 
           // Layer 2: Bottom Content Mask Gradient (Absolute Sync with KovariBottomNav)
@@ -568,6 +576,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                     }
                   },
                   onSend: _sendMessage,
+                  isCompact: _isCompact,
                 ),
               ],
             ),
@@ -832,6 +841,7 @@ class _MessageList extends StatelessWidget {
     required this.isGroup,
     required this.lastRead,
     required this.hideHeader,
+    required this.isCompact,
   });
 
   final List<MessageEntity> messages;
@@ -841,11 +851,13 @@ class _MessageList extends StatelessWidget {
   final bool isGroup;
   final int lastRead;
   final bool hideHeader;
+  final bool isCompact;
 
   @override
   Widget build(BuildContext context) {
     final bottomPad = MediaQuery.of(context).padding.bottom;
     final topPad = MediaQuery.of(context).padding.top;
+    final double scale = isCompact ? 0.85 : 1.0;
 
     // Production-Grade Robustness: Explicit Temporal Sorting
     // Regardless of how the provider or optimistic UI inserts messages,
@@ -871,10 +883,10 @@ class _MessageList extends StatelessWidget {
         parent: AlwaysScrollableScrollPhysics(),
       ),
       padding: EdgeInsets.fromLTRB(
-        16,
-        hideHeader ? 16 : 92 + topPad,
-        16,
-        60 + bottomPad,
+        16 * scale,
+        hideHeader ? (16 * scale) : 92 + topPad,
+        16 * scale,
+        60 * scale + bottomPad,
       ),
       itemCount: displayMessages.length,
       itemBuilder: (context, index) {
@@ -912,6 +924,7 @@ class _MessageList extends StatelessWidget {
                 isGroup: isGroup,
                 isConsecutive: isConsecutive,
                 mediaMessages: mediaMessages,
+                isCompact: isCompact,
               ),
             ),
           ],
@@ -967,6 +980,7 @@ class _MessageBubble extends ConsumerWidget {
     required this.isGroup,
     required this.isConsecutive,
     required this.mediaMessages,
+    required this.isCompact,
   });
 
   final MessageEntity message;
@@ -975,9 +989,11 @@ class _MessageBubble extends ConsumerWidget {
   final bool isGroup;
   final bool isConsecutive;
   final List<MessageEntity> mediaMessages;
+  final bool isCompact;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final double scale = isCompact ? 0.85 : 1.0;
     final bubbleColor = isMe
         ? AppColors.primary
         : AppColors.secondaryColor(context);
@@ -1012,10 +1028,14 @@ class _MessageBubble extends ConsumerWidget {
     }
 
     final bubbleRadius = BorderRadius.only(
-      topLeft: Radius.circular(isMe ? 18 : (isConsecutive ? 4 : 18)),
-      topRight: Radius.circular(isMe ? (isConsecutive ? 4 : 18) : 18),
-      bottomLeft: Radius.circular(isMe ? 18 : 4),
-      bottomRight: Radius.circular(isMe ? 4 : 18),
+      topLeft: Radius.circular(
+        isMe ? 18 * scale : (isConsecutive ? 4 * scale : 18 * scale),
+      ),
+      topRight: Radius.circular(
+        isMe ? (isConsecutive ? 4 * scale : 18 * scale) : 18 * scale,
+      ),
+      bottomLeft: Radius.circular(isMe ? 18 * scale : 4 * scale),
+      bottomRight: Radius.circular(isMe ? 4 * scale : 18 * scale),
     );
 
     Color getSenderColor(String senderId) {
@@ -1070,16 +1090,16 @@ class _MessageBubble extends ConsumerWidget {
           child: Container(
             decoration: BoxDecoration(
               border: Border.all(color: AppColors.borderColor(context)),
-              borderRadius: BorderRadius.circular(20),
+              borderRadius: BorderRadius.circular(20 * scale),
             ),
             child: ClipRRect(
-              borderRadius: BorderRadius.circular(20),
+              borderRadius: BorderRadius.circular(20 * scale),
               child: Stack(
                 alignment: Alignment.bottomRight,
                 children: [
                   // 🖼️ Media Content
                   SizedBox(
-                    height: 200,
+                    height: 200 * scale,
                     width: double.infinity,
                     child: message.mediaType == 'image'
                         ? (message.localFilePath != null
@@ -1093,7 +1113,7 @@ class _MessageBubble extends ConsumerWidget {
                                   salt: message.encryptionSalt ?? '',
                                   chatId: message.chatId,
                                   placeholder: Container(
-                                    height: 200,
+                                    height: 200 * scale,
                                     color: AppColors.surface(context, level: 2),
                                     child: const Center(
                                       child: SizedBox(
@@ -1107,10 +1127,10 @@ class _MessageBubble extends ConsumerWidget {
                                   ),
                                 ))
                         : Container(
-                            height: 200,
+                            height: 200 * scale,
                             color: AppColors.surface(context, level: 2),
-                            child: const Center(
-                              child: Icon(LucideIcons.video, size: 40),
+                            child: Center(
+                              child: Icon(LucideIcons.video, size: 40 * scale),
                             ),
                           ),
                   ),
@@ -1161,29 +1181,33 @@ class _MessageBubble extends ConsumerWidget {
                           }
                         : null,
                     child: Container(
-                      margin: const EdgeInsets.all(8),
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 4,
+                      margin: EdgeInsets.all(8 * scale),
+                      padding: EdgeInsets.symmetric(
+                        horizontal: 8 * scale,
+                        vertical: 4 * scale,
                       ),
                       decoration: BoxDecoration(
                         color: Colors.black.withValues(alpha: 0.5),
-                        borderRadius: BorderRadius.circular(12),
+                        borderRadius: BorderRadius.circular(12 * scale),
                       ),
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           Text(
                             timeString,
-                            style: const TextStyle(
+                            style: TextStyle(
                               color: Colors.white,
-                              fontSize: 10,
+                              fontSize: 10 * scale,
                               fontWeight: FontWeight.w500,
                             ),
                           ),
                           if (isMe) ...[
                             const SizedBox(width: 4),
-                            _DeliveryIcon(message: message, isMe: true),
+                            _DeliveryIcon(
+                              message: message,
+                              isMe: true,
+                              isCompact: isCompact,
+                            ),
                           ],
                         ],
                       ),
@@ -1197,7 +1221,10 @@ class _MessageBubble extends ConsumerWidget {
       );
     } else {
       bubbleContent = Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        padding: EdgeInsets.symmetric(
+          horizontal: 12 * scale,
+          vertical: 6 * scale,
+        ),
         decoration: BoxDecoration(
           color: bubbleColor,
           borderRadius: bubbleRadius,
@@ -1212,18 +1239,18 @@ class _MessageBubble extends ConsumerWidget {
                   member.name,
                   style: TextStyle(
                     fontWeight: FontWeight.bold,
-                    fontSize: 11,
+                    fontSize: 11 * scale,
                     color: getSenderColor(member.id),
                   ),
                 ),
-                const SizedBox(height: 3),
+                SizedBox(height: 3 * scale),
               ],
               if (message.text != null && message.text!.isNotEmpty)
                 _LinkifiedText(
                   text: message.text!,
                   style: AppTextStyles.bodyMedium.copyWith(
                     color: textColor,
-                    fontSize: 13,
+                    fontSize: 13 * scale,
                     height: 1.4,
                   ),
                   linkColor: isMe ? Colors.white : AppColors.primary,
@@ -1233,11 +1260,11 @@ class _MessageBubble extends ConsumerWidget {
                   '🔒 Encrypted message',
                   style: AppTextStyles.bodyMedium.copyWith(
                     color: textColor.withValues(alpha: 0.6),
-                    fontSize: 13,
+                    fontSize: 13 * scale,
                     fontStyle: FontStyle.italic,
                   ),
                 ),
-              const SizedBox(height: 1),
+              SizedBox(height: 1 * scale),
               Align(
                 alignment: Alignment.centerRight,
                 child: Row(
@@ -1246,7 +1273,7 @@ class _MessageBubble extends ConsumerWidget {
                     Text(
                       timeString,
                       style: AppTextStyles.bodySmall.copyWith(
-                        fontSize: 10,
+                        fontSize: 10 * scale,
                         color: isMe
                             ? Colors.white70
                             : AppColors.text(context, isMuted: true),
@@ -1254,7 +1281,11 @@ class _MessageBubble extends ConsumerWidget {
                     ),
                     if (isMe) ...[
                       const SizedBox(width: 4),
-                      _DeliveryIcon(message: message, isMe: isMe),
+                      _DeliveryIcon(
+                        message: message,
+                        isMe: isMe,
+                        isCompact: isCompact,
+                      ),
                     ],
                   ],
                 ),
@@ -1274,20 +1305,23 @@ class _MessageBubble extends ConsumerWidget {
           children: [
             if (!isConsecutive && member != null)
               Padding(
-                padding: const EdgeInsets.only(right: 8.0, bottom: 4.0),
+                padding: EdgeInsets.only(
+                  right: 8.0 * scale,
+                  bottom: 4.0 * scale,
+                ),
                 child: KovariAvatar(
                   imageUrl: member.avatar,
-                  size: 28,
+                  size: 28 * scale,
                   fullName: member.name,
                 ),
               )
             else
-              const SizedBox(width: 36),
+              SizedBox(width: 36 * scale),
             Flexible(
               child: Container(
-                margin: const EdgeInsets.symmetric(vertical: 2),
+                margin: EdgeInsets.symmetric(vertical: 2 * scale),
                 constraints: BoxConstraints(
-                  maxWidth: MediaQuery.of(context).size.width * 0.65,
+                  maxWidth: MediaQuery.of(context).size.width * 0.65 * scale,
                 ),
                 child: bubbleContent,
               ),
@@ -1300,9 +1334,9 @@ class _MessageBubble extends ConsumerWidget {
     return Align(
       alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
       child: Container(
-        margin: const EdgeInsets.symmetric(vertical: 2),
+        margin: EdgeInsets.symmetric(vertical: 2 * scale),
         constraints: BoxConstraints(
-          maxWidth: MediaQuery.of(context).size.width * 0.75,
+          maxWidth: MediaQuery.of(context).size.width * 0.75 * scale,
         ),
         child: bubbleContent,
       ),
@@ -1313,10 +1347,15 @@ class _MessageBubble extends ConsumerWidget {
 // ── Delivery Status Icon ────────────────────────────────────────────────────
 
 class _DeliveryIcon extends ConsumerWidget {
-  const _DeliveryIcon({required this.message, required this.isMe});
+  const _DeliveryIcon({
+    required this.message,
+    required this.isMe,
+    this.isCompact = false,
+  });
 
   final MessageEntity message;
   final bool isMe;
+  final bool isCompact;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -1374,13 +1413,13 @@ class _DeliveryIcon extends ConsumerWidget {
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(icon, size: 12, color: color),
+              Icon(icon, size: isCompact ? 10 : 12, color: color),
               const SizedBox(width: 4),
               Text(
                 'Tap to retry',
                 style: TextStyle(
                   color: color,
-                  fontSize: 10,
+                  fontSize: isCompact ? 9 : 10,
                   fontWeight: FontWeight.w600,
                 ),
               ),
@@ -1390,7 +1429,7 @@ class _DeliveryIcon extends ConsumerWidget {
       );
     }
 
-    return Icon(icon, size: 12, color: color);
+    return Icon(icon, size: isCompact ? 10 : 12, color: color);
   }
 }
 
@@ -1539,6 +1578,7 @@ class _InputBar extends ConsumerWidget {
     required this.isSending,
     required this.onChanged,
     required this.onSend,
+    required this.isCompact,
   });
 
   final String chatId;
@@ -1548,6 +1588,7 @@ class _InputBar extends ConsumerWidget {
   final bool isSending;
   final ValueChanged<String> onChanged;
   final VoidCallback onSend;
+  final bool isCompact;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -1556,8 +1597,15 @@ class _InputBar extends ConsumerWidget {
       context,
     ).withValues(alpha: 0.5); // Absolute match with bottom nav surface
 
+    final double scale = isCompact ? 0.85 : 1.0;
+
     return Container(
-      padding: EdgeInsets.fromLTRB(16, 6, 16, 10 + bottomPad),
+      padding: EdgeInsets.fromLTRB(
+        16 * scale,
+        6 * scale,
+        16 * scale,
+        10 * scale + bottomPad,
+      ),
       decoration: const BoxDecoration(color: Colors.transparent),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
@@ -1639,28 +1687,29 @@ class _InputBar extends ConsumerWidget {
             },
             backgroundColor: pillBg,
             iconColor: AppColors.text(context, isMuted: true),
+            isCompact: isCompact,
           ),
-          const SizedBox(width: 8),
+          SizedBox(width: 8 * scale),
 
           Expanded(
             child: GestureDetector(
               onTap: () => focusNode.requestFocus(),
               behavior: HitTestBehavior.opaque,
               child: ClipRRect(
-                borderRadius: BorderRadius.circular(20),
+                borderRadius: BorderRadius.circular(20 * scale),
                 child: BackdropFilter(
                   filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
                   child: Container(
-                    constraints: const BoxConstraints(minHeight: 40),
+                    constraints: BoxConstraints(minHeight: 40 * scale),
                     decoration: BoxDecoration(
                       color: pillBg,
-                      borderRadius: BorderRadius.circular(20),
+                      borderRadius: BorderRadius.circular(20 * scale),
                       border: Border.all(
                         color: AppColors.borderColor(context),
                         width: 1,
                       ),
                     ),
-                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    padding: EdgeInsets.symmetric(horizontal: 12 * scale),
                     child: Row(
                       crossAxisAlignment: CrossAxisAlignment.center,
                       children: [
@@ -1677,7 +1726,7 @@ class _InputBar extends ConsumerWidget {
                             cursorColor: AppColors.primary,
                             style: AppTextStyles.bodyMedium.copyWith(
                               color: AppColors.text(context),
-                              fontSize: 14,
+                              fontSize: 14 * scale,
                             ),
                             decoration: InputDecoration(
                               isDense: true,
@@ -1686,7 +1735,7 @@ class _InputBar extends ConsumerWidget {
                               hintText: 'Message',
                               hintStyle: AppTextStyles.bodyMedium.copyWith(
                                 color: AppColors.text(context, isMuted: true),
-                                fontSize: 12,
+                                fontSize: 12 * scale,
                               ),
                               border: InputBorder.none,
                               enabledBorder: InputBorder.none,
@@ -1702,7 +1751,7 @@ class _InputBar extends ConsumerWidget {
               ),
             ),
           ),
-          const SizedBox(width: 8),
+          SizedBox(width: 8 * scale),
 
           // Action Button (Send or Camera)
           _ActionPod(
@@ -1710,6 +1759,7 @@ class _InputBar extends ConsumerWidget {
             onPressed: isSending ? null : onSend,
             backgroundColor: pillBg,
             iconColor: AppColors.text(context, isMuted: true),
+            isCompact: isCompact,
           ),
         ],
       ),
@@ -1724,6 +1774,7 @@ class _ActionPod extends StatelessWidget {
     required this.backgroundColor,
     this.iconColor,
     this.iconSize,
+    this.isCompact = false,
   });
 
   final IconData icon;
@@ -1731,9 +1782,12 @@ class _ActionPod extends StatelessWidget {
   final Color backgroundColor;
   final Color? iconColor;
   final double? iconSize;
+  final bool isCompact;
 
   @override
   Widget build(BuildContext context) {
+    final double scale = isCompact ? 0.85 : 1.0;
+    final double sizeVal = 40 * scale;
     return GestureDetector(
       onTap: () {
         if (onPressed != null) {
@@ -1745,8 +1799,8 @@ class _ActionPod extends StatelessWidget {
         child: BackdropFilter(
           filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
           child: Container(
-            width: 40,
-            height: 40,
+            width: sizeVal,
+            height: sizeVal,
             decoration: BoxDecoration(
               color: backgroundColor,
               shape: BoxShape.circle,
@@ -1760,7 +1814,7 @@ class _ActionPod extends StatelessWidget {
                 icon,
                 color:
                     iconColor ?? AppColors.text(context).withValues(alpha: 0.8),
-                size: iconSize ?? 16,
+                size: iconSize ?? (16 * scale),
               ),
             ),
           ),
