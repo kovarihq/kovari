@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:mobile/core/navigation/routes.dart';
 import 'package:mobile/core/providers/auth_provider.dart';
@@ -205,7 +206,7 @@ class ProfileScreen extends ConsumerWidget {
                   'Explore',
                   onPressed: () {
                     // Navigate to the Explore tab (index 1)
-                    ref.read(appShellIndexProvider.notifier).setIndex(1);
+                    StatefulNavigationShell.of(context).goBranch(1);
                   },
                   backgroundColor: AppColors.secondaryColor(context),
                   textColor: AppColors.text(context),
