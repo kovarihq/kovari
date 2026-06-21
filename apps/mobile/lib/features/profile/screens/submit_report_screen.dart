@@ -230,6 +230,7 @@ class _SubmitReportScreenState extends ConsumerState<SubmitReportScreen> {
         centerTitle: false,
         leadingWidth: 100,
         leading: GestureDetector(
+          behavior: HitTestBehavior.opaque,
           onTap: () => context.pop(),
           child: Container(
             padding: const EdgeInsets.only(left: 8),

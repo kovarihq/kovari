@@ -275,8 +275,11 @@ class ExploreNotifier extends Notifier<ExploreState> {
     }
   }
 
+  final Set<String> _pendingSwipes = {};
+
   Future<void> handlePass(String matchId) async {
-    if (_userId == null || state.isPending) return;
+    if (_userId == null || _pendingSwipes.contains(matchId)) return;
+    _pendingSwipes.add(matchId);
 
     final prevState = state;
     _removeMatchAndSyncLedger(matchId);
@@ -292,15 +295,20 @@ class ExploreNotifier extends Notifier<ExploreState> {
         isSolo: state.searchData.travelMode == TravelMode.solo,
       );
     } catch (e) {
+      // Revert if error occurs (optional, but keep deck clean)
       state = prevState.copyWith(error: 'Failed to pass: $e');
+    } finally {
+      _pendingSwipes.remove(matchId);
     }
   }
 
   Future<void> handleInterested(String matchId) async {
-    if (_userId == null || state.isPending) return;
+    if (_userId == null || _pendingSwipes.contains(matchId)) return;
+    _pendingSwipes.add(matchId);
 
     final prevState = state;
-    state = state.copyWith(isPending: true);
+    // Optimistically remove card instantly from the deck
+    _removeMatchAndSyncLedger(matchId);
 
     try {
       await _service.sendInterest(
@@ -312,13 +320,12 @@ class ExploreNotifier extends Notifier<ExploreState> {
         destinationId: state.searchData.destination,
         isSolo: state.searchData.travelMode == TravelMode.solo,
       );
-      state = state.copyWith(isPending: false);
-      _removeMatchAndSyncLedger(matchId);
     } catch (e) {
       state = prevState.copyWith(
         error: 'Failed to express interest: $e',
-        isPending: false,
       );
+    } finally {
+      _pendingSwipes.remove(matchId);
     }
   }
 }

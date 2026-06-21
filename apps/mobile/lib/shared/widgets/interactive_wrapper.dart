@@ -72,7 +72,7 @@ class _InteractiveWrapperState extends State<InteractiveWrapper>
     super.dispose();
   }
 
-  Future<void> _handleTapDown(TapDownDetails details) async {
+  void _handleTapDown(TapDownDetails details) {
     if (widget.isDisabled ||
         widget.isLoading ||
         widget.onPressed == null ||
@@ -80,9 +80,9 @@ class _InteractiveWrapperState extends State<InteractiveWrapper>
       return;
     }
 
-    await _controller.forward();
+    _controller.forward();
     setState(() => _isTapped = true);
-    await HapticService.trigger(widget.hapticType);
+    HapticService.trigger(widget.hapticType);
   }
 
   void _handleTapCancel() {
@@ -152,24 +152,26 @@ class _InteractiveWrapperState extends State<InteractiveWrapper>
       return;
     }
 
-    // Deliberate delay to allow the InkRipple to "bloom" fully and provide high-fidelity feedback
-    await Future<void>.delayed(const Duration(milliseconds: 120));
+    // Call the click handler immediately for instantaneous action
+    final action = widget.onPressed?.call();
 
-    await _controller.reverse();
+    // Reset visual press states
+    _controller.reverse();
     setState(() {
       _isTapped = false;
       _isDebouncing = true;
     });
 
     try {
-      await widget.onPressed?.call();
+      if (action is Future) {
+        await action;
+      }
     } finally {
       if (mounted) {
-        unawaited(
-          Future<void>.delayed(const Duration(milliseconds: 300), () {
-            if (mounted) setState(() => _isDebouncing = false);
-          }),
-        );
+        // Short debounce (100ms) to prevent rapid double clicks while keeping buttons fully clickable
+        Future<void>.delayed(const Duration(milliseconds: 100), () {
+          if (mounted) setState(() => _isDebouncing = false);
+        });
       }
     }
   }

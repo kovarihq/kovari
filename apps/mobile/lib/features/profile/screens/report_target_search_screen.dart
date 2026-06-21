@@ -92,6 +92,7 @@ class _ReportTargetSearchScreenState
     );
 
   Widget _buildBackButton(BuildContext context) => GestureDetector(
+      behavior: HitTestBehavior.opaque,
       onTap: () => context.pop(),
       child: Container(
         padding: const EdgeInsets.all(8),

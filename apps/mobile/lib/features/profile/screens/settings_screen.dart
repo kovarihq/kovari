@@ -355,6 +355,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen>
     );
 
   Widget _buildBackButton(BuildContext context) => GestureDetector(
+      behavior: HitTestBehavior.opaque,
       onTap: () {
         HapticService.selection();
         context.pop();
