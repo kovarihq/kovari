@@ -88,7 +88,7 @@ class KovariBottomNav extends ConsumerWidget {
                     horizontal: 2,
                   ), // Added for corner breathing room
                   decoration: BoxDecoration(
-                    color: Colors.transparent,
+                    color: AppColors.cardColor(context),
                     borderRadius: BorderRadius.circular(40),
                     border: Border.all(color: AppColors.borderColor(context)),
                   ),

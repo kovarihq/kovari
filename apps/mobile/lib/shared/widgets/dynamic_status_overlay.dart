@@ -93,7 +93,9 @@ class _DynamicStatusOverlayState extends ConsumerState<DynamicStatusOverlay> {
 
     // 💎 Social-Elite: Position below header on Chat screen
     final baseTop = isChatScreen ? (safeTop + 48.0) : null;
-    final baseBottom = isChatScreen ? null : (isNavBarVisible ? (70.0 + safeBottom) : (6.0 + safeBottom));
+    final baseBottom = isChatScreen
+        ? null
+        : (isNavBarVisible ? (70.0 + safeBottom) : (6.0 + safeBottom));
 
     // Combine manual and system
     final allItems = [..._displayList, ...systemStatuses];
@@ -107,8 +109,9 @@ class _DynamicStatusOverlayState extends ConsumerState<DynamicStatusOverlay> {
       right: 16,
       child: Column(
         mainAxisSize: MainAxisSize.min,
-        verticalDirection:
-            isChatScreen ? VerticalDirection.down : VerticalDirection.up,
+        verticalDirection: isChatScreen
+            ? VerticalDirection.down
+            : VerticalDirection.up,
         children: allItems.map((status) {
           final isManual = _displayList.contains(status);
           final isStillActive = isManual
@@ -160,7 +163,7 @@ class _DynamicStatusOverlayState extends ConsumerState<DynamicStatusOverlay> {
                               vertical: 10,
                             ),
                             decoration: BoxDecoration(
-                              color: Colors.transparent,
+                              color: AppColors.cardColor(context),
                               borderRadius: BorderRadius.circular(24),
                               border: Border.all(
                                 color: AppColors.borderColor(context),
@@ -208,7 +211,6 @@ class _DynamicStatusOverlayState extends ConsumerState<DynamicStatusOverlay> {
 }
 
 class _StatusPillContent extends StatelessWidget {
-
   const _StatusPillContent({
     super.key,
     required this.icon,
@@ -227,55 +229,55 @@ class _StatusPillContent extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => GestureDetector(
-      onTap: onAction,
-      behavior: HitTestBehavior.opaque,
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          _buildIcon(context),
-          const SizedBox(width: 10),
-          Flexible(
-            child: Text(
-              label,
-              style: AppTextStyles.bodySmall.copyWith(
-                color: AppColors.text(context, isMuted: true),
-                fontSize: 14,
-                fontWeight: FontWeight.w600,
-                decoration: TextDecoration.none,
-              ),
-              maxLines: 4, // Allow up to 4 lines for details
+    onTap: onAction,
+    behavior: HitTestBehavior.opaque,
+    child: Row(
+      mainAxisSize: MainAxisSize.min,
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        _buildIcon(context),
+        const SizedBox(width: 10),
+        Flexible(
+          child: Text(
+            label,
+            style: AppTextStyles.bodySmall.copyWith(
+              color: AppColors.text(context, isMuted: true),
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
+              decoration: TextDecoration.none,
+            ),
+            maxLines: 4, // Allow up to 4 lines for details
+          ),
+        ),
+        if (onAction != null) ...[
+          const SizedBox(width: 8),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+            decoration: BoxDecoration(
+              color: accentColor.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(6),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  actionLabel ?? 'Action',
+                  style: AppTextStyles.bodySmall.copyWith(
+                    color: accentColor,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w800,
+                    decoration: TextDecoration.none,
+                  ),
+                ),
+                const SizedBox(width: 2),
+                Icon(LucideIcons.chevronRight, size: 14, color: accentColor),
+              ],
             ),
           ),
-          if (onAction != null) ...[
-            const SizedBox(width: 8),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-              decoration: BoxDecoration(
-                color: accentColor.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(6),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    actionLabel ?? 'Action',
-                    style: AppTextStyles.bodySmall.copyWith(
-                      color: accentColor,
-                      fontSize: 14,
-                      fontWeight: FontWeight.w800,
-                      decoration: TextDecoration.none,
-                    ),
-                  ),
-                  const SizedBox(width: 2),
-                  Icon(LucideIcons.chevronRight, size: 14, color: accentColor),
-                ],
-              ),
-            ),
-          ],
         ],
-      ),
-    );
+      ],
+    ),
+  );
 
   Widget _buildIcon(BuildContext context) {
     if (isSpinning) {
@@ -296,7 +298,6 @@ class _StatusPillContent extends StatelessWidget {
 }
 
 class _SwipeToDismiss extends StatefulWidget {
-
   const _SwipeToDismiss({
     super.key,
     required this.child,
