@@ -252,7 +252,7 @@ async function filterInteractedMatches(userId: string, matches: any[]) {
 
   // 3. Filter out if m.userId matches EITHER a UUID or a Clerk ID
   return matches.filter(m => {
-    const id = m.userId;
+    const id = m.userId || m.id;
     if (!id) return true;
     return !excludeUuidSet.has(id) && !clerkIds.has(id);
   });

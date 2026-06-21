@@ -8,10 +8,23 @@ import 'package:mobile/features/explore/services/explore_service.dart';
 import 'package:mobile/features/explore/services/match_service.dart';
 import 'package:mobile/shared/models/kovari_user.dart';
 
+/// Discovery-feed state management following the Hinge/Bumble architecture:
+///
+///  ┌─────────────────────────────────────────────────────────────────┐
+///  │  Hinge / Bumble model                                            │
+///  │  1. Server always returns fresh-filtered candidates.             │
+///  │  2. Client keeps a PERSISTENT "seen" ledger (user IDs only).    │
+///  │  3. Fetched candidates are double-filtered client-side against   │
+///  │     the ledger — defense-in-depth against cache/lag.            │
+///  │  4. Discovery feed is NEVER cached on the client (ignoreCache). │
+///  │  5. Tab switches restore the IN-MEMORY deck; do NOT re-fetch.   │
+///  └─────────────────────────────────────────────────────────────────┘
 class ExploreNotifier extends Notifier<ExploreState> {
   @override
   ExploreState build() {
-    final cache = ref.read(localCacheProvider);
+    // Start with an empty deck — discovery feed is never pre-loaded from cache.
+    // We do NOT seed state.matches from Hive here because that data is stale and
+    // contains users that may have already been swiped.
     final initialSearch = SearchData(
       destination: '',
       budget: 20000,
@@ -21,29 +34,29 @@ class ExploreNotifier extends Notifier<ExploreState> {
     );
     final initialFilters = ExploreFilters.initial();
 
-    final cacheKey =
-        'matches_${initialSearch.travelMode.name}_${initialSearch.destination}';
-    List<dynamic>? cachedMatches;
-    try {
-      cachedMatches = cache.getEntities(cacheKey);
-    } catch (_) {}
-
     return ExploreState(
       searchData: initialSearch,
       filters: initialFilters,
-      matches: cachedMatches ?? [],
+      matches: const [],
       currentIndex: 0,
       isLoading: false,
-      hasSearched: cachedMatches != null && cachedMatches.isNotEmpty,
+      hasSearched: false,
       page: 1,
       hasMore: true,
+      soloMatches: const [],
+      soloCurrentIndex: 0,
+      soloPage: 1,
+      soloHasMore: true,
+      groupMatches: const [],
+      groupCurrentIndex: 0,
+      groupPage: 1,
+      groupHasMore: true,
     );
   }
 
   ExploreService get _service => ref.read(exploreServiceProvider);
   MatchService get _matchService => ref.read(matchServiceProvider);
   KovariUser? get _user => ref.watch(authStateProvider);
-
   String? get _userId => _user?.id;
 
   void updateSearchData(SearchData searchData) {
@@ -54,24 +67,25 @@ class ExploreNotifier extends Notifier<ExploreState> {
     state = state.copyWith(filters: filters);
   }
 
+  /// Switch between Solo and Group travel modes.
+  ///
+  /// Restores the in-memory deck for the target mode — swiped cards stay gone.
+  /// Does NOT re-fetch if the mode already has an in-memory deck.
   void setTravelMode(TravelMode mode) {
-    final cache = ref.read(localCacheProvider);
-    final cacheKey = 'matches_${mode.name}_${state.searchData.destination}';
-    List<dynamic>? cached;
-    try {
-      cached = cache.getEntities(cacheKey);
-    } catch (_) {}
+    if (state.searchData.travelMode == mode) return;
 
     state = state.copyWith(
       searchData: state.searchData.copyWith(travelMode: mode),
-      hasSearched: cached != null && cached.isNotEmpty,
-      matches: cached ?? [],
-      currentIndex: 0,
-      page: 1,
-      hasMore: true,
+      isLoading: false,
+      error: null,
+      isFetchingNextPage: false,
     );
 
-    performSearch(isSilent: cached != null && cached.isNotEmpty);
+    // Only hit the server if this mode has no in-memory deck yet.
+    // If we have a deck (even empty after swiping everything), trust it.
+    if (state.matches.isEmpty && !state.hasSearched) {
+      performSearch();
+    }
   }
 
   void searchWithoutDestination() {
@@ -81,53 +95,41 @@ class ExploreNotifier extends Notifier<ExploreState> {
       destinationDetails: null,
     );
 
-    final cache = ref.read(localCacheProvider);
-    final cacheKey = 'matches_${updatedSearch.travelMode.name}_';
-    List<dynamic>? cached;
-    try {
-      cached = cache.getEntities(cacheKey);
-    } catch (_) {}
-
     state = state.copyWith(
       searchData: updatedSearch,
       filters: defaultFilters,
-      matches: cached ?? [],
+      matches: const [],
       currentIndex: 0,
       page: 1,
       hasMore: true,
-      hasSearched: cached != null && cached.isNotEmpty,
+      hasSearched: false,
     );
 
-    performSearch(isSilent: cached != null && cached.isNotEmpty);
+    performSearch();
   }
 
+  /// Fetch candidates from the server.
+  ///
+  /// The server runs [filterInteractedMatches] on every request.
+  /// We additionally apply the local seen-user ledger client-side as a
+  /// second filter to handle any propagation lag (same as Hinge/Bumble).
   Future<void> performSearch({
     bool isRefresh = false,
     bool isLoadMore = false,
     bool isSilent = false,
   }) async {
     final userId = _userId ?? 'dummy-user-id';
+    final mode = state.searchData.travelMode;
 
     if (isLoadMore && state.isFetchingNextPage) return;
 
-    if (!isRefresh && !isLoadMore && !isSilent && state.matches.isNotEmpty) {
-      if (state.lastFetchTime != null &&
-          state.searchData.travelMode == TravelMode.solo) {
-        if (DateTime.now().difference(state.lastFetchTime!).inSeconds < 30) {
-          return; // Cache valid and we already have matches
-        }
-      }
-    }
-
     if (isLoadMore) {
-      if (!state.hasMore || state.searchData.travelMode != TravelMode.solo) {
-        return;
-      }
+      if (!state.hasMore || mode != TravelMode.solo) return;
       state = state.copyWith(isFetchingNextPage: true);
     } else if (!isSilent) {
       state = state.copyWith(
         isLoading: true,
-        matches: [],
+        matches: const [],
         currentIndex: 0,
         page: 1,
         hasMore: true,
@@ -139,7 +141,10 @@ class ExploreNotifier extends Notifier<ExploreState> {
       var newHasMore = state.hasMore;
       var newPage = state.page;
 
-      if (state.searchData.travelMode == TravelMode.solo) {
+      // Load the local seen-ledger once per fetch for O(1) lookups below.
+      final seenIds = ref.read(localCacheProvider).getSeenUsers();
+
+      if (mode == TravelMode.solo) {
         if (!isLoadMore) {
           await _service.createSession(state.searchData, userId);
         }
@@ -150,7 +155,17 @@ class ExploreNotifier extends Notifier<ExploreState> {
           filters: state.filters,
         );
 
-        final List<MatchUser> fetchedMatches = result.matches.cast<MatchUser>();
+        List<MatchUser> fetchedMatches = result.matches.cast<MatchUser>();
+
+        // Client-side dedup: strip any user that is in our seen ledger.
+        // This is the same defense-in-depth approach Hinge uses to handle
+        // the window between a swipe and the server cache being invalidated.
+        if (seenIds.isNotEmpty) {
+          fetchedMatches = fetchedMatches.where((m) {
+            return !seenIds.contains(m.id);
+          }).toList();
+        }
+
         fetchedMatches.sort((a, b) => (b.score ?? 0).compareTo(a.score ?? 0));
 
         if (isLoadMore) {
@@ -166,7 +181,21 @@ class ExploreNotifier extends Notifier<ExploreState> {
           state.searchData,
           state.filters,
         );
-        matches = result.matches;
+
+        // Apply seen-ledger filter for groups too.
+        var groupMatches = result.matches;
+        if (seenIds.isNotEmpty) {
+          groupMatches = groupMatches.where((m) {
+            try {
+              final dynamic item = m;
+              return !seenIds.contains(item.id as String?);
+            } catch (_) {
+              return true;
+            }
+          }).toList();
+        }
+
+        matches = groupMatches;
         newHasMore = result.hasMore;
       }
 
@@ -177,17 +206,6 @@ class ExploreNotifier extends Notifier<ExploreState> {
         hasMore: newHasMore,
         lastFetchTime: isLoadMore ? state.lastFetchTime : DateTime.now(),
       );
-
-      // Persist to cache
-      if (!isLoadMore) {
-        final cache = ref.read(localCacheProvider);
-        unawaited(
-          cache.setEntities(
-            'matches_${state.searchData.travelMode.name}_${state.searchData.destination}',
-            matches,
-          ),
-        );
-      }
     } catch (e) {
       state = state.copyWith(error: e.toString());
     } finally {
@@ -195,21 +213,65 @@ class ExploreNotifier extends Notifier<ExploreState> {
     }
   }
 
-  void nextMatch() {
-    if (state.currentIndex < state.matches.length - 1) {
-      state = state.copyWith(currentIndex: state.currentIndex + 1);
+  /// Remove a swiped card from the in-memory deck and record it in the
+  /// persistent seen-users ledger so it never resurfaces — even after an
+  /// app restart. This is the core of the Hinge/Bumble dedup mechanism.
+  void _removeMatchAndSyncLedger(String matchId) {
+    final updatedMatches = List<dynamic>.from(state.matches);
+    updatedMatches.removeWhere((m) {
+      if (m is MatchUser) {
+        return m.id == matchId;
+      }
+      try {
+        final dynamic item = m;
+        return (item.id as String?) == matchId;
+      } catch (_) {
+        return false;
+      }
+    });
 
-      if (state.searchData.travelMode == TravelMode.solo &&
-          state.currentIndex >= state.matches.length - 3 &&
-          state.hasMore) {
-        performSearch(isLoadMore: true);
-      }
-    } else {
-      if (state.searchData.travelMode == TravelMode.solo && state.hasMore) {
-        performSearch(isLoadMore: true);
+    final idsToRecord = <String>[matchId];
+    try {
+      final swiped = state.matches.firstWhere((m) {
+        if (m is MatchUser) {
+          return m.id == matchId;
+        }
+        try {
+          final dynamic item = m;
+          return (item.id as String?) == matchId;
+        } catch (_) {
+          return false;
+        }
+      });
+      if (swiped is MatchUser) {
+        if (swiped.id.isNotEmpty && swiped.id != matchId) {
+          idsToRecord.add(swiped.id);
+        }
       } else {
-        state = state.copyWith(matches: [], currentIndex: 0);
+        final dynamic s = swiped;
+        if (s.id != null && s.id != matchId) idsToRecord.add(s.id as String);
       }
+    } catch (_) {}
+
+    int newIndex = state.currentIndex;
+    if (updatedMatches.isEmpty) {
+      newIndex = 0;
+    } else if (newIndex >= updatedMatches.length) {
+      newIndex = updatedMatches.length - 1;
+    }
+
+    state = state.copyWith(matches: updatedMatches, currentIndex: newIndex);
+
+    // Persist to seen-users ledger — the source of truth for dedup.
+    final cache = ref.read(localCacheProvider);
+    unawaited(cache.addSeenUsers(idsToRecord));
+
+    // Auto-load more when the deck is running low (solo only).
+    if (state.searchData.travelMode == TravelMode.solo &&
+        updatedMatches.length - newIndex <= 3 &&
+        state.hasMore &&
+        !state.isFetchingNextPage) {
+      performSearch(isLoadMore: true);
     }
   }
 
@@ -217,18 +279,15 @@ class ExploreNotifier extends Notifier<ExploreState> {
     if (_userId == null || state.isPending) return;
 
     final prevState = state;
-    // Optimistic Update
-    nextMatch();
+    _removeMatchAndSyncLedger(matchId);
 
     try {
       await _service.skipMatch(
         skipperId: _userId!,
-        skippedUserId: state.searchData.travelMode == TravelMode.solo
-            ? matchId
-            : null,
-        skippedGroupId: state.searchData.travelMode == TravelMode.group
-            ? matchId
-            : null,
+        skippedUserId:
+            state.searchData.travelMode == TravelMode.solo ? matchId : null,
+        skippedGroupId:
+            state.searchData.travelMode == TravelMode.group ? matchId : null,
         destinationId: state.searchData.destination,
         isSolo: state.searchData.travelMode == TravelMode.solo,
       );
@@ -246,17 +305,15 @@ class ExploreNotifier extends Notifier<ExploreState> {
     try {
       await _service.sendInterest(
         fromUserId: _userId!,
-        toUserId: state.searchData.travelMode == TravelMode.solo
-            ? matchId
-            : null,
-        toGroupId: state.searchData.travelMode == TravelMode.group
-            ? matchId
-            : null,
+        toUserId:
+            state.searchData.travelMode == TravelMode.solo ? matchId : null,
+        toGroupId:
+            state.searchData.travelMode == TravelMode.group ? matchId : null,
         destinationId: state.searchData.destination,
         isSolo: state.searchData.travelMode == TravelMode.solo,
       );
       state = state.copyWith(isPending: false);
-      nextMatch();
+      _removeMatchAndSyncLedger(matchId);
     } catch (e) {
       state = prevState.copyWith(
         error: 'Failed to express interest: $e',

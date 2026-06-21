@@ -102,17 +102,32 @@ class ExploreState {
   ExploreState({
     required this.searchData,
     required this.filters,
-    required this.matches,
-    required this.currentIndex,
+    required List<dynamic> matches,
+    required int currentIndex,
     required this.isLoading,
     this.error,
     required this.hasSearched,
     this.lastFetchTime,
-    required this.page,
-    required this.hasMore,
+    required int page,
+    required bool hasMore,
     this.isPending = false,
     this.isFetchingNextPage = false,
-  });
+    List<dynamic>? soloMatches,
+    int? soloCurrentIndex,
+    int? soloPage,
+    bool? soloHasMore,
+    List<dynamic>? groupMatches,
+    int? groupCurrentIndex,
+    int? groupPage,
+    bool? groupHasMore,
+  })  : soloMatches = soloMatches ?? (searchData.travelMode == TravelMode.solo ? matches : const []),
+        soloCurrentIndex = soloCurrentIndex ?? (searchData.travelMode == TravelMode.solo ? currentIndex : 0),
+        soloPage = soloPage ?? (searchData.travelMode == TravelMode.solo ? page : 1),
+        soloHasMore = soloHasMore ?? (searchData.travelMode == TravelMode.solo ? hasMore : true),
+        groupMatches = groupMatches ?? (searchData.travelMode == TravelMode.group ? matches : const []),
+        groupCurrentIndex = groupCurrentIndex ?? (searchData.travelMode == TravelMode.group ? currentIndex : 0),
+        groupPage = groupPage ?? (searchData.travelMode == TravelMode.group ? page : 1),
+        groupHasMore = groupHasMore ?? (searchData.travelMode == TravelMode.group ? hasMore : true);
 
   factory ExploreState.initial() => ExploreState(
       searchData: SearchData(
@@ -132,16 +147,28 @@ class ExploreState {
     );
   final SearchData searchData;
   final ExploreFilters filters;
-  final List<dynamic> matches;
-  final int currentIndex;
+  
+  final List<dynamic> soloMatches;
+  final int soloCurrentIndex;
+  final int soloPage;
+  final bool soloHasMore;
+
+  final List<dynamic> groupMatches;
+  final int groupCurrentIndex;
+  final int groupPage;
+  final bool groupHasMore;
+
   final bool isLoading;
   final String? error;
   final bool hasSearched;
   final DateTime? lastFetchTime;
-  final int page;
-  final bool hasMore;
   final bool isPending;
   final bool isFetchingNextPage;
+
+  List<dynamic> get matches => searchData.travelMode == TravelMode.solo ? soloMatches : groupMatches;
+  int get currentIndex => searchData.travelMode == TravelMode.solo ? soloCurrentIndex : groupCurrentIndex;
+  int get page => searchData.travelMode == TravelMode.solo ? soloPage : groupPage;
+  bool get hasMore => searchData.travelMode == TravelMode.solo ? soloHasMore : groupHasMore;
 
   ExploreState copyWith({
     SearchData? searchData,
@@ -156,18 +183,42 @@ class ExploreState {
     bool? hasMore,
     bool? isPending,
     bool? isFetchingNextPage,
-  }) => ExploreState(
-      searchData: searchData ?? this.searchData,
+    List<dynamic>? soloMatches,
+    int? soloCurrentIndex,
+    int? soloPage,
+    bool? soloHasMore,
+    List<dynamic>? groupMatches,
+    int? groupCurrentIndex,
+    int? groupPage,
+    bool? groupHasMore,
+  }) {
+    final newSearchData = searchData ?? this.searchData;
+    final mode = newSearchData.travelMode;
+
+    return ExploreState(
+      searchData: newSearchData,
       filters: filters ?? this.filters,
-      matches: matches ?? this.matches,
-      currentIndex: currentIndex ?? this.currentIndex,
       isLoading: isLoading ?? this.isLoading,
       error: error,
       hasSearched: hasSearched ?? this.hasSearched,
       lastFetchTime: lastFetchTime ?? this.lastFetchTime,
-      page: page ?? this.page,
-      hasMore: hasMore ?? this.hasMore,
       isPending: isPending ?? this.isPending,
       isFetchingNextPage: isFetchingNextPage ?? this.isFetchingNextPage,
+      
+      matches: matches ?? this.matches,
+      currentIndex: currentIndex ?? this.currentIndex,
+      page: page ?? this.page,
+      hasMore: hasMore ?? this.hasMore,
+
+      soloMatches: soloMatches ?? (mode == TravelMode.solo && matches != null ? matches : this.soloMatches),
+      soloCurrentIndex: soloCurrentIndex ?? (mode == TravelMode.solo && currentIndex != null ? currentIndex : this.soloCurrentIndex),
+      soloPage: soloPage ?? (mode == TravelMode.solo && page != null ? page : this.soloPage),
+      soloHasMore: soloHasMore ?? (mode == TravelMode.solo && hasMore != null ? hasMore : this.soloHasMore),
+
+      groupMatches: groupMatches ?? (mode == TravelMode.group && matches != null ? matches : this.groupMatches),
+      groupCurrentIndex: groupCurrentIndex ?? (mode == TravelMode.group && currentIndex != null ? currentIndex : this.groupCurrentIndex),
+      groupPage: groupPage ?? (mode == TravelMode.group && page != null ? page : this.groupPage),
+      groupHasMore: groupHasMore ?? (mode == TravelMode.group && hasMore != null ? hasMore : this.groupHasMore),
     );
+  }
 }

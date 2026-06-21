@@ -1,13 +1,15 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { createAdminSupabaseClient } from "@kovari/api";
-import { auth } from "@clerk/nextjs/server";
+import { resolveUser } from "@/lib/auth/resolveUser";
+import { invalidateMatchingCache } from "@/lib/api/matching/cache";
 
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
   try {
-    const { userId: clerkUserId } = await auth();
-    if (!clerkUserId) {
+    const authResult = await resolveUser(request, { mode: 'protected' });
+    if (!authResult.ok || !authResult.user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
+    const reporterUuid = authResult.user.userId;
     const supabaseAdmin = createAdminSupabaseClient();
 
     const body = await request.json();
@@ -19,9 +21,6 @@ export async function POST(request: Request) {
       evidenceUrl,
       evidencePublicId,
     } = body;
-    
-    // Use authenticated user as reporter
-    const reporterId = clerkUserId;
 
     // Normalize type: 'solo' (legacy) -> 'user'
     const reportType =
@@ -40,9 +39,9 @@ export async function POST(request: Request) {
         ? evidenceUrl.trim()
         : null;
 
-    if (!reporterId || !targetIdentifier || !reason) {
+    if (!reporterUuid || !targetIdentifier || !reason) {
       console.error("Report API: Missing parameters", {
-        reporterId,
+        reporterUuid,
         targetIdentifier,
         reason,
         type: reportType,
@@ -77,16 +76,6 @@ export async function POST(request: Request) {
       if (error) throw error;
       return data?.id || null;
     };
-
-    const reporterUuid = await resolve(reporterId);
-
-    // Validating reporter
-    if (!reporterUuid) {
-      return NextResponse.json(
-        { success: false, error: "Invalid reporter ID" },
-        { status: 400 },
-      );
-    }
 
     let targetUuid = targetIdentifier;
     // For user/solo type, resolve the target user ID (in case it's a clerk ID)
@@ -156,6 +145,7 @@ export async function POST(request: Request) {
         console.error("Report API: Failed to send notification", notifError);
       }
 
+      await invalidateMatchingCache(reporterUuid);
       return NextResponse.json({ success: true, reportId: data.id });
     } else if (reportType === "group") {
       // Check duplicate in group_flags
@@ -212,6 +202,7 @@ export async function POST(request: Request) {
         console.error("Report API: Failed to send notification", notifError);
       }
 
+      await invalidateMatchingCache(reporterUuid);
       return NextResponse.json({ success: true, reportId: data.id });
     } else {
       // Unknown report type

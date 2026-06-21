@@ -60,9 +60,9 @@ class ApiEndpoints {
   static const exploreSession = 'session';
   static const matchSolo = 'match-solo';
   static const matchGroups = 'match-groups';
-  static const exploreInterest = 'explore/interest';
-  static const exploreSkip = 'explore/skip';
-  static const exploreReport = 'explore/report';
+  static const exploreInterest = 'matching/interest';
+  static const exploreSkip = 'matching/skip';
+  static const exploreReport = 'matching/report';
 
   // v1 Mobile Specific
   static String v1InviteInfo(String token) => 'v1/invite/$token';

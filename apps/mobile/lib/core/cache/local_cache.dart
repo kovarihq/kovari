@@ -39,6 +39,9 @@ class LocalCache {
   static Box<String>? _box;
   static Box<String>? _profileBox;
   static Box<String>? _entityBox;
+  // Persistent seen-users set: survives app restarts, drives discovery feed
+  // deduplication exactly like Hinge/Bumble's local interaction ledger.
+  static Box<String>? _seenUsersBox;
   final Map<String, CacheEntry> _memoryCache = {};
 
   Future<void> init() async {
@@ -46,8 +49,9 @@ class LocalCache {
       _box = await Hive.openBox<String>(_boxName);
       _profileBox = await Hive.openBox<String>('profile_cache');
       _entityBox = await Hive.openBox<String>('entity_cache');
+      _seenUsersBox = await Hive.openBox<String>('seen_users_v1');
       AppLogger.i(
-        'LocalCache initialized (API: ${_box?.length}, Profile: ${_profileBox?.length}, Entity: ${_entityBox?.length})',
+        'LocalCache initialized (API: ${_box?.length}, Profile: ${_profileBox?.length}, Entity: ${_entityBox?.length}, SeenUsers: ${_seenUsersBox?.length})',
       );
       _checkVersion();
     } catch (e) {
@@ -178,6 +182,7 @@ class LocalCache {
     await _box?.clear();
     await _profileBox?.clear();
     await _entityBox?.clear();
+    await _seenUsersBox?.clear();
     await _box?.put('__cache_version_key__', _currentVersion.toString());
   }
 
@@ -199,5 +204,26 @@ class LocalCache {
   List<dynamic>? getEntities(String key) {
     final data = _entityBox?.get(key);
     return data != null ? jsonDecode(data) as List<dynamic> : null;
+  }
+
+  // ── Seen-Users Ledger ────────────────────────────────────────────────────
+  // Mirrors how Hinge/Bumble track locally which profiles have been acted on.
+  // The ledger is keyed by userId so lookups are O(1).
+
+  /// Persist a batch of user IDs that have been swiped (in any direction).
+  Future<void> addSeenUsers(Iterable<String> ids) async {
+    if (_seenUsersBox == null || ids.isEmpty) return;
+    final entries = {for (final id in ids) id: '1'};
+    await _seenUsersBox!.putAll(entries);
+  }
+
+  /// Return the full set of seen user IDs.
+  Set<String> getSeenUsers() {
+    return _seenUsersBox?.keys.cast<String>().toSet() ?? {};
+  }
+
+  /// Remove all seen-user records (call on logout or manual reset).
+  Future<void> clearSeenUsers() async {
+    await _seenUsersBox?.clear();
   }
 }

@@ -149,13 +149,16 @@ class ExploreService {
       'fromUserId': fromUserId,
       'destinationId': destinationId,
     };
+    final String path;
     if (isSolo) {
       payload['toUserId'] = toUserId;
+      path = ApiEndpoints.exploreInterest;
     } else {
       payload['toGroupId'] = toGroupId;
+      path = 'groups/interest';
     }
     await _apiClient.post<void>(
-      ApiEndpoints.exploreInterest,
+      path,
       data: payload,
       parser: (_) {},
     );
@@ -172,12 +175,8 @@ class ExploreService {
       'skipperId': skipperId,
       'destinationId': destinationId,
       'type': isSolo ? 'solo' : 'group',
+      'skippedUserId': isSolo ? skippedUserId : skippedGroupId,
     };
-    if (isSolo) {
-      payload['skippedUserId'] = skippedUserId;
-    } else {
-      payload['toGroupId'] = skippedGroupId;
-    }
     await _apiClient.post<void>(
       ApiEndpoints.exploreSkip,
       data: payload,
@@ -195,13 +194,9 @@ class ExploreService {
     final payload = <String, dynamic>{
       'reporterId': reporterId,
       'reason': reason,
-      'type': isSolo ? 'solo' : 'group',
+      'type': isSolo ? 'user' : 'group',
+      'targetId': isSolo ? reportedUserId : reportedGroupId,
     };
-    if (isSolo) {
-      payload['reportedUserId'] = reportedUserId;
-    } else {
-      payload['reportedGroupId'] = reportedGroupId;
-    }
     await _apiClient.post<void>(
       ApiEndpoints.exploreReport,
       data: payload,

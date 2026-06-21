@@ -168,27 +168,35 @@ class SocketService extends Notifier<SocketState> {
       AppLogger.e('⚠️ [Socket] Connection error', error: err);
       state = SocketState.error;
 
-      // Handle invalid token / authentication error from socket server
+      // Handle invalid token / authentication error from socket server.
+      // IMPORTANT: We do NOT propagate auth failures up to logout() from here.
+      // A socket auth error is a transient condition (token just rotated, server
+      // restarted, etc.) — Instagram/WhatsApp never log you out for this.
       final errMsg = err.toString().toLowerCase();
       if (errMsg.contains('authentication error') ||
           errMsg.contains('invalid token')) {
         AppLogger.w(
-          '🔑 [Socket] Authentication error detected. Refreshing token...',
+          '🔑 [Socket] Auth error on connect. Attempting silent token refresh...',
         );
         try {
+          // Attempt a single silent refresh. authRepositoryProvider will NOT
+          // logout for SOCKET-CONN-REFRESH requests — it enters degraded mode
+          // instead. If the refresh succeeds we reconnect; if not we simply
+          // wait for the socket's built-in reconnect loop (up to 10 attempts).
           await ref
               .read(authRepositoryProvider)
               .refreshToken(requestId: 'SOCKET-CONN-REFRESH');
-          // If refresh was successful, reconnect
           AppLogger.i(
             '🔑 [Socket] Token refreshed successfully. Reconnecting...',
           );
           await reconnectWithToken();
         } catch (e) {
-          AppLogger.e(
-            '🔑 [Socket] Token refresh failed after connection error',
-            error: e,
+          AppLogger.w(
+            '🔑 [Socket] Silent refresh skipped or failed — socket reconnect loop will retry.',
           );
+          // Deliberately do NOT rethrow or call logout().
+          // The socket's built-in reconnection (10 attempts, 2 s delay) will
+          // keep retrying and pick up the new token when it's available.
         }
       }
     });

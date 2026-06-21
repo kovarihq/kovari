@@ -1,29 +1,28 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { createAdminSupabaseClient, AI } from "@kovari/api";
-import { auth } from "@clerk/nextjs/server";
+import { resolveUser } from "@/lib/auth/resolveUser";
 import { createNotification } from "@/lib/notifications/createNotification";
 import { NotificationType } from "@kovari/types";
 import { createClient } from "@supabase/supabase-js";
 import { assertUUID } from "@/lib/validation/uuid";
+import { invalidateMatchingCache } from "@/lib/api/matching/cache";
 
 const { logMatchEvent, createMatchEventLog } = AI.Logging;
 const { extractFeaturesForSoloMatch } = AI.FeatureExtraction;
 import { getSetting } from "@kovari/utils";
 
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
   try {
-    const { userId: clerkUserId } = await auth();
-    if (!clerkUserId) {
+    const authResult = await resolveUser(request, { mode: 'protected' });
+    if (!authResult.ok || !authResult.user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
+    const fromUuid = authResult.user.userId;
     const supabaseAdmin = createAdminSupabaseClient();
 
     const body = await request.json();
     const { toUserId } = body;
     const destinationId = body.destinationId || "Global";
-
-    // Use authenticated user as sender
-    const fromUserId = clerkUserId;
 
     if (!toUserId || !destinationId) {
       return NextResponse.json(
@@ -47,7 +46,6 @@ export async function POST(request: Request) {
       return data?.id || null;
     };
 
-    const fromUuid = await resolve(fromUserId);
     const toUuid = await resolve(toUserId);
     if (!fromUuid || !toUuid) {
       return NextResponse.json(
@@ -337,6 +335,9 @@ export async function POST(request: Request) {
         );
       }
     }
+
+    // Invalidate matching cache for the user who is expressing interest
+    await invalidateMatchingCache(fromUuid);
 
     return NextResponse.json({ success: true, interestId: data?.id });
   } catch (err: any) {

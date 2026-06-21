@@ -1,7 +1,8 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { createAdminSupabaseClient, AI } from "@kovari/api";
-import { auth } from "@clerk/nextjs/server";
+import { resolveUser } from "@/lib/auth/resolveUser";
 import { createClient } from "@supabase/supabase-js";
+import { invalidateMatchingCache } from "@/lib/api/matching/cache";
 
 const { logMatchEvent, createMatchEventLog } = AI.Logging;
 const { extractFeaturesForSoloMatch, extractFeaturesForGroupMatch } = AI.FeatureExtraction;
@@ -13,24 +14,22 @@ const SUPABASE_SERVICE_ROLE = process.env.SUPABASE_SERVICE_ROLE_KEY!;
 
 const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE);
 
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
   try {
-    const { userId: clerkUserId } = await auth();
-    if (!clerkUserId) {
+    const authResult = await resolveUser(request, { mode: 'protected' });
+    if (!authResult.ok || !authResult.user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
+    const skipperUuid = authResult.user.userId;
     const supabaseAdmin = createAdminSupabaseClient();
 
     const body = await request.json();
     const { skippedUserId, type = "solo" } = body;
     const destinationId = body.destinationId || "Global";
 
-    // Use authenticated user as skipper
-    const skipperId = clerkUserId;
-
-    if (!skipperId || !skippedUserId || !destinationId) {
+    if (!skipperUuid || !skippedUserId || !destinationId) {
       console.error("Skip API: Missing parameters", {
-        skipperId,
+        skipperUuid,
         skippedUserId,
         destinationId,
       });
@@ -56,21 +55,6 @@ export async function POST(request: Request) {
       if (error) throw error;
       return data?.id || null;
     };
-
-    const skipperUuid = await resolve(skipperId);
-    if (!skipperUuid) {
-      console.error("Skip API: Failed to resolve skipper UUID", {
-        skipperId,
-        skipperUuid,
-      });
-      return NextResponse.json(
-        {
-          success: false,
-          error: "Could not resolve skipper identifier to UUID",
-        },
-        { status: 400 }
-      );
-    }
 
     let skippedEntityId: string;
     
@@ -215,6 +199,9 @@ export async function POST(request: Request) {
       // Don't fail the skip operation if logging fails
       console.error("Error logging skip event:", logError);
     }
+
+    // Invalidate matching cache for the skipper
+    await invalidateMatchingCache(skipperUuid);
 
     return NextResponse.json({
       success: true,

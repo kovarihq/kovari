@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getAuth } from "@clerk/nextjs/server";
+import { resolveUser } from "@/lib/auth/resolveUser";
 import { createClient } from "@supabase/supabase-js";
+import { invalidateMatchingCache } from "@/lib/api/matching/cache";
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const SUPABASE_SERVICE_ROLE = process.env.SUPABASE_SERVICE_ROLE_KEY!;
@@ -9,21 +10,19 @@ const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE);
 
 export async function POST(request: NextRequest) {
   try {
-    const { userId: clerkUserId } = getAuth(request);
-    
-    if (!clerkUserId) {
+    const authResult = await resolveUser(request, { mode: 'protected' });
+    if (!authResult.ok || !authResult.user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
+    const userUuid = authResult.user.userId;
 
     const body = await request.json();
     const { toGroupId } = body;
     const destinationId = body.destinationId || "Global";
-    // Overwrite fromUserId with the authenticated user's ID
-    const fromUserId = clerkUserId;
 
     if (!toGroupId || !destinationId) {
       console.error("Group Interest API: Missing parameters", {
-        fromUserId,
+        userUuid,
         toGroupId,
         destinationId,
       });
@@ -38,34 +37,6 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         { success: false, error: "Server configuration error" },
         { status: 500 }
-      );
-    }
-
-    // Resolve user ID to UUID if needed
-    const resolve = async (identifier: string) => {
-      const uuidRegex =
-        /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
-      if (uuidRegex.test(identifier)) return identifier;
-      const { data, error } = await supabaseAdmin
-        .from("users")
-        .select("id")
-        .eq("clerk_user_id", identifier)
-        .maybeSingle();
-      if (error) throw error;
-      return data?.id || null;
-    };
-
-    const userUuid = await resolve(fromUserId);
-    if (!userUuid) {
-      console.error("Group Interest API: Failed to resolve user UUID", {
-        fromUserId,
-      });
-      return NextResponse.json(
-        {
-          success: false,
-          error: "Could not resolve user identifier to UUID",
-        },
-        { status: 400 }
       );
     }
 
@@ -179,6 +150,9 @@ export async function POST(request: NextRequest) {
       console.error("Group Interest API: Failed to send notification", notifyError);
       // Don't fail the request
     }
+
+    // Invalidate matching cache for the user expressing interest in the group
+    await invalidateMatchingCache(userUuid);
 
     return NextResponse.json({
       success: true,

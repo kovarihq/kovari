@@ -55,7 +55,9 @@ class _ExploreScreenState extends ConsumerState<ExploreScreen>
           ? 0
           : 1;
 
-      // Auto-trigger initial search on mount (background refresh if we already have cached matches, otherwise full loading search)
+      // Always do an initial fetch on mount.
+      // isSilent=true shows cached data immediately while refreshing in background.
+      // setTravelMode (on tab switch) handles the "don't re-fetch" guard separately.
       ref
           .read(exploreProvider.notifier)
           .performSearch(isSilent: state.matches.isNotEmpty);

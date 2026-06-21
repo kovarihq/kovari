@@ -57,6 +57,10 @@ class MatchService {
     final response = await _apiClient.get<MatchResult>(
       'match-solo',
       queryParameters: queryParams,
+      // ⚠️ Discovery feed must NEVER be served from HTTP cache.
+      // Hinge/Bumble always fetch fresh — the server runs filterInteractedMatches()
+      // on every request to guarantee swiped users never reappear.
+      ignoreCache: true,
       parser: (data) {
         if (data is! Map<String, dynamic>) return MatchResult.empty();
 

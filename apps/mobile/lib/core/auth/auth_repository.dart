@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:dio/dio.dart';
+import 'package:dio/dio.dart' as dio;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mobile/core/auth/session_manager.dart';
 import 'package:mobile/core/auth/token_storage.dart';
@@ -68,17 +69,31 @@ class AuthRepository {
       if (refreshToken == null) throw AuthFailure(AuthFailure.invalidToken);
 
       // 4.5 Connectivity Health Check (Fast Ping with Single-Flight Deduplication)
+      // NOTE: We use a plain OfflineException here — NOT AuthFailure — so a
+      // connectivity blip routes to degraded mode, never to logout().
       if (requestId != 'BOOTSTRAP-REFRESH') {
         try {
           await _sessionManager.performHealthCheck(() async {
-            await _refreshDio.get<dynamic>('health').timeout(const Duration(seconds: 2));
+            // GET api/health returns 200 when reachable. Redirects (3xx) are
+            // also fine — they prove the network is up.
+            await _refreshDio
+                .get<dynamic>(
+                  'health',
+                  options: dio.Options(
+                    followRedirects: true,
+                    validateStatus: (s) => s != null && s < 500,
+                  ),
+                )
+                .timeout(const Duration(seconds: 3));
           });
         } catch (e) {
           AppLogger.w(
-            '[$requestId] Connectivity check failed. Skipping refresh.',
+            '[$requestId] Connectivity check failed. Entering degraded mode.',
           );
           _sessionManager.setDegraded(true);
-          throw AuthFailure('OFFLINE');
+          // Throw a plain exception so the catch block enters degraded mode
+          // rather than triggering logout().
+          throw _OfflineException();
         }
       }
 
@@ -139,14 +154,28 @@ class AuthRepository {
       final duration = DateTime.now().difference(startTime).inMilliseconds;
       AppLogger.e('❌ [$requestId] Refresh failed after $duration ms', error: e);
 
-      if (e is AuthFailure ||
-          (e is DioException &&
-              (e.response?.statusCode == 401 ||
-                  e.response?.statusCode == 403))) {
+      // Only force logout on hard auth rejections from the server (401/403)
+      // or if the refresh token itself is explicitly invalid/expired.
+      // NEVER logout on:
+      //   • Network/connectivity errors (_OfflineException)
+      //   • Socket auth errors (SOCKET-CONN-REFRESH caller)
+      //   • Transient DioExceptions (timeout, connection refused, etc.)
+      final isHardAuthFailure =
+          (e is AuthFailure &&
+              e.reason != 'CIRCUIT_OPEN' &&
+              e.reason != AuthFailure.severeExpiry) &&
+          e is! _OfflineException;
+      final isServerAuthRejection =
+          e is DioException &&
+          (e.response?.statusCode == 401 ||
+              e.response?.statusCode == 403);
+
+      if ((isHardAuthFailure || isServerAuthRejection) &&
+          requestId != 'SOCKET-CONN-REFRESH') {
         _sessionManager.failRefresh(e);
         await logout(reason: 'REFRESH_FAILURE');
       } else {
-        // Network or Transient Error -> Enter Degraded Mode
+        // Transient / connectivity / socket errors → degraded mode, NOT logout.
         _sessionManager.failRefresh(e);
         _sessionManager.setDegraded(true);
       }
@@ -199,9 +228,10 @@ class AuthRepository {
     _ref.listen(connectivityProvider, (previous, next) {
       if (next.isOnline && previous?.status != ConnectionStatus.online) {
         // Connectivity Restored or Backend Reachable again
+        final wasDegraded = _sessionManager.isDegraded;
         _sessionManager.setDegraded(false);
 
-        if (_sessionManager.isDegraded && _recoveryAttempts < 3) {
+        if (wasDegraded) {
           AppLogger.i(
             '🌐 Connectivity restored. Triggering auto-refresh recovery.',
           );
@@ -210,12 +240,11 @@ class AuthRepository {
             Duration(milliseconds: 300 + (DateTime.now().millisecond % 300)),
             () {
               _recoveryAttempts++;
-              unawaited(refreshToken(requestId: 'RECOVERY-AUTO'));
+              unawaited(refreshToken(requestId: 'RECOVERY-AUTO').catchError((_) {
+                // Keep error handling silent for auto-recovery pings
+              }));
             },
           ));
-        } else if (_recoveryAttempts >= 3) {
-          AppLogger.w('Recovery attempts exhausted. Manual login required.');
-          logout(reason: 'RECOVERY_EXHAUSTED');
         }
       }
     });
@@ -272,3 +301,10 @@ final authRepositoryProvider = Provider((ref) {
   repo.setupRecoveryListener();
   return repo;
 });
+
+/// Private exception used to signal connectivity failure.
+/// Using a dedicated type prevents it from being treated as an [AuthFailure]
+/// in the catch block, which would trigger logout unnecessarily.
+class _OfflineException implements Exception {
+  const _OfflineException();
+}
