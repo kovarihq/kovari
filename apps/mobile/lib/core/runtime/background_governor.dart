@@ -1,5 +1,6 @@
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:mobile/core/realtime/socket_service.dart';
 import 'package:mobile/core/runtime/runtime_scheduler.dart';
 import 'package:mobile/core/utils/app_logger.dart';
 import 'package:mobile/features/chat/providers/chat_media_service.dart';
@@ -34,6 +35,13 @@ class BackgroundGovernor extends WidgetsBindingObserver {
     // 2. Clear image cache to free memory for system
     PaintingBinding.instance.imageCache.clear();
     PaintingBinding.instance.imageCache.clearLiveImages();
+
+    // 3. Disconnect socket instantly for clean status updates and battery savings
+    try {
+      _ref.read(socketServiceProvider.notifier).disconnect();
+    } catch (e) {
+      AppLogger.e('⚠️ [BackgroundGovernor] Socket disconnection failed', error: e);
+    }
   }
 
   void _handleForeground() {
@@ -49,6 +57,13 @@ class BackgroundGovernor extends WidgetsBindingObserver {
       _ref.read(chatMediaServiceProvider).recoverBackgroundUploads();
     } catch (e) {
       AppLogger.e('⚠️ [BackgroundGovernor] Background upload recovery failed', error: e);
+    }
+
+    // 3. Reconnect socket instantly
+    try {
+      _ref.read(socketServiceProvider.notifier).reconnectWithToken();
+    } catch (e) {
+      AppLogger.e('⚠️ [BackgroundGovernor] Socket reconnection failed', error: e);
     }
   }
 }

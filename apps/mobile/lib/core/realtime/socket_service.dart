@@ -80,6 +80,12 @@ class SocketService extends Notifier<SocketState> {
     await _init();
   }
 
+  /// Manually disconnects and cleans up the active socket connection.
+  void disconnect() {
+    AppLogger.i('🔌 [SocketService] [$_instanceId] Manual disconnect requested');
+    _disposeSocket();
+  }
+
   void _safeAddEvent(SocketEvent event) {
     if (!_eventController.isClosed) {
       _eventController.add(event);

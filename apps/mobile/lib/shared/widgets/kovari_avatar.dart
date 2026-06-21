@@ -4,7 +4,6 @@ import 'package:mobile/core/widgets/common/kovari_image.dart';
 import 'package:mobile/core/widgets/common/user_avatar_fallback.dart';
 
 class KovariAvatar extends StatelessWidget {
-
   const KovariAvatar({
     super.key,
     required this.imageUrl,
@@ -69,7 +68,7 @@ class KovariAvatar extends StatelessWidget {
               width: dotSize,
               height: dotSize,
               decoration: BoxDecoration(
-                color: const Color(0xFF4CAF50), // Vibrant Green
+                color: AppColors.primary,
                 shape: BoxShape.circle,
                 border: Border.all(
                   color: borderColor ?? AppColors.backgroundColor(context),

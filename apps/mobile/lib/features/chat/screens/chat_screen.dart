@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:ui';
@@ -507,8 +508,6 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                if (conversation != null)
-                  _TypingIndicator(conversation: conversation),
                 _InputBar(
                   chatId: _chatId,
                   controller: _inputController,
@@ -541,14 +540,44 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   }
 }
 
-class _ChatAppBar extends ConsumerWidget {
-  const _ChatAppBar({required this.conversation, required this.chatId});
+class _ChatAppBar extends ConsumerStatefulWidget {
+  const _ChatAppBar({
+    super.key,
+    required this.conversation,
+    required this.chatId,
+  });
 
   final ConversationEntity? conversation;
   final String chatId;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<_ChatAppBar> createState() => _ChatAppBarState();
+}
+
+class _ChatAppBarState extends ConsumerState<_ChatAppBar> {
+  Timer? _tickerTimer;
+
+  @override
+  void initState() {
+    super.initState();
+    // Rebuild every 15 seconds to update the relative presence/last seen text in real-time
+    _tickerTimer = Timer.periodic(const Duration(seconds: 15), (_) {
+      if (mounted) {
+        setState(() {});
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _tickerTimer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final chatId = widget.chatId;
+    final conversation = widget.conversation;
     final runtimeState = ref.watch(conversationRuntimeProvider(chatId));
     final msgState = ref.watch(messageStoreProvider(chatId));
     final isOnline =
@@ -575,7 +604,8 @@ class _ChatAppBar extends ConsumerWidget {
       }
     }
 
-    final lastActivity = runtimeState?.partnerLastActivityAt ??
+    final lastActivity =
+        runtimeState?.partnerLastActivityAt ??
         partnerMessageAt ??
         conversation?.lastMessageAt;
 
@@ -584,17 +614,35 @@ class _ChatAppBar extends ConsumerWidget {
       lastActivityAt: lastActivity,
       lastSeen: lastSeen,
     );
-    final isStateOnline =
-        pState == PresenceState.online || pState == PresenceState.activeNow;
 
-    final subtitle = conversation?.isGroup == true
-        ? '${conversation?.participantIds.length ?? 0} members'
-        : PresenceFormatter.label(
-            isOnline: isOnline,
-            lastActivityAt: lastActivity,
-            lastSeen: lastSeen,
-          );
-    final formattedSubtitle = subtitle.isEmpty ? 'Offline' : subtitle;
+    final isGroup = conversation?.isGroup == true;
+    final typingIds = runtimeState?.typingUserIds ?? const {};
+    final isTyping = typingIds.isNotEmpty;
+
+    final String formattedSubtitle;
+    final bool isStateOnline;
+
+    if (isTyping) {
+      isStateOnline = true; // Highlight in accent/primary color when typing
+      if (isGroup) {
+        formattedSubtitle = typingIds.length > 1
+            ? '${typingIds.length} members typing…'
+            : 'typing…';
+      } else {
+        formattedSubtitle = 'typing…';
+      }
+    } else {
+      final subtitle = isGroup
+          ? '${conversation?.participantIds.length ?? 0} members'
+          : PresenceFormatter.label(
+              isOnline: isOnline,
+              lastActivityAt: lastActivity,
+              lastSeen: lastSeen,
+            );
+      formattedSubtitle = subtitle.isEmpty ? 'Offline' : subtitle;
+      isStateOnline =
+          pState == PresenceState.online || pState == PresenceState.activeNow;
+    }
 
     return ClipRRect(
       borderRadius: BorderRadius.circular(20),
@@ -691,7 +739,7 @@ class _AvatarPod extends ConsumerWidget {
                 imageUrl: conversation?.displayAvatar,
                 fullName: conversation?.displayName ?? '?',
                 size: 34,
-                isOnline: isOnline && conversation?.isGroup != true,
+                isOnline: false,
                 borderColor: AppColors.cardColor(
                   context,
                 ).withValues(alpha: 0.8),
@@ -1242,10 +1290,7 @@ class _DeliveryIcon extends ConsumerWidget {
         LucideIcons.checkCheck,
         isMe ? Colors.white70 : AppColors.text(context, isMuted: true),
       ),
-      MessageDeliveryStatus.seen => (
-        LucideIcons.checkCheck,
-        Colors.white,
-      ),
+      MessageDeliveryStatus.seen => (LucideIcons.checkCheck, Colors.white),
       MessageDeliveryStatus.failed => (
         LucideIcons.circleAlert,
         const Color(0xFFFF3B30),

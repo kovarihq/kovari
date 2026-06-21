@@ -59,9 +59,6 @@ class PresenceFormatter {
     final now = DateTime.now();
     final diff = now.difference(activityTime);
 
-    if (diff.inMinutes < PresenceThresholds.activeNowMinutes) {
-      return PresenceState.activeNow;
-    }
     if (diff.inMinutes < PresenceThresholds.recentlyActiveMinutes) {
       return PresenceState.recentlyActive;
     }
@@ -75,11 +72,11 @@ class PresenceFormatter {
   ///
   /// Examples:
   /// - "Online"
-  /// - "Active now"
-  /// - "Active 5m ago"
-  /// - "Active 3h ago"
-  /// - "Active yesterday"
-  /// - "Active Jan 5"
+  /// - "Last seen just now"
+  /// - "Last seen 5m ago"
+  /// - "Last seen 3h ago"
+  /// - "Last seen yesterday"
+  /// - "Last seen 3d ago"
   static String label({
     required bool isOnline,
     DateTime? lastActivityAt,
@@ -93,20 +90,20 @@ class PresenceFormatter {
     final now = DateTime.now();
     final diff = now.difference(activityTime);
 
-    if (diff.inMinutes < PresenceThresholds.activeNowMinutes) {
-      return 'Active now';
+    if (diff.inMinutes < 1) {
+      return 'Last seen just now';
     }
     if (diff.inMinutes < 60) {
-      return 'Active ${diff.inMinutes}m ago';
+      return 'Last seen ${diff.inMinutes}m ago';
     }
     if (diff.inHours < PresenceThresholds.lastSeenHoursThreshold) {
-      return 'Active ${diff.inHours}h ago';
+      return 'Last seen ${diff.inHours}h ago';
     }
     if (diff.inDays == 1) {
-      return 'Active yesterday';
+      return 'Last seen yesterday';
     }
     if (diff.inDays < 7) {
-      return 'Active ${diff.inDays}d ago';
+      return 'Last seen ${diff.inDays}d ago';
     }
     return '';
   }
