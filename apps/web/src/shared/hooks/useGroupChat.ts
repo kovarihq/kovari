@@ -24,6 +24,8 @@ export interface ChatMessage {
   mediaType?: "image" | "video";
   status?: "sending" | "sent" | "delivered" | "seen";
   isEncrypted?: boolean;
+  encryptionIv?: string;
+  encryptionSalt?: string;
 }
 
 export interface GroupInfo {
@@ -544,6 +546,8 @@ export const useGroupChat = (groupId: string) => {
         mediaUrl: incomingMsg.mediaUrl,
         mediaType: incomingMsg.mediaType,
         senderUsername: incomingMsg.senderUsername, // Added senderUsername
+        encryptionIv: incomingMsg.iv || incomingMsg.encryptionIv || incomingMsg.encryption_iv,
+        encryptionSalt: incomingMsg.salt || incomingMsg.encryptionSalt || incomingMsg.encryption_salt,
       };
 
       const merged = [...prev, newMessage];

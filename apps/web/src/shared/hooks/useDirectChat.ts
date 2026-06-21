@@ -576,11 +576,14 @@ export const useDirectChat = (
           }
         }
 
+        const senderId = incomingMsg.senderId || incomingMsg.sender_id;
+        const receiverId = incomingMsg.receiverId || incomingMsg.receiver_id || (senderId === currentUserUuid ? partnerUuid : currentUserUuid);
+
         // Constructing a DirectChatMessage, not ChatMessage as per the original type
         const newMessage: DirectChatMessage = {
           id: incomingMsg.id || incomingMsg.tempId,
-          sender_id: incomingMsg.senderId,
-          receiver_id: incomingMsg.senderId === currentUserUuid ? partnerUuid : currentUserUuid,
+          sender_id: senderId,
+          receiver_id: receiverId,
           encrypted_content: incomingMsg.encryptedContent,
           encryption_iv: incomingMsg.iv,
           encryption_salt: incomingMsg.salt,
@@ -591,6 +594,10 @@ export const useDirectChat = (
           mediaType: incomingMsg.mediaType,
           client_id: incomingMsg.tempId, // from optimism
           status: "delivered", // Explicitly received by us, so delivered
+          sender_profile: incomingMsg.senderName ? {
+            name: incomingMsg.senderName,
+            username: incomingMsg.senderUsername,
+          } : undefined,
         };
         
         // Let the sender know we got it

@@ -122,35 +122,47 @@ class _GroupDetailsScreenState extends ConsumerState<GroupDetailsScreen> {
             onTabChanged: (index) => setState(() => _activeTabIndex = index),
           ),
           Expanded(
-            child: KovariRefreshIndicator(
-              onRefresh: _onRefresh,
-              child: IndexedStack(
-                index: _activeTabIndex,
-                children: [
-                  OverviewTab(
-                    group: group,
-                    isEditingNotes: _isEditingNotes,
-                    notesController: _notesController,
-                    onEditNotesToggle: () =>
-                        setState(() => _isEditingNotes = !_isEditingNotes),
-                    onTabChange: (index) =>
-                        setState(() => _activeTabIndex = index),
-                    onViewAllMembers: _showMembersModal,
-                  ),
-                  ChatsTab(group: group),
-                  ItineraryTab(group: group),
-                  SettingsTab(
-                    group: group,
-                    onViewMembers: () {
-                      final members = ref
-                          .read(memberStoreProvider)[widget.groupId]
-                          ?.data;
-                      if (members != null) {
-                        _showMembersModal(members);
-                      }
-                    },
-                  ),
-                ],
+            child: NotificationListener<OverscrollIndicatorNotification>(
+              onNotification: (notification) {
+                // Disable pull-to-refresh overscroll glow on the Chats tab
+                if (_activeTabIndex == 1) {
+                  notification.disallowIndicator();
+                  return true;
+                }
+                return false;
+              },
+              child: KovariRefreshIndicator(
+                onRefresh: _activeTabIndex == 1
+                    ? () async {} // no-op for chats tab
+                    : _onRefresh,
+                child: IndexedStack(
+                  index: _activeTabIndex,
+                  children: [
+                    OverviewTab(
+                      group: group,
+                      isEditingNotes: _isEditingNotes,
+                      notesController: _notesController,
+                      onEditNotesToggle: () =>
+                          setState(() => _isEditingNotes = !_isEditingNotes),
+                      onTabChange: (index) =>
+                          setState(() => _activeTabIndex = index),
+                      onViewAllMembers: _showMembersModal,
+                    ),
+                    ChatsTab(group: group),
+                    ItineraryTab(group: group),
+                    SettingsTab(
+                      group: group,
+                      onViewMembers: () {
+                        final members = ref
+                            .read(memberStoreProvider)[widget.groupId]
+                            ?.data;
+                        if (members != null) {
+                          _showMembersModal(members);
+                        }
+                      },
+                    ),
+                  ],
+                ),
               ),
             ),
           ),

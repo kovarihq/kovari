@@ -39,6 +39,7 @@ import {
   isSameDay,
   formatMessageDate,
   linkifyMessage,
+  decryptFileBytes,
 } from "@kovari/utils";
 import GroupMediaSection from "@/features/groups/components/group-media-section";
 import { useUser } from "@clerk/nextjs";
@@ -213,6 +214,7 @@ export default function GroupChatInterface() {
   // Add modal state
   const [modalOpen, setModalOpen] = useState(false);
   const [modalMediaUrl, setModalMediaUrl] = useState<string | null>(null);
+  const [decryptedUrls, setDecryptedUrls] = useState<Record<string, string>>({});
   const [modalMediaType, setModalMediaType] = useState<
     "image" | "video" | null
   >(null);
@@ -1167,7 +1169,7 @@ export default function GroupChatInterface() {
                               aria-label="View image in full screen"
                               tabIndex={0}
                               onClick={() => {
-                                setModalMediaUrl(msg.mediaUrl);
+                                setModalMediaUrl(decryptedUrls[msg.id] || msg.mediaUrl);
                                 setModalMediaType("image");
                                 setModalTimestamp(msg.createdAt); // Use raw ISO date
                                 setModalSender(msg.sender);
@@ -1175,7 +1177,7 @@ export default function GroupChatInterface() {
                               }}
                               onKeyDown={(e) => {
                                 if (e.key === "Enter" || e.key === " ") {
-                                  setModalMediaUrl(msg.mediaUrl);
+                                  setModalMediaUrl(decryptedUrls[msg.id] || msg.mediaUrl);
                                   setModalMediaType("image");
                                   setModalTimestamp(msg.createdAt); // Use raw ISO date
                                   setModalSender(msg.sender);
@@ -1186,6 +1188,14 @@ export default function GroupChatInterface() {
                               <MediaWithSkeleton
                                 url={msg.mediaUrl}
                                 timestamp={msg.timestamp}
+                                iv={msg.encryptionIv}
+                                salt={msg.encryptionSalt}
+                                decryptionKey={groupId}
+                                onDecrypted={(blobUrl) => {
+                                  if (decryptedUrls[msg.id] !== blobUrl) {
+                                    setDecryptedUrls((prev) => ({ ...prev, [msg.id]: blobUrl }));
+                                  }
+                                }}
                               />
                             </button>
                           )}
@@ -1196,7 +1206,7 @@ export default function GroupChatInterface() {
                               aria-label="View video in full screen"
                               tabIndex={0}
                               onClick={() => {
-                                setModalMediaUrl(msg.mediaUrl);
+                                setModalMediaUrl(decryptedUrls[msg.id] || msg.mediaUrl);
                                 setModalMediaType("video");
                                 setModalTimestamp(msg.createdAt); // Use raw ISO date
                                 setModalSender(msg.sender);
@@ -1204,7 +1214,7 @@ export default function GroupChatInterface() {
                               }}
                               onKeyDown={(e) => {
                                 if (e.key === "Enter" || e.key === " ") {
-                                  setModalMediaUrl(msg.mediaUrl);
+                                  setModalMediaUrl(decryptedUrls[msg.id] || msg.mediaUrl);
                                   setModalMediaType("video");
                                   setModalTimestamp(msg.createdAt); // Use raw ISO date
                                   setModalSender(msg.sender);
@@ -1215,6 +1225,14 @@ export default function GroupChatInterface() {
                               <VideoWithSkeleton
                                 url={msg.mediaUrl}
                                 timestamp={msg.timestamp}
+                                iv={msg.encryptionIv}
+                                salt={msg.encryptionSalt}
+                                decryptionKey={groupId}
+                                onDecrypted={(blobUrl) => {
+                                  if (decryptedUrls[msg.id] !== blobUrl) {
+                                    setDecryptedUrls((prev) => ({ ...prev, [msg.id]: blobUrl }));
+                                  }
+                                }}
                               />
                             </button>
                           )}
@@ -1412,22 +1430,104 @@ export default function GroupChatInterface() {
 const MediaWithSkeleton = ({
   url,
   timestamp,
+  iv,
+  salt,
+  decryptionKey,
+  onDecrypted,
 }: {
   url: string;
   timestamp: string;
+  iv?: string;
+  salt?: string;
+  decryptionKey?: string;
+  onDecrypted?: (blobUrl: string) => void;
 }) => {
   const [loaded, setLoaded] = useState(false);
+  const [decryptedUrl, setDecryptedUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    if (!url) return;
+
+    if (!iv || !salt || !decryptionKey) {
+      const fullUrl = getFullImageUrl(url);
+      setDecryptedUrl(fullUrl);
+      setLoaded(true);
+      if (onDecrypted) onDecrypted(fullUrl);
+      return;
+    }
+
+    const loadAndDecrypt = async () => {
+      try {
+        const proxyUrl = `/api/proxy/media?url=${encodeURIComponent(getFullImageUrl(url))}`;
+        const res = await fetch(proxyUrl);
+        if (!res.ok) throw new Error("Failed to fetch encrypted media");
+        const arrayBuffer = await res.arrayBuffer();
+        const encryptedBytes = new Uint8Array(arrayBuffer);
+
+        // Check if raw bytes are unencrypted (magic bytes check)
+        let isUnencrypted = false;
+        const rawBytes = encryptedBytes;
+        if (rawBytes.length % 16 !== 0) {
+          isUnencrypted = true;
+        } else if (rawBytes.length >= 4) {
+          if (
+            (rawBytes[0] === 137 && rawBytes[1] === 80 && rawBytes[2] === 78 && rawBytes[3] === 71) || // PNG
+            (rawBytes[0] === 255 && rawBytes[1] === 216 && rawBytes[2] === 255) || // JPEG
+            (rawBytes[0] === 71 && rawBytes[1] === 73 && rawBytes[2] === 70 && rawBytes[3] === 56) || // GIF
+            (rawBytes[0] === 82 && rawBytes[1] === 73 && rawBytes[2] === 70 && rawBytes[3] === 70) // RIFF/WebP
+          ) {
+            isUnencrypted = true;
+          }
+        }
+
+        let decryptedBytes: Uint8Array;
+        if (isUnencrypted) {
+          decryptedBytes = encryptedBytes;
+        } else {
+          decryptedBytes = decryptFileBytes(encryptedBytes, iv, salt, decryptionKey);
+        }
+
+        const blob = new Blob([decryptedBytes as any], { type: "image/jpeg" });
+        const blobUrl = URL.createObjectURL(blob);
+        if (active) {
+          setDecryptedUrl(blobUrl);
+          setLoaded(true);
+          if (onDecrypted) onDecrypted(blobUrl);
+        }
+      } catch (err) {
+        console.error("Error decrypting media:", err);
+        if (active) {
+          const fullUrl = getFullImageUrl(url);
+          setDecryptedUrl(fullUrl);
+          setLoaded(true);
+          if (onDecrypted) onDecrypted(fullUrl);
+        }
+      }
+    };
+
+    loadAndDecrypt();
+    return () => {
+      active = false;
+      if (decryptedUrl && decryptedUrl.startsWith("blob:")) {
+        URL.revokeObjectURL(decryptedUrl);
+      }
+    };
+  }, [url, iv, salt, decryptionKey]);
+
   return (
     <div className="relative w-40 h-32 md:w-56 md:h-32 max-w-full">
       {!loaded && (
         <Skeleton className="absolute inset-0 w-full h-full rounded-2xl" />
       )}
-      <img
-        src={getFullImageUrl(url)}
-        alt="sent media"
-        className={`w-full h-full border border-border object-cover rounded-2xl ${loaded ? "" : "invisible"}`}
-        onLoad={() => setLoaded(true)}
-      />
+      {decryptedUrl && (
+        <img
+          src={decryptedUrl}
+          alt="sent media"
+          className={`w-full h-full border border-border object-cover rounded-2xl ${loaded ? "" : "invisible"}`}
+          onLoad={() => setLoaded(true)}
+        />
+      )}
       <span className="absolute bottom-2 right-2 bg-black/50 text-primary-foreground text-[10px] px-2 py-0.5 rounded-md">
         {timestamp}
       </span>
@@ -1439,22 +1539,99 @@ const MediaWithSkeleton = ({
 const VideoWithSkeleton = ({
   url,
   timestamp,
+  iv,
+  salt,
+  decryptionKey,
+  onDecrypted,
 }: {
   url: string;
   timestamp: string;
+  iv?: string;
+  salt?: string;
+  decryptionKey?: string;
+  onDecrypted?: (blobUrl: string) => void;
 }) => {
   const [loaded, setLoaded] = useState(false);
+  const [decryptedUrl, setDecryptedUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    if (!url) return;
+
+    if (!iv || !salt || !decryptionKey) {
+      setDecryptedUrl(url);
+      setLoaded(true);
+      if (onDecrypted) onDecrypted(url);
+      return;
+    }
+
+    const loadAndDecrypt = async () => {
+      try {
+        const proxyUrl = `/api/proxy/media?url=${encodeURIComponent(url)}`;
+        const res = await fetch(proxyUrl);
+        if (!res.ok) throw new Error("Failed to fetch encrypted video");
+        const arrayBuffer = await res.arrayBuffer();
+        const encryptedBytes = new Uint8Array(arrayBuffer);
+
+        let isUnencrypted = false;
+        const rawBytes = encryptedBytes;
+        if (rawBytes.length % 16 !== 0) {
+          isUnencrypted = true;
+        } else if (rawBytes.length >= 4) {
+          if (
+            (rawBytes[0] === 26 && rawBytes[1] === 69 && rawBytes[2] === 223 && rawBytes[3] === 163) || // MKV/WebM
+            (rawBytes.length >= 8 && rawBytes[4] === 102 && rawBytes[5] === 116 && rawBytes[6] === 121 && rawBytes[7] === 112) // MP4
+          ) {
+            isUnencrypted = true;
+          }
+        }
+
+        let decryptedBytes: Uint8Array;
+        if (isUnencrypted) {
+          decryptedBytes = encryptedBytes;
+        } else {
+          decryptedBytes = decryptFileBytes(encryptedBytes, iv, salt, decryptionKey);
+        }
+
+        const blob = new Blob([decryptedBytes as any], { type: "video/mp4" });
+        const blobUrl = URL.createObjectURL(blob);
+        if (active) {
+          setDecryptedUrl(blobUrl);
+          setLoaded(true);
+          if (onDecrypted) onDecrypted(blobUrl);
+        }
+      } catch (err) {
+        console.error("Error decrypting video:", err);
+        if (active) {
+          setDecryptedUrl(url);
+          setLoaded(true);
+          if (onDecrypted) onDecrypted(url);
+        }
+      }
+    };
+
+    loadAndDecrypt();
+    return () => {
+      active = false;
+      if (decryptedUrl && decryptedUrl.startsWith("blob:")) {
+        URL.revokeObjectURL(decryptedUrl);
+      }
+    };
+  }, [url, iv, salt, decryptionKey]);
+
   return (
     <div className="relative w-40 h-32 md:w-56 md:h-32 max-w-full">
       {!loaded && (
         <Skeleton className="absolute inset-0 w-full h-full rounded-2xl" />
       )}
-      <video
-        src={url}
-        controls={false}
-        className={`w-full h-full object-cover rounded-2xl ${loaded ? "" : "invisible"}`}
-        onLoadedData={() => setLoaded(true)}
-      />
+      {decryptedUrl && (
+        <video
+          src={decryptedUrl}
+          controls={false}
+          className={`w-full h-full object-cover rounded-2xl ${loaded ? "" : "invisible"}`}
+          onLoadedData={() => setLoaded(true)}
+        />
+      )}
       <div className="absolute inset-0 flex items-center justify-center bg-black/30">
         <HiPlay className="h-7 w-7 text-primary-foreground" />
       </div>

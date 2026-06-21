@@ -201,12 +201,18 @@ class ChatMutationService {
       text: payload.mediaType == 'image' ? '📷 Photo' : '🎥 Video',
       mediaUrl: payload.mediaUrl,
       mediaType: payload.mediaType,
+      encryptionIv: payload.encryptionIv,
+      encryptionSalt: payload.encryptionSalt,
       deliveryStatus: MessageDeliveryStatus.pending,
     );
 
     _ref
         .read(conversationStoreProvider.notifier)
         .updateLastMessage(chatId, message);
+
+    _ref
+        .read(messageStoreProvider(chatId).notifier)
+        .addOptimistic(message);
 
     // 3. Emit via socket (respecting connectivity)
     _emitOrDefer(chatId, clientMessageId, payload);

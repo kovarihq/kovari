@@ -183,9 +183,6 @@ export const decryptGroupMessage = (
   return decryptMessage(encryptedMessage, groupKey);
 };
 
-/**
- * Hash a string for secure comparison
- */
 export const hashString = (str: string): string => {
   return CryptoJS.SHA256(str).toString();
 };
@@ -195,4 +192,61 @@ export const hashString = (str: string): string => {
  */
 export const generateKeyFingerprint = (key: string): string => {
   return CryptoJS.SHA256(key).toString().substring(0, 16);
+};
+
+/**
+ * Convert Uint8Array to CryptoJS WordArray
+ */
+const u8ToWordArray = (u8a: Uint8Array): CryptoJS.lib.WordArray => {
+  const words = [];
+  for (let i = 0; i < u8a.length; i += 4) {
+    words.push(
+      ((u8a[i] || 0) << 24) |
+      ((u8a[i + 1] || 0) << 16) |
+      ((u8a[i + 2] || 0) << 8) |
+      (u8a[i + 3] || 0)
+    );
+  }
+  return CryptoJS.lib.WordArray.create(words, u8a.length);
+};
+
+/**
+ * Convert CryptoJS WordArray to Uint8Array
+ */
+const wordArrayToU8 = (wordArray: CryptoJS.lib.WordArray): Uint8Array => {
+  const words = wordArray.words;
+  const sigBytes = wordArray.sigBytes;
+  const u8 = new Uint8Array(sigBytes);
+  let write = 0;
+  for (let i = 0; i < sigBytes; i++) {
+    const byte = (words[i >>> 2] >>> (24 - (i % 4) * 8)) & 0xff;
+    u8[write++] = byte;
+  }
+  return u8;
+};
+
+/**
+ * Decrypt raw encrypted file bytes using AES-256-CBC
+ */
+export const decryptFileBytes = (
+  encryptedBytes: Uint8Array,
+  iv: string,
+  salt: string,
+  key: string
+): Uint8Array => {
+  const derivedKey = deriveKeyFromPassword(key, salt);
+  const ciphertext = u8ToWordArray(encryptedBytes);
+  const ivWords = autoDecode(iv);
+
+  const decrypted = CryptoJS.AES.decrypt(
+    { ciphertext } as CryptoJS.lib.CipherParams,
+    derivedKey,
+    {
+      iv: ivWords,
+      mode: CryptoJS.mode.CBC,
+      padding: CryptoJS.pad.Pkcs7,
+    }
+  );
+
+  return wordArrayToU8(decrypted);
 };

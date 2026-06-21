@@ -88,16 +88,28 @@ export const registerSocketEvents = (
           }
         }
       } else {
-        // Group chat: check membership in DB
+        // Group chat: check membership or creator status in DB
         if (supabaseId) {
           const supabase = createAdminSupabaseClient();
-          const { data } = await supabase
+          const { data: membership } = await supabase
             .from("group_memberships")
             .select("id")
             .eq("group_id", chatId)
             .eq("user_id", supabaseId)
-            .single();
-          if (data) isAuthorized = true;
+            .maybeSingle();
+          
+          if (membership) {
+            isAuthorized = true;
+          } else {
+            // Check if the user is the creator of the group
+            const { data: group } = await supabase
+              .from("groups")
+              .select("id")
+              .eq("id", chatId)
+              .eq("creator_id", supabaseId)
+              .maybeSingle();
+            if (group) isAuthorized = true;
+          }
         }
       }
     } catch (err) {
@@ -179,6 +191,9 @@ export const registerSocketEvents = (
         chatId,
         avatar: (socket.data as any).profilePhoto || message.avatar,
         senderClerkId: userId, // userId is the verified Clerk ID on this socket
+        senderId: socket.data.supabaseId, // Inject Supabase UUID so clients can map sender names/profiles
+        senderName: (socket.data as any).fullName || message.senderName || "Unknown User",
+        senderUsername: (socket.data as any).username || message.senderUsername,
         conversationSequence,
         serverSequence,
         createdAt: persistedMessage.created_at || new Date().toISOString(),

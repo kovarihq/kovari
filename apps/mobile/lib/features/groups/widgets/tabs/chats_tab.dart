@@ -1,54 +1,26 @@
 import 'package:flutter/material.dart';
-import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:mobile/core/theme/app_colors.dart';
+import 'package:mobile/features/chat/screens/chat_screen.dart';
 import 'package:mobile/features/groups/models/group.dart';
-import 'package:mobile/shared/widgets/primary_button.dart';
 
 class ChatsTab extends StatelessWidget {
-
   const ChatsTab({super.key, required this.group});
   final GroupModel group;
 
   @override
-  Widget build(BuildContext context) => Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Container(
-            padding: const EdgeInsets.all(24),
-            decoration: BoxDecoration(
-              color: AppColors.isDark(context) ? AppColors.primary.withValues(alpha: 0.15) : AppColors.primaryLight,
-              shape: BoxShape.circle,
-            ),
-            child: const Icon(
-              LucideIcons.messageCircle,
-              size: 48,
-              color: AppColors.primary,
-            ),
-          ),
-          const SizedBox(height: 24),
-          const Text(
-            'Group Chat',
-            style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'Connect with your travel buddies here.',
-            style: TextStyle(color: AppColors.text(context, isMuted: true), fontSize: 14),
-          ),
-          const SizedBox(height: 32),
-          PrimaryButton(
-            text: 'Open Chat',
-            onPressed: () {
-              // Navigation to chat screen would go here
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Chat feature integration coming soon!'),
-                ),
-              );
-            },
-          ),
-        ],
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 0, 12, 16),
+      child: Card(
+        elevation: 0,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(24),
+          side: BorderSide(color: AppColors.borderColor(context)),
+        ),
+        color: AppColors.surface(context, level: 1),
+        clipBehavior: Clip.antiAlias,
+        child: ChatScreen(chatId: group.id, hideHeader: true),
       ),
     );
+  }
 }

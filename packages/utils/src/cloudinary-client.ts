@@ -26,6 +26,11 @@ export const getOptimizedUrl = (
     return url;
   }
 
+  // Do not mutate raw (e.g. encrypted E2EE) resource URLs!
+  if (url.includes("/raw/")) {
+    return url;
+  }
+
   const transformations = [];
 
   const finalOptions = {

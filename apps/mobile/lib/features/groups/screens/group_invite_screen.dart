@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:mobile/core/navigation/routes.dart';
 import 'package:mobile/core/providers/auth_provider.dart';
+import 'package:mobile/core/theme/app_colors.dart';
 import 'package:mobile/core/theme/app_text_styles.dart';
 import 'package:mobile/core/utils/app_logger.dart';
 import 'package:mobile/core/widgets/common/kovari_image.dart';
@@ -14,6 +15,7 @@ import 'package:mobile/features/groups/providers/group_provider.dart';
 import 'package:mobile/shared/utils/url_utils.dart';
 import 'package:mobile/shared/widgets/kovari_avatar.dart';
 import 'package:mobile/shared/widgets/primary_button.dart';
+import 'package:mobile/shared/widgets/secondary_button.dart';
 
 class GroupInviteScreen extends ConsumerStatefulWidget {
   const GroupInviteScreen({super.key, required this.token});
@@ -335,40 +337,35 @@ class _GroupInviteScreenState extends ConsumerState<GroupInviteScreen> {
         margin: const EdgeInsets.all(32),
         padding: const EdgeInsets.all(32),
         decoration: BoxDecoration(
-          color: Colors.white.withValues(alpha: 0.1),
+          color: AppColors.cardColor(context),
           borderRadius: BorderRadius.circular(30),
-          border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
+          border: Border.all(color: AppColors.borderColor(context)),
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(
-              LucideIcons.circleAlert,
-              color: Colors.blueAccent,
-              size: 48,
-            ),
-            const SizedBox(height: 20),
             Text(
               'Invalid Link',
-              style: AppTextStyles.h2.copyWith(color: Colors.white),
+              style: AppTextStyles.bodySmall.copyWith(
+                color: AppColors.text(context),
+                fontSize: 14,
+              ),
             ),
             const SizedBox(height: 12),
             Text(
               'This invitation has expired or been revoked.',
               textAlign: TextAlign.center,
               style: AppTextStyles.bodyMedium.copyWith(
-                color: Colors.white.withValues(alpha: 0.6),
+                color: AppColors.text(context, isMuted: true),
+                fontSize: 12,
               ),
             ),
-            const SizedBox(height: 32),
-            TextButton(
-              onPressed: () => context.pop(),
-              child: const Text(
-                'Go Back',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.w600,
-                ),
+            const SizedBox(height: 16),
+            SizedBox(
+              child: SecondaryButton(
+                onPressed: () => context.pop(),
+                text: 'Go Back',
+                height: 40,
               ),
             ),
           ],

@@ -38,7 +38,8 @@ import {
   formatMessageDate, 
   isSameDay, 
   linkifyMessage,
-  getFullImageUrl 
+  getFullImageUrl,
+  decryptFileBytes
 } from "@kovari/utils";
 import Link from "next/link";
 import { useToast } from "@/shared/hooks/use-toast";
@@ -80,22 +81,104 @@ const MessageSkeleton = () => (
 const MediaWithSkeleton = ({
   url,
   timestamp,
+  iv,
+  salt,
+  decryptionKey,
+  onDecrypted,
 }: {
   url: string;
   timestamp: string;
+  iv?: string;
+  salt?: string;
+  decryptionKey?: string;
+  onDecrypted?: (blobUrl: string) => void;
 }) => {
   const [loaded, setLoaded] = useState(false);
+  const [decryptedUrl, setDecryptedUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    if (!url) return;
+
+    if (!iv || !salt || !decryptionKey) {
+      const fullUrl = getFullImageUrl(url);
+      setDecryptedUrl(fullUrl);
+      setLoaded(true);
+      if (onDecrypted) onDecrypted(fullUrl);
+      return;
+    }
+
+    const loadAndDecrypt = async () => {
+      try {
+        const proxyUrl = `/api/proxy/media?url=${encodeURIComponent(getFullImageUrl(url))}`;
+        const res = await fetch(proxyUrl);
+        if (!res.ok) throw new Error("Failed to fetch encrypted media");
+        const arrayBuffer = await res.arrayBuffer();
+        const encryptedBytes = new Uint8Array(arrayBuffer);
+
+        // Check if raw bytes are unencrypted (magic bytes check)
+        let isUnencrypted = false;
+        const rawBytes = encryptedBytes;
+        if (rawBytes.length % 16 !== 0) {
+          isUnencrypted = true;
+        } else if (rawBytes.length >= 4) {
+          if (
+            (rawBytes[0] === 137 && rawBytes[1] === 80 && rawBytes[2] === 78 && rawBytes[3] === 71) || // PNG
+            (rawBytes[0] === 255 && rawBytes[1] === 216 && rawBytes[2] === 255) || // JPEG
+            (rawBytes[0] === 71 && rawBytes[1] === 73 && rawBytes[2] === 70 && rawBytes[3] === 56) || // GIF
+            (rawBytes[0] === 82 && rawBytes[1] === 73 && rawBytes[2] === 70 && rawBytes[3] === 70) // RIFF/WebP
+          ) {
+            isUnencrypted = true;
+          }
+        }
+
+        let decryptedBytes: Uint8Array;
+        if (isUnencrypted) {
+          decryptedBytes = encryptedBytes;
+        } else {
+          decryptedBytes = decryptFileBytes(encryptedBytes, iv, salt, decryptionKey);
+        }
+
+        const blob = new Blob([decryptedBytes as any], { type: "image/jpeg" });
+        const blobUrl = URL.createObjectURL(blob);
+        if (active) {
+          setDecryptedUrl(blobUrl);
+          setLoaded(true);
+          if (onDecrypted) onDecrypted(blobUrl);
+        }
+      } catch (err) {
+        console.error("Error decrypting media:", err);
+        if (active) {
+          const fullUrl = getFullImageUrl(url);
+          setDecryptedUrl(fullUrl);
+          setLoaded(true);
+          if (onDecrypted) onDecrypted(fullUrl);
+        }
+      }
+    };
+
+    loadAndDecrypt();
+    return () => {
+      active = false;
+      if (decryptedUrl && decryptedUrl.startsWith("blob:")) {
+        URL.revokeObjectURL(decryptedUrl);
+      }
+    };
+  }, [url, iv, salt, decryptionKey]);
+
   return (
     <div className="relative w-40 h-32 md:w-60 md:h-44 lg:w-80 lg:h-60 max-w-full">
       {!loaded && (
         <Skeleton className="absolute inset-0 w-full h-full rounded-2xl" />
       )}
-      <img
-        src={getFullImageUrl(url)}
-        alt="sent media"
-        className={`w-full h-full object-cover rounded-2xl ${loaded ? "" : "invisible"}`}
-        onLoad={() => setLoaded(true)}
-      />
+      {decryptedUrl && (
+        <img
+          src={decryptedUrl}
+          alt="sent media"
+          className={`w-full h-full object-cover rounded-2xl ${loaded ? "" : "invisible"}`}
+          onLoad={() => setLoaded(true)}
+        />
+      )}
       <span className="absolute bottom-2 right-2 bg-black/50 text-primary-foreground text-[10px] px-2 py-0.5 rounded-md">
         {timestamp}
       </span>
@@ -107,22 +190,99 @@ const MediaWithSkeleton = ({
 const VideoWithSkeleton = ({
   url,
   timestamp,
+  iv,
+  salt,
+  decryptionKey,
+  onDecrypted,
 }: {
   url: string;
   timestamp: string;
+  iv?: string;
+  salt?: string;
+  decryptionKey?: string;
+  onDecrypted?: (blobUrl: string) => void;
 }) => {
   const [loaded, setLoaded] = useState(false);
+  const [decryptedUrl, setDecryptedUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    if (!url) return;
+
+    if (!iv || !salt || !decryptionKey) {
+      setDecryptedUrl(url);
+      setLoaded(true);
+      if (onDecrypted) onDecrypted(url);
+      return;
+    }
+
+    const loadAndDecrypt = async () => {
+      try {
+        const proxyUrl = `/api/proxy/media?url=${encodeURIComponent(url)}`;
+        const res = await fetch(proxyUrl);
+        if (!res.ok) throw new Error("Failed to fetch encrypted video");
+        const arrayBuffer = await res.arrayBuffer();
+        const encryptedBytes = new Uint8Array(arrayBuffer);
+
+        let isUnencrypted = false;
+        const rawBytes = encryptedBytes;
+        if (rawBytes.length % 16 !== 0) {
+          isUnencrypted = true;
+        } else if (rawBytes.length >= 4) {
+          if (
+            (rawBytes[0] === 26 && rawBytes[1] === 69 && rawBytes[2] === 223 && rawBytes[3] === 163) || // MKV/WebM
+            (rawBytes.length >= 8 && rawBytes[4] === 102 && rawBytes[5] === 116 && rawBytes[6] === 121 && rawBytes[7] === 112) // MP4
+          ) {
+            isUnencrypted = true;
+          }
+        }
+
+        let decryptedBytes: Uint8Array;
+        if (isUnencrypted) {
+          decryptedBytes = encryptedBytes;
+        } else {
+          decryptedBytes = decryptFileBytes(encryptedBytes, iv, salt, decryptionKey);
+        }
+
+        const blob = new Blob([decryptedBytes as any], { type: "video/mp4" });
+        const blobUrl = URL.createObjectURL(blob);
+        if (active) {
+          setDecryptedUrl(blobUrl);
+          setLoaded(true);
+          if (onDecrypted) onDecrypted(blobUrl);
+        }
+      } catch (err) {
+        console.error("Error decrypting video:", err);
+        if (active) {
+          setDecryptedUrl(url);
+          setLoaded(true);
+          if (onDecrypted) onDecrypted(url);
+        }
+      }
+    };
+
+    loadAndDecrypt();
+    return () => {
+      active = false;
+      if (decryptedUrl && decryptedUrl.startsWith("blob:")) {
+        URL.revokeObjectURL(decryptedUrl);
+      }
+    };
+  }, [url, iv, salt, decryptionKey]);
+
   return (
     <div className="relative w-40 h-32 md:w-60 md:h-44 lg:w-80 lg:h-60 max-w-full">
       {!loaded && (
         <Skeleton className="absolute inset-0 w-full h-full rounded-2xl" />
       )}
-      <video
-        src={url}
-        controls={false}
-        className={`w-full h-full object-cover rounded-2xl ${loaded ? "" : "invisible"}`}
-        onLoadedData={() => setLoaded(true)}
-      />
+      {decryptedUrl && (
+        <video
+          src={decryptedUrl}
+          controls={false}
+          className={`w-full h-full object-cover rounded-2xl ${loaded ? "" : "invisible"}`}
+          onLoadedData={() => setLoaded(true)}
+        />
+      )}
       <div className="absolute inset-0 flex items-center justify-center bg-black/30">
         <HiPlay className="h-7 w-7 text-primary-foreground" />
       </div>
@@ -150,6 +310,10 @@ const MessageRow = React.memo(
     showError,
     onRetry,
     isSenderDeleted,
+    onMediaClick,
+    decryptedUrls,
+    setDecryptedUrls,
+    sharedSecret,
   }: {
     msg: any;
     isSent: boolean;
@@ -158,6 +322,10 @@ const MessageRow = React.memo(
     showError: boolean;
     onRetry?: (msg: any) => void;
     isSenderDeleted?: boolean;
+    onMediaClick?: (url: string, type: "image" | "video", timestamp: string, sender: string) => void;
+    decryptedUrls: Record<string, string>;
+    setDecryptedUrls: React.Dispatch<React.SetStateAction<Record<string, string>>>;
+    sharedSecret: string;
   }) => {
     const hasMedia = !!msg.mediaUrl;
     const hasText = isRealTextMessage(content);
@@ -168,20 +336,66 @@ const MessageRow = React.memo(
 
     // Any media: show only media card (no bubble)
     if (hasMedia && msg.mediaType === "image") {
+      const senderName = isSenderDeleted ? "Deleted User" : msg.sender_profile?.name || "Unknown User";
       return (
         <div
           className={`flex ${isSent ? "justify-end" : "justify-start"} mb-1`}
         >
-          <MediaWithSkeleton url={msg.mediaUrl} timestamp={timeString} />
+          <button
+            type="button"
+            className="overflow-hidden rounded-2xl focus:outline-none focus:ring-0 mb-1"
+            aria-label="View image in full screen"
+            onClick={() => {
+              if (onMediaClick) {
+                onMediaClick(decryptedUrls[msg.id] || msg.mediaUrl, "image", msg.created_at, senderName);
+              }
+            }}
+          >
+            <MediaWithSkeleton
+              url={msg.mediaUrl}
+              timestamp={timeString}
+              iv={msg.encryption_iv}
+              salt={msg.encryption_salt}
+              decryptionKey={sharedSecret}
+              onDecrypted={(blobUrl) => {
+                if (decryptedUrls[msg.id] !== blobUrl) {
+                  setDecryptedUrls((prev) => ({ ...prev, [msg.id]: blobUrl }));
+                }
+              }}
+            />
+          </button>
         </div>
       );
     }
     if (hasMedia && msg.mediaType === "video") {
+      const senderName = isSenderDeleted ? "Deleted User" : msg.sender_profile?.name || "Unknown User";
       return (
         <div
           className={`flex ${isSent ? "justify-end" : "justify-start"} mb-1`}
         >
-          <VideoWithSkeleton url={msg.mediaUrl} timestamp={timeString} />
+          <button
+            type="button"
+            className="overflow-hidden rounded-2xl focus:outline-none focus:ring-0 mb-1"
+            aria-label="View video in full screen"
+            onClick={() => {
+              if (onMediaClick) {
+                onMediaClick(decryptedUrls[msg.id] || msg.mediaUrl, "video", msg.created_at, senderName);
+              }
+            }}
+          >
+            <VideoWithSkeleton
+              url={msg.mediaUrl}
+              timestamp={timeString}
+              iv={msg.encryption_iv}
+              salt={msg.encryption_salt}
+              decryptionKey={sharedSecret}
+              onDecrypted={(blobUrl) => {
+                if (decryptedUrls[msg.id] !== blobUrl) {
+                  setDecryptedUrls((prev) => ({ ...prev, [msg.id]: blobUrl }));
+                }
+              }}
+            />
+          </button>
         </div>
       );
     }
@@ -275,11 +489,17 @@ const MessageList = ({
   currentUserUuid,
   sharedSecret,
   onRetry,
+  onMediaClick,
+  decryptedUrls,
+  setDecryptedUrls,
 }: {
   messages: any[];
   currentUserUuid: string;
   sharedSecret: string;
   onRetry?: (msg: any) => void;
+  onMediaClick?: (url: string, type: "image" | "video", timestamp: string, sender: string) => void;
+  decryptedUrls: Record<string, string>;
+  setDecryptedUrls: React.Dispatch<React.SetStateAction<Record<string, string>>>;
 }) => {
   // Group messages by date and add date separators
   const messagesWithSeparators = useMemo(() => {
@@ -389,6 +609,10 @@ const MessageList = ({
                 showError={showError}
                 onRetry={onRetry}
                 isSenderDeleted={isSenderDeleted}
+                onMediaClick={onMediaClick}
+                decryptedUrls={decryptedUrls}
+                setDecryptedUrls={setDecryptedUrls}
+                sharedSecret={sharedSecret}
               />
             </div>
           );
@@ -693,6 +917,7 @@ const DirectChatPage = () => {
   // Modal state for media viewer
   const [modalOpen, setModalOpen] = useState(false);
   const [modalMediaUrl, setModalMediaUrl] = useState<string | null>(null);
+  const [decryptedUrls, setDecryptedUrls] = useState<Record<string, string>>({});
   const [modalMediaType, setModalMediaType] = useState<
     "image" | "video" | null
   >(null);
@@ -1024,12 +1249,17 @@ const DirectChatPage = () => {
   // Helper to get sender display name
   const getSenderName = useCallback(
     (msg: any) => {
+      console.log("🕵️ [getSenderName] msg:", { id: msg.id, sender_id: msg.sender_id, currentUserUuid, partnerUuid, partnerName: partnerProfile?.name });
       if (msg.sender_profile?.name) return msg.sender_profile.name;
       if (msg.sender_profile?.username) return msg.sender_profile.username;
       if (msg.sender_id === currentUserUuid) return "You";
+      if (msg.sender_id === partnerUuid && partnerProfile) {
+        if (partnerProfile.name) return partnerProfile.name;
+        if (partnerProfile.username) return partnerProfile.username;
+      }
       return "Unknown";
     },
-    [currentUserUuid],
+    [currentUserUuid, partnerUuid, partnerProfile],
   );
 
   // Patch MessageRow to support modal opening for media
@@ -1074,7 +1304,7 @@ const DirectChatPage = () => {
                 aria-label="View image in full screen"
                 tabIndex={0}
                 onClick={() => {
-                  setModalMediaUrl(msg.mediaUrl);
+                  setModalMediaUrl(decryptedUrls[msg.id] || msg.mediaUrl);
                   setModalMediaType("image");
                   setModalTimestamp(msg.created_at);
                   setModalSender(senderName);
@@ -1082,7 +1312,7 @@ const DirectChatPage = () => {
                 }}
                 onKeyDown={(e) => {
                   if (e.key === "Enter" || e.key === " ") {
-                    setModalMediaUrl(msg.mediaUrl);
+                    setModalMediaUrl(decryptedUrls[msg.id] || msg.mediaUrl);
                     setModalMediaType("image");
                     setModalTimestamp(msg.created_at);
                     setModalSender(senderName);
@@ -1090,7 +1320,18 @@ const DirectChatPage = () => {
                   }
                 }}
               >
-                <MediaWithSkeleton url={msg.mediaUrl} timestamp={timeString} />
+                <MediaWithSkeleton
+                  url={msg.mediaUrl}
+                  timestamp={timeString}
+                  iv={msg.encryption_iv}
+                  salt={msg.encryption_salt}
+                  decryptionKey={sharedSecret}
+                  onDecrypted={(blobUrl) => {
+                    if (decryptedUrls[msg.id] !== blobUrl) {
+                      setDecryptedUrls((prev) => ({ ...prev, [msg.id]: blobUrl }));
+                    }
+                  }}
+                />
               </button>
             </div>
           );
@@ -1106,7 +1347,7 @@ const DirectChatPage = () => {
                 aria-label="View video in full screen"
                 tabIndex={0}
                 onClick={() => {
-                  setModalMediaUrl(msg.mediaUrl);
+                  setModalMediaUrl(decryptedUrls[msg.id] || msg.mediaUrl);
                   setModalMediaType("video");
                   setModalTimestamp(msg.created_at);
                   setModalSender(senderName);
@@ -1114,7 +1355,7 @@ const DirectChatPage = () => {
                 }}
                 onKeyDown={(e) => {
                   if (e.key === "Enter" || e.key === " ") {
-                    setModalMediaUrl(msg.mediaUrl);
+                    setModalMediaUrl(decryptedUrls[msg.id] || msg.mediaUrl);
                     setModalMediaType("video");
                     setModalTimestamp(msg.created_at);
                     setModalSender(senderName);
@@ -1122,7 +1363,18 @@ const DirectChatPage = () => {
                   }
                 }}
               >
-                <VideoWithSkeleton url={msg.mediaUrl} timestamp={timeString} />
+                <VideoWithSkeleton
+                  url={msg.mediaUrl}
+                  timestamp={timeString}
+                  iv={msg.encryption_iv}
+                  salt={msg.encryption_salt}
+                  decryptionKey={sharedSecret}
+                  onDecrypted={(blobUrl) => {
+                    if (decryptedUrls[msg.id] !== blobUrl) {
+                      setDecryptedUrls((prev) => ({ ...prev, [msg.id]: blobUrl }));
+                    }
+                  }}
+                />
               </button>
             </div>
           );
@@ -1139,6 +1391,9 @@ const DirectChatPage = () => {
               showError={showError}
               onRetry={onRetry}
               isSenderDeleted={isSenderDeleted}
+              decryptedUrls={decryptedUrls}
+              setDecryptedUrls={setDecryptedUrls}
+              sharedSecret={sharedSecret}
             />
           );
         }
@@ -1147,7 +1402,7 @@ const DirectChatPage = () => {
     );
     Comp.displayName = "PatchedMessageRow";
     return Comp;
-  }, [getSenderName]);
+  }, [getSenderName, decryptedUrls, setDecryptedUrls, sharedSecret]);
 
   // Patch MessageList to use PatchedMessageRow
   const PatchedMessageList = useMemo(() => {

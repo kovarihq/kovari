@@ -19,11 +19,11 @@ class GroupKeyData {
   });
 
   factory GroupKeyData.fromJson(Map<String, dynamic> json) => GroupKeyData(
-        groupId: json['groupId'] as String,
-        key: json['key'] as String,
-        fingerprint: json['fingerprint'] as String? ?? '',
-        createdAt: json['createdAt'] as String? ?? '',
-      );
+    groupId: json['groupId'] as String,
+    key: json['key'] as String,
+    fingerprint: json['fingerprint'] as String? ?? '',
+    createdAt: json['createdAt'] as String? ?? '',
+  );
 
   final String groupId;
 
@@ -92,6 +92,7 @@ class GroupEncryptionService {
 
   Future<String?> _fetchGroupKey(String groupId) async {
     try {
+      print('🛡️ [GroupEncryptionService] Fetching key for $groupId...');
       AppLogger.d('[GroupEncryptionService] Fetching key for $groupId');
       final apiClient = _ref.read(apiClientProvider);
       final response = await apiClient.get<Map<String, dynamic>>(
@@ -101,21 +102,29 @@ class GroupEncryptionService {
       );
 
       if (response.data == null) {
+        print('🛡️ [GroupEncryptionService] Null response data for $groupId');
         AppLogger.w('[GroupEncryptionService] Null response for $groupId');
         return null;
       }
 
       final keyData = GroupKeyData.fromJson(response.data!);
       _keyCache[groupId] = keyData.key;
+      print(
+        '🛡️ [GroupEncryptionService] Key successfully loaded: ${keyData.key.substring(0, 5)}... fingerprint: ${keyData.fingerprint}',
+      );
       AppLogger.d(
         '[GroupEncryptionService] Key loaded for $groupId '
         '(fingerprint: ${keyData.fingerprint})',
       );
       return keyData.key;
-    } catch (e) {
+    } catch (e, stack) {
+      print(
+        '🛡️ [GroupEncryptionService] Failed to fetch key for $groupId. Error: $e',
+      );
       AppLogger.e(
         '[GroupEncryptionService] Failed to fetch key for $groupId',
         error: e,
+        stackTrace: stack,
       );
       return null;
     }
@@ -146,7 +155,9 @@ class GroupEncryptionService {
   ) async {
     final key = await ensureKeyLoaded(groupId);
     if (key == null) {
-      AppLogger.e('[GroupEncryptionService] Cannot encrypt: no key for $groupId');
+      AppLogger.e(
+        '[GroupEncryptionService] Cannot encrypt: no key for $groupId',
+      );
       return null;
     }
 
@@ -173,7 +184,9 @@ class GroupEncryptionService {
   }) async {
     final key = await ensureKeyLoaded(groupId);
     if (key == null) {
-      AppLogger.w('[GroupEncryptionService] Cannot decrypt: no key for $groupId');
+      AppLogger.w(
+        '[GroupEncryptionService] Cannot decrypt: no key for $groupId',
+      );
       return '[Encrypted message]';
     }
 

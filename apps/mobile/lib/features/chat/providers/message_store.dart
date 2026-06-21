@@ -240,10 +240,14 @@ class MessageStore extends Notifier<ConversationMessageState> {
       // Determine conversation type from runtime store. If the runtime store
       // already has an entry with isGroup=true metadata, use group path.
       // Fallback: check whether chatId looks like a UUID pair (direct) or not.
+      // A direct chat ID is always "uuid_uuid" (exactly 2 parts when split on '_').
+      // Group chat IDs are single UUIDs and will have != 2 parts.
       final runtimeEntry = ref.read(conversationRuntimeStoreProvider)[_chatId];
       final isGroupChat =
           runtimeEntry?.conversationType == ConversationType.group ||
-          runtimeEntry?.metadata?.isGroup == true;
+          runtimeEntry?.metadata?.isGroup == true ||
+          _chatId.split('_').length !=
+              2; // Structural fallback: group IDs aren't uuid_uuid
 
       _conversationType = isGroupChat
           ? ConversationType.group
@@ -257,7 +261,12 @@ class MessageStore extends Notifier<ConversationMessageState> {
         final rawData = await syncEngine.swrFetch<Map<String, dynamic>>(
           path: 'groups/$_chatId/messages',
           queryParameters: {'limit': _kHotWindowSize},
-          parser: (data) => data as Map<String, dynamic>,
+          parser: (data) {
+            if (data is List) {
+              return {'messages': data};
+            }
+            return data as Map<String, dynamic>;
+          },
           ignoreCache: forceRefresh,
           onUpdate: (updatedData) {
             if (!_isDisposed && _isActive) {
@@ -343,6 +352,9 @@ class MessageStore extends Notifier<ConversationMessageState> {
     for (final json in rawMessages) {
       try {
         final entity = _parseMessageJson(json as Map<String, dynamic>);
+        AppLogger.d(
+          '[MessageStore DEBUG] Raw JSON: $json | Entity: id=${entity.id}, text=${entity.text}, isEncrypted=${entity.isEncrypted}, mediaUrl=${entity.mediaUrl}, mediaType=${entity.mediaType}',
+        );
         if (entity.isEncrypted) {
           final decrypted = await _decryptIfNeeded(entity);
           if (decrypted != null) {
@@ -426,7 +438,12 @@ class MessageStore extends Notifier<ConversationMessageState> {
         rawData = await syncEngine.swrFetch<Map<String, dynamic>>(
           path: path,
           queryParameters: params,
-          parser: (data) => data as Map<String, dynamic>,
+          parser: (data) {
+            if (data is List) {
+              return {'messages': data};
+            }
+            return data as Map<String, dynamic>;
+          },
           ignoreCache: true, // Pagination bypasses cache to get fresh history
         );
       } else {
@@ -737,7 +754,8 @@ class MessageStore extends Notifier<ConversationMessageState> {
       if (msg.deliveryStatus == MessageDeliveryStatus.seen) continue;
 
       final clientId = msg.clientMessageId;
-      final matches = idSet.contains(msg.id) ||
+      final matches =
+          idSet.contains(msg.id) ||
           (clientId != null && idSet.contains(clientId)) ||
           (clientId != null && idSet.contains('pending_$clientId'));
 
@@ -775,10 +793,11 @@ class MessageStore extends Notifier<ConversationMessageState> {
   bool _isOwnSentMessage(MessageEntity msg) {
     final user = ref.read(authProvider).user;
     if (user == null) return false;
-    final myIds = {user.id, user.resolvedUuid, user.uuid}
-        .whereType<String>()
-        .where((id) => id.isNotEmpty)
-        .toSet();
+    final myIds = {
+      user.id,
+      user.resolvedUuid,
+      user.uuid,
+    }.whereType<String>().where((id) => id.isNotEmpty).toSet();
     return myIds.contains(msg.senderId);
   }
 
@@ -789,10 +808,11 @@ class MessageStore extends Notifier<ConversationMessageState> {
     final user = ref.read(authProvider).user;
     if (user == null) return false;
 
-    final myIds = {user.id, user.resolvedUuid, user.uuid}
-        .whereType<String>()
-        .where((id) => id.isNotEmpty)
-        .toSet();
+    final myIds = {
+      user.id,
+      user.resolvedUuid,
+      user.uuid,
+    }.whereType<String>().where((id) => id.isNotEmpty).toSet();
     if (myIds.contains(readerUserId)) return false;
 
     final partnerId =
@@ -805,8 +825,7 @@ class MessageStore extends Notifier<ConversationMessageState> {
     if (partnerId == null) return true;
 
     return readerUserId == partnerId ||
-        readerUserId ==
-            ref.read(conversationProvider(_chatId))?.partnerClerkId;
+        readerUserId == ref.read(conversationProvider(_chatId))?.partnerClerkId;
   }
 
   int? _parseSocketInt(dynamic value) {
@@ -1006,20 +1025,33 @@ class MessageStore extends Notifier<ConversationMessageState> {
 
     // --- Group Chat Decryption (Workstream 8) ---
     // Detect group conversations by checking the runtime store entry.
+    // Structural fallback: a direct chat ID is always "uuid_uuid" (2 parts).
+    // Group IDs are single UUIDs — they will not have exactly 2 underscore-separated parts.
     final runtimeEntry = ref.read(conversationRuntimeStoreProvider)[_chatId];
     final isGroup =
         _conversationType == ConversationType.group ||
-        runtimeEntry?.conversationType == ConversationType.group;
+        runtimeEntry?.conversationType == ConversationType.group ||
+        _chatId.split('_').length != 2; // Structural fallback
 
     if (isGroup) {
+      AppLogger.d(
+        '[MessageStore] 🔑 Group decryption path for $_chatId | '
+        'isEncrypted=${entity.isEncrypted} | '
+        'iv=${entity.encryptionIv} | '
+        'salt=${entity.encryptionSalt} | '
+        'content=${entity.encryptedContent?.substring(0, 8)}...',
+      );
       try {
         final groupSvc = ref.read(groupEncryptionServiceProvider);
+        final keyAvailable = groupSvc.isKeyAvailable(_chatId);
+        AppLogger.d('[MessageStore] 🔑 Group key cached: $keyAvailable');
         final plain = await groupSvc.decryptMessage(
           groupId: _chatId,
           encryptedContent: entity.encryptedContent!,
           iv: entity.encryptionIv!,
           salt: entity.encryptionSalt!,
         );
+        AppLogger.d('[MessageStore] 🔑 Decryption result: "$plain"');
         if (plain != '[Encrypted message]' && plain != '[Failed to decrypt]') {
           return entity.copyWith(text: plain, isEncrypted: false);
         }
@@ -1142,8 +1174,8 @@ class MessageStore extends Notifier<ConversationMessageState> {
       final cache = ref.read(localCacheProvider);
       final cached = cache.get(cacheKey.path, params: cacheKey.params);
       final rawEnvelope = cached?.data;
-      final dynamic payload = rawEnvelope is Map &&
-              (rawEnvelope).containsKey('data')
+      final dynamic payload =
+          rawEnvelope is Map && (rawEnvelope).containsKey('data')
           ? (rawEnvelope as Map)['data']
           : rawEnvelope;
 
@@ -1159,7 +1191,8 @@ class MessageStore extends Notifier<ConversationMessageState> {
         if (item is! Map) continue;
         final map = Map<String, dynamic>.from(item);
         final sameId = map['id'] == message.id;
-        final sameClientId = message.clientMessageId != null &&
+        final sameClientId =
+            message.clientMessageId != null &&
             (map['tempId'] == message.clientMessageId ||
                 map['client_id'] == message.clientMessageId);
         if (sameId || sameClientId) {
@@ -1178,9 +1211,11 @@ class MessageStore extends Notifier<ConversationMessageState> {
         final aSeq = a['conversationSequence'] as int? ?? 0;
         final bSeq = b['conversationSequence'] as int? ?? 0;
         if (aSeq != 0 || bSeq != 0) return aSeq.compareTo(bSeq);
-        final aAt = DateTime.tryParse(a['createdAt'] as String? ?? '') ??
+        final aAt =
+            DateTime.tryParse(a['createdAt'] as String? ?? '') ??
             DateTime.fromMillisecondsSinceEpoch(0);
-        final bAt = DateTime.tryParse(b['createdAt'] as String? ?? '') ??
+        final bAt =
+            DateTime.tryParse(b['createdAt'] as String? ?? '') ??
             DateTime.fromMillisecondsSinceEpoch(0);
         return aAt.compareTo(bAt);
       });
@@ -1193,16 +1228,15 @@ class MessageStore extends Notifier<ConversationMessageState> {
       }
 
       final nextPayload = {'messages': updatedMessages};
-      final nextEnvelope = rawEnvelope is Map &&
-              (rawEnvelope).containsKey('data')
-          ? {...Map<String, dynamic>.from(rawEnvelope as Map), 'data': nextPayload}
+      final nextEnvelope =
+          rawEnvelope is Map && (rawEnvelope).containsKey('data')
+          ? {
+              ...Map<String, dynamic>.from(rawEnvelope as Map),
+              'data': nextPayload,
+            }
           : nextPayload;
 
-      await cache.set(
-        cacheKey.path,
-        nextEnvelope,
-        params: cacheKey.params,
-      );
+      await cache.set(cacheKey.path, nextEnvelope, params: cacheKey.params);
       AppLogger.d(
         '[MessageStore] Persisted reconciled message ${message.id} to history cache',
       );
