@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:mobile/core/theme/app_colors.dart';
 import 'package:mobile/core/theme/app_spacing.dart';
@@ -108,7 +109,7 @@ class NotificationItem extends StatelessWidget {
       return CircleAvatar(
         radius: 20,
         backgroundColor: AppColors.surface(context, level: 2),
-        backgroundImage: NetworkImage(notification.imageUrl!),
+        backgroundImage: CachedNetworkImageProvider(notification.imageUrl!),
       );
     }
 

@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_cropper/image_cropper.dart';
@@ -432,7 +433,7 @@ class _EditCoverPhotoSheetState extends ConsumerState<EditCoverPhotoSheet> {
                     )
                   : (_currentCoverUrl != null
                         ? DecorationImage(
-                            image: NetworkImage(
+                            image: CachedNetworkImageProvider(
                               UrlUtils.getFullImageUrl(_currentCoverUrl) ?? '',
                             ),
                             fit: BoxFit.cover,

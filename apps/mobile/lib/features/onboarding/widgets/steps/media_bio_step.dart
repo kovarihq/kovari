@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_cropper/image_cropper.dart';
@@ -243,7 +244,7 @@ class _MediaBioStepState extends ConsumerState<MediaBioStep> {
                           )
                         : state.profilePicUrl != null
                         ? DecorationImage(
-                            image: NetworkImage(state.profilePicUrl!),
+                            image: CachedNetworkImageProvider(state.profilePicUrl!),
                             fit: BoxFit.cover,
                           )
                         : null,

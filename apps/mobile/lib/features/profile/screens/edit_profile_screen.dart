@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_cropper/image_cropper.dart';
@@ -483,7 +484,7 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
                           : (_profilePicUrl != null &&
                                 _profilePicUrl!.isNotEmpty)
                           ? DecorationImage(
-                              image: NetworkImage(
+                              image: CachedNetworkImageProvider(
                                 UrlUtils.getFullImageUrl(_profilePicUrl) ?? '',
                               ),
                               fit: BoxFit.cover,

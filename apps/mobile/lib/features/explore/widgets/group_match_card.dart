@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:mobile/core/theme/app_colors.dart';
 import 'package:mobile/core/theme/app_text_styles.dart';
+import 'package:mobile/core/widgets/common/kovari_image.dart';
 import 'package:mobile/core/widgets/common/user_avatar_fallback.dart';
 import 'package:mobile/features/explore/providers/explore_provider.dart';
 import 'package:mobile/features/groups/models/group.dart';
@@ -200,27 +201,19 @@ class _GroupMatchCardState extends ConsumerState<GroupMatchCard> {
                                   child:
                                       coverImage != null &&
                                           coverImage.isNotEmpty
-                                      ? CachedNetworkImage(
+                                      ? KovariImage(
                                           imageUrl: coverImage,
                                           fit: BoxFit.cover,
-                                          placeholder: (context, url) =>
-                                              const UserAvatarFallback(
-                                                shape: BoxShape.rectangle,
-                                                borderRadius: BorderRadius.all(
-                                                  Radius.circular(16),
-                                                ),
-                                                size: 100,
-                                              ),
-                                          errorWidget:
-                                              (context, url, dynamic error) =>
-                                                  const UserAvatarFallback(
-                                                    shape: BoxShape.rectangle,
-                                                    borderRadius:
-                                                        BorderRadius.all(
-                                                          Radius.circular(16),
-                                                        ),
-                                                    size: 100,
-                                                  ),
+                                          borderRadius: BorderRadius.circular(
+                                            15,
+                                          ),
+                                          placeholder: const UserAvatarFallback(
+                                            shape: BoxShape.rectangle,
+                                            borderRadius: BorderRadius.all(
+                                              Radius.circular(16),
+                                            ),
+                                            size: 100,
+                                          ),
                                         )
                                       : UserAvatarFallback(
                                           shape: BoxShape.rectangle,
@@ -475,27 +468,19 @@ class _GroupMatchCardState extends ConsumerState<GroupMatchCard> {
                                   child:
                                       creator.avatar != null &&
                                           creator.avatar!.isNotEmpty
-                                      ? CachedNetworkImage(
+                                      ? KovariImage(
                                           imageUrl: creator.avatar!,
                                           fit: BoxFit.cover,
-                                          placeholder: (context, url) =>
-                                              const UserAvatarFallback(
-                                                shape: BoxShape.rectangle,
-                                                borderRadius: BorderRadius.all(
-                                                  Radius.circular(16),
-                                                ),
-                                                size: 100,
-                                              ),
-                                          errorWidget:
-                                              (context, url, dynamic error) =>
-                                                  const UserAvatarFallback(
-                                                    shape: BoxShape.rectangle,
-                                                    borderRadius:
-                                                        BorderRadius.all(
-                                                          Radius.circular(16),
-                                                        ),
-                                                    size: 100,
-                                                  ),
+                                          borderRadius: BorderRadius.circular(
+                                            15,
+                                          ),
+                                          placeholder: const UserAvatarFallback(
+                                            shape: BoxShape.rectangle,
+                                            borderRadius: BorderRadius.all(
+                                              Radius.circular(16),
+                                            ),
+                                            size: 100,
+                                          ),
                                         )
                                       : UserAvatarFallback(
                                           shape: BoxShape.rectangle,

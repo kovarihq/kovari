@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:mobile/core/theme/app_colors.dart';
 import 'package:mobile/core/theme/app_text_styles.dart';
+import 'package:mobile/core/widgets/common/kovari_image.dart';
 import 'package:mobile/core/widgets/common/user_avatar_fallback.dart';
 import 'package:mobile/features/explore/models/match_user.dart';
 import 'package:mobile/features/explore/providers/explore_provider.dart';
@@ -151,33 +152,19 @@ class _SoloMatchCardState extends ConsumerState<SoloMatchCard> {
                                 child: AspectRatio(
                                   aspectRatio: 1 / 1,
                                   child: match.image.isNotEmpty
-                                      ? CachedNetworkImage(
+                                      ? KovariImage(
                                           imageUrl: match.image,
                                           fit: BoxFit.cover,
-                                          placeholder: (context, url) =>
-                                              const UserAvatarFallback(
-                                                shape: BoxShape.rectangle,
-                                                borderRadius: BorderRadius.all(
-                                                  Radius.circular(16),
-                                                ),
-                                                size: 100,
-                                              ),
-                                          errorWidget:
-                                              (
-                                                context,
-                                                url,
-                                                dynamic error,
-                                              ) => UserAvatarFallback(
-                                                name: match.name,
-                                                backgroundColor: AppColors
-                                                    .primary
-                                                    .withValues(alpha: 0.1),
-                                                iconColor: AppColors.primary,
-                                                shape: BoxShape.rectangle,
-                                                borderRadius:
-                                                    BorderRadius.circular(16),
-                                                fontSize: 64,
-                                              ),
+                                          borderRadius: BorderRadius.circular(
+                                            15,
+                                          ),
+                                          placeholder: const UserAvatarFallback(
+                                            shape: BoxShape.rectangle,
+                                            borderRadius: BorderRadius.all(
+                                              Radius.circular(16),
+                                            ),
+                                            size: 100,
+                                          ),
                                         )
                                       : UserAvatarFallback(
                                           shape: BoxShape.rectangle,
