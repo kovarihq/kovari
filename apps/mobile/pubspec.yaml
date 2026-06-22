@@ -84,6 +84,7 @@ dev_dependencies:
 
   go_router_builder: ^4.3.0
   build_runner: ^2.4.9
+  flutter_launcher_icons: ^0.13.1
 
   # The "flutter_lints" package below contains a set of recommended lints to
   # encourage good coding practices. The lint set provided by the package is
@@ -96,9 +97,9 @@ dev_dependencies:
 # following page: https://dart.dev/tools/pub/pubspec
 
 flutter_native_splash:
-  color: "#F8F9FC"
+  color: "#0000fe"
   image: "assets/small_logo_wo_text.png"
-  color_dark: "#000000"
+  color_dark: "#0000fe"
   image_dark: "assets/small_logo_wo_text.png"
   android: true
   ios: true
@@ -106,8 +107,8 @@ flutter_native_splash:
   android_gravity: center
   ios_content_mode: center
   android_12:
-    color: "#F8F9FC"
-    color_dark: "#000000"
+    color: "#0000fe"
+    color_dark: "#0000fe"
     # Use the actual Kovari logo for Android 12+
     image: "assets/small_logo_wo_text.png"
     image_dark: "assets/small_logo_wo_text.png"
@@ -123,6 +124,7 @@ flutter:
     - assets/logo.png
     - assets/google_logo.png
     - assets/small_logo_wo_text.png
+    - assets/app_icon.png
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images
@@ -149,3 +151,10 @@ flutter:
   #
   # For details regarding fonts from package dependencies,
   # see https://flutter.dev/to/font-from-package
+
+flutter_launcher_icons:
+  android: "ic_launcher"
+  ios: true
+  image_path: "assets/app_icon.png"
+  adaptive_icon_background: "#0000fe"
+  adaptive_icon_foreground: "assets/app_icon.png"
