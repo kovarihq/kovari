@@ -7,6 +7,7 @@ import 'package:mobile/core/providers/auth_provider.dart';
 import 'package:mobile/core/providers/profile_provider.dart';
 import 'package:mobile/core/providers/theme_provider.dart';
 import 'package:mobile/core/services/haptic_service.dart';
+import 'package:mobile/core/config/interaction_config.dart';
 import 'package:mobile/core/theme/app_colors.dart';
 import 'package:mobile/core/theme/app_text_styles.dart';
 import 'package:mobile/core/utils/api_error_handler.dart';
@@ -14,6 +15,7 @@ import 'package:mobile/features/auth/services/auth_service.dart';
 import 'package:mobile/features/profile/providers/settings_provider.dart';
 import 'package:mobile/shared/widgets/kovari_confirm_dialog.dart';
 import 'package:mobile/shared/widgets/kovari_snackbar.dart';
+import 'package:mobile/shared/widgets/interactive_wrapper.dart';
 import 'package:mobile/shared/widgets/primary_button.dart';
 import 'package:mobile/shared/widgets/secondary_button.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -261,157 +263,148 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen>
   Widget build(BuildContext context) {
     final profile = ref.watch(profileProvider);
 
-    return AnimatedTheme(
-      data: Theme.of(context),
-      duration: const Duration(milliseconds: 400),
-      curve: Curves.easeInOut,
-      child: Scaffold(
-        backgroundColor: AppColors.surface(context),
-        body: Column(
-          children: [
-            Container(
-              color: AppColors.surface(context, level: 1),
-              child: SafeArea(bottom: false, child: _buildHeader(context)),
-            ),
-            Expanded(
-              child: SingleChildScrollView(
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 24,
-                  ),
-                  child: Column(
-                    children: [
-                      _buildSectionHeader(
-                        'Manage email',
-                        'Change your account email address.',
-                      ),
-                      const SizedBox(height: 16),
-                      _buildAccountSection(profile?.email ?? ''),
-                      const SizedBox(height: 32),
-                      _buildSectionHeader(
-                        'Manage password',
-                        'Change your account password.',
-                      ),
-                      const SizedBox(height: 16),
-                      _buildSecuritySection(),
-                      const SizedBox(height: 32),
-                      _buildSectionHeader(
-                        'Appearance',
-                        'Customize how Kovari looks on your device.',
-                      ),
-                      const SizedBox(height: 16),
-                      _buildAppearanceSection(),
-                      const SizedBox(height: 32),
-                      _buildSectionHeader(
-                        'Legal & Policies',
-                        "Review Kovari's policies and your acceptance history.",
-                      ),
-                      const SizedBox(height: 16),
-                      _buildLegalSection(),
-                      const SizedBox(height: 32),
-                      _buildSectionHeader(
-                        'Delete account',
-                        'This action is permanent and cannot be undone.',
-                        isDestructive: true,
-                      ),
-                      const SizedBox(height: 16),
-                      _buildDangerZoneSection(),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildHeader(BuildContext context) => Container(
-      padding: const EdgeInsets.only(left: 4, right: 16, top: 16, bottom: 16),
-      decoration: BoxDecoration(
-        color: AppColors.surface(context, level: 1),
-        border: Border(
-          bottom: BorderSide(color: AppColors.borderColor(context)),
-        ),
-      ),
-      child: Row(
+    return Scaffold(
+      backgroundColor: AppColors.surface(context),
+      body: Column(
         children: [
-          _buildBackButton(context),
-          const SizedBox(width: 4),
+          Container(
+            color: AppColors.surface(context, level: 1),
+            child: SafeArea(bottom: false, child: _buildHeader(context)),
+          ),
           Expanded(
-            child: Text(
-              'Settings',
-              style: TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w600,
-                color: AppColors.text(context),
+            child: SingleChildScrollView(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 24,
+                ),
+                child: Column(
+                  children: [
+                    _buildSectionHeader(
+                      'Manage email',
+                      'Change your account email address.',
+                    ),
+                    const SizedBox(height: 16),
+                    _buildAccountSection(profile?.email ?? ''),
+                    const SizedBox(height: 32),
+                    _buildSectionHeader(
+                      'Manage password',
+                      'Change your account password.',
+                    ),
+                    const SizedBox(height: 16),
+                    _buildSecuritySection(),
+                    const SizedBox(height: 32),
+                    _buildSectionHeader(
+                      'Appearance',
+                      'Customize how Kovari looks on your device.',
+                    ),
+                    const SizedBox(height: 16),
+                    _buildAppearanceSection(),
+                    const SizedBox(height: 32),
+                    _buildSectionHeader(
+                      'Legal & Policies',
+                      "Review Kovari's policies and your acceptance history.",
+                    ),
+                    const SizedBox(height: 16),
+                    _buildLegalSection(),
+                    const SizedBox(height: 32),
+                    _buildSectionHeader(
+                      'Delete account',
+                      'This action is permanent and cannot be undone.',
+                      isDestructive: true,
+                    ),
+                    const SizedBox(height: 16),
+                    _buildDangerZoneSection(),
+                  ],
+                ),
               ),
             ),
           ),
         ],
       ),
     );
+  }
+
+  Widget _buildHeader(BuildContext context) => Container(
+    padding: const EdgeInsets.only(left: 4, right: 16, top: 16, bottom: 16),
+    decoration: BoxDecoration(
+      color: AppColors.surface(context, level: 1),
+      border: Border(bottom: BorderSide(color: AppColors.borderColor(context))),
+    ),
+    child: Row(
+      children: [
+        _buildBackButton(context),
+        const SizedBox(width: 4),
+        Expanded(
+          child: Text(
+            'Settings',
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
+              color: AppColors.text(context),
+            ),
+          ),
+        ),
+      ],
+    ),
+  );
 
   Widget _buildBackButton(BuildContext context) => GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTap: () {
-        HapticService.selection();
-        context.pop();
-      },
-      child: Container(
-        padding: const EdgeInsets.all(8),
-        child: Icon(
-          LucideIcons.arrowLeft,
-          size: 20,
-          color: AppColors.text(context),
-        ),
+    behavior: HitTestBehavior.opaque,
+    onTap: () {
+      HapticService.selection();
+      context.pop();
+    },
+    child: Container(
+      padding: const EdgeInsets.all(8),
+      child: Icon(
+        LucideIcons.arrowLeft,
+        size: 20,
+        color: AppColors.text(context),
       ),
-    );
+    ),
+  );
 
   Widget _buildSectionHeader(
     String title,
     String subtitle, {
     bool isDestructive = false,
   }) => SizedBox(
-      width: double.infinity,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            title,
-            style: TextStyle(
-              fontSize: 15,
-              fontWeight: FontWeight.bold,
-              color: isDestructive
-                  ? AppColors.destructive
-                  : AppColors.text(context),
-            ),
+    width: double.infinity,
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          title,
+          style: TextStyle(
+            fontSize: 15,
+            fontWeight: FontWeight.bold,
+            color: isDestructive
+                ? AppColors.destructive
+                : AppColors.text(context),
           ),
-          const SizedBox(height: 4),
-          Text(
-            subtitle,
-            style: TextStyle(
-              fontSize: 13,
-              color: AppColors.text(context, isMuted: true),
-            ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          subtitle,
+          style: TextStyle(
+            fontSize: 13,
+            color: AppColors.text(context, isMuted: true),
           ),
-        ],
-      ),
-    );
+        ),
+      ],
+    ),
+  );
 
   Widget _buildCard({required Widget child, Color? borderColor}) => Container(
-      width: double.infinity,
-      decoration: BoxDecoration(
-        color: AppColors.surface(context, level: 1),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: borderColor ?? AppColors.borderColor(context),
-        ),
-      ),
-      child: child,
-    );
+    width: double.infinity,
+    decoration: BoxDecoration(
+      color: AppColors.surface(context, level: 1),
+      borderRadius: BorderRadius.circular(16),
+      border: Border.all(color: borderColor ?? AppColors.borderColor(context)),
+    ),
+    child: child,
+  );
 
   Widget _buildAccountSection(String currentEmail) {
     if (!_showEmailForm) {
@@ -641,172 +634,178 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen>
   Widget _buildAppearanceSection() {
     final themeMode = ref.watch(themeProvider);
 
-    // Sync tab index if changed externally
-    if (!_themeTabController.indexIsChanging &&
-        _themeTabController.index != _themeModeToIndex(themeMode)) {
-      _themeTabController.animateTo(_themeModeToIndex(themeMode));
-    }
-
-    return AnimatedContainer(
-      duration: const Duration(milliseconds: 300),
+    return Container(
       height: 45,
+      padding: const EdgeInsets.all(4),
       decoration: BoxDecoration(
         color: AppColors.surface(context, level: 1),
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: AppColors.borderColor(context)),
       ),
-      child: TabBar(
-        controller: _themeTabController,
-        overlayColor: WidgetStateProperty.all(Colors.transparent),
-        splashFactory: NoSplash.splashFactory,
-        indicator: BoxDecoration(
-          borderRadius: BorderRadius.circular(12),
-          color: AppColors.primary.withValues(alpha: 0.1),
-          border: Border.all(color: Colors.transparent, width: 0),
-        ),
-        labelColor: AppColors.primary,
-        unselectedLabelColor: AppColors.text(context, isMuted: true),
-        labelStyle: AppTextStyles.bodyMedium.copyWith(
-          fontWeight: FontWeight.w600,
-        ),
-        unselectedLabelStyle: AppTextStyles.bodyMedium.copyWith(
-          fontWeight: FontWeight.w600,
-        ),
-        indicatorSize: TabBarIndicatorSize.tab,
-        dividerColor: Colors.transparent,
-        onTap: (index) => HapticService.selection(),
-        tabs: const [
-          Tab(text: 'Light'),
-          Tab(text: 'System'),
-          Tab(text: 'Dark'),
+      child: Row(
+        children: [
+          _buildThemeTab('Light', ThemeMode.light, themeMode),
+          _buildThemeTab('System', ThemeMode.system, themeMode),
+          _buildThemeTab('Dark', ThemeMode.dark, themeMode),
         ],
       ),
     );
   }
 
-  Widget _buildDangerZoneSection() => _buildCard(
-      borderColor: AppColors.borderColor(context),
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Permanently remove your account',
-              style: TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
-                color: AppColors.text(context),
-              ),
+  Widget _buildThemeTab(String label, ThemeMode mode, ThemeMode currentMode) {
+    final isSelected = mode == currentMode;
+    return Expanded(
+      child: GestureDetector(
+        onTap: () {
+          HapticService.selection();
+          if (currentMode != mode) {
+            ref.read(themeProvider.notifier).setThemeMode(mode);
+          }
+        },
+        behavior: HitTestBehavior.opaque,
+        child: Container(
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(8),
+            color: isSelected
+                ? AppColors.primary.withValues(alpha: 0.1)
+                : Colors.transparent,
+          ),
+          child: Text(
+            label,
+            style: AppTextStyles.bodyMedium.copyWith(
+              fontWeight: FontWeight.w600,
+              color: isSelected
+                  ? AppColors.primary
+                  : AppColors.text(context, isMuted: true),
             ),
-            const SizedBox(height: 4),
-            Text(
-              'Deleting your account removes your profile, groups, and activity.',
-              style: TextStyle(
-                fontSize: 13,
-                color: AppColors.text(context, isMuted: true),
-              ),
-            ),
-            const SizedBox(height: 12),
-            _buildActionButton(
-              'Delete Account',
-              onPressed: _handleDeleteAccount,
-              isLoading: _isDeleteLoading,
-              isDestructive: true,
-              height: 36,
-              width: double.infinity,
-            ),
-          ],
+          ),
         ),
       ),
     );
+  }
+
+  Widget _buildDangerZoneSection() => _buildCard(
+    borderColor: AppColors.borderColor(context),
+    child: Padding(
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Permanently remove your account',
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+              color: AppColors.text(context),
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Deleting your account removes your profile, groups, and activity.',
+            style: TextStyle(
+              fontSize: 13,
+              color: AppColors.text(context, isMuted: true),
+            ),
+          ),
+          const SizedBox(height: 12),
+          _buildActionButton(
+            'Delete Account',
+            onPressed: _handleDeleteAccount,
+            isLoading: _isDeleteLoading,
+            isDestructive: true,
+            height: 36,
+            width: double.infinity,
+          ),
+        ],
+      ),
+    ),
+  );
 
   Widget _buildLegalSection() => Column(
-      children: [
-        _buildExpandingList(
-          title: 'POLICY DOCUMENTS',
-          children: [
-            _buildLegalTile(
-              'Terms of Service',
-              LucideIcons.fileText,
-              url: 'https://kovari.in/terms',
-            ),
-            _buildLegalTile(
-              'Privacy Policy',
-              LucideIcons.shield,
-              url: 'https://kovari.in/privacy',
-            ),
-            _buildLegalTile(
-              'Community Guidelines',
-              LucideIcons.bookOpen,
-              url: 'https://kovari.in/community-guidelines',
-            ),
-            _buildLegalTile(
-              'Data Deletion Policy',
-              LucideIcons.trash2,
-              url: 'https://kovari.in/data-deletion',
-              isLast: true,
-            ),
-          ],
-        ),
-        const SizedBox(height: 24),
-        _buildExpandingList(
-          title: 'POLICY ACCEPTANCE STATUS',
-          children: [
-            _buildStatusTile(
-              'Terms of Service',
-              'Accepted: Mar 4, 2026',
-              'Version: 2026-03-03',
-            ),
-            _buildStatusTile(
-              'Privacy Policy',
-              'Accepted: Mar 4, 2026',
-              'Version: 2026-03-03',
-            ),
-            _buildStatusTile(
-              'Community Guidelines',
-              'Accepted: Mar 4, 2026',
-              'Version: 2026-03-03',
-              isLast: true,
-            ),
-          ],
-        ),
-      ],
-    );
+    children: [
+      _buildExpandingList(
+        title: 'POLICY DOCUMENTS',
+        children: [
+          _buildLegalTile(
+            'Terms of Service',
+            LucideIcons.fileText,
+            url: 'https://kovari.in/terms',
+          ),
+          _buildLegalTile(
+            'Privacy Policy',
+            LucideIcons.shield,
+            url: 'https://kovari.in/privacy',
+          ),
+          _buildLegalTile(
+            'Community Guidelines',
+            LucideIcons.bookOpen,
+            url: 'https://kovari.in/community-guidelines',
+          ),
+          _buildLegalTile(
+            'Data Deletion Policy',
+            LucideIcons.trash2,
+            url: 'https://kovari.in/data-deletion',
+            isLast: true,
+          ),
+        ],
+      ),
+      const SizedBox(height: 24),
+      _buildExpandingList(
+        title: 'POLICY ACCEPTANCE STATUS',
+        children: [
+          _buildStatusTile(
+            'Terms of Service',
+            'Accepted: Mar 4, 2026',
+            'Version: 2026-03-03',
+          ),
+          _buildStatusTile(
+            'Privacy Policy',
+            'Accepted: Mar 4, 2026',
+            'Version: 2026-03-03',
+          ),
+          _buildStatusTile(
+            'Community Guidelines',
+            'Accepted: Mar 4, 2026',
+            'Version: 2026-03-03',
+            isLast: true,
+          ),
+        ],
+      ),
+    ],
+  );
 
   Widget _buildExpandingList({
     required String title,
     required List<Widget> children,
   }) => _buildCard(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-            decoration: BoxDecoration(
-              color: AppColors.surface(context, level: 1),
-              borderRadius: const BorderRadius.vertical(
-                top: Radius.circular(16),
-              ),
-              border: Border(
-                bottom: BorderSide(color: AppColors.borderColor(context)),
-              ),
-            ),
-            child: Text(
-              title,
-              style: TextStyle(
-                fontSize: 10,
-                fontWeight: FontWeight.w700,
-                color: AppColors.text(context, isMuted: true),
-                letterSpacing: 1.2,
-              ),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          decoration: BoxDecoration(
+            color: AppColors.surface(context, level: 1),
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+            border: Border(
+              bottom: BorderSide(color: AppColors.borderColor(context)),
             ),
           ),
-          ...children,
-        ],
-      ),
-    );
+          child: Text(
+            title,
+            style: TextStyle(
+              fontSize: 10,
+              fontWeight: FontWeight.w700,
+              color: AppColors.text(context, isMuted: true),
+              letterSpacing: 1.2,
+            ),
+          ),
+        ),
+        ...children,
+      ],
+    ),
+  );
 
   Widget _buildStatusTile(
     String title,
@@ -814,53 +813,53 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen>
     String version, {
     bool isLast = false,
   }) => Column(
-      children: [
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    title,
-                    style: const TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w400,
-                    ),
+    children: [
+      Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w400,
                   ),
-                  const SizedBox(height: 2),
-                  Text(
-                    accepted,
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: AppColors.text(context, isMuted: true),
-                    ),
-                  ),
-                  Text(
-                    version,
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: AppColors.text(context, isMuted: true),
-                    ),
-                  ),
-                ],
-              ),
-              Container(
-                width: 8,
-                height: 8,
-                decoration: const BoxDecoration(
-                  color: Color(0xFF22C55E),
-                  shape: BoxShape.circle,
                 ),
+                const SizedBox(height: 2),
+                Text(
+                  accepted,
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: AppColors.text(context, isMuted: true),
+                  ),
+                ),
+                Text(
+                  version,
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: AppColors.text(context, isMuted: true),
+                  ),
+                ),
+              ],
+            ),
+            Container(
+              width: 8,
+              height: 8,
+              decoration: const BoxDecoration(
+                color: Color(0xFF22C55E),
+                shape: BoxShape.circle,
               ),
-            ],
-          ),
+            ),
+          ],
         ),
-        if (!isLast) Divider(height: 1, color: AppColors.borderColor(context)),
-      ],
-    );
+      ),
+      if (!isLast) Divider(height: 1, color: AppColors.borderColor(context)),
+    ],
+  );
 
   Widget _buildLegalTile(
     String title,
@@ -868,36 +867,36 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen>
     required String url,
     bool isLast = false,
   }) => Column(
-      children: [
-        ListTile(
-          leading: Icon(
-            icon,
-            size: 18,
-            color: AppColors.text(context, isMuted: true),
-          ),
-          title: Text(
-            title,
-            style: TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.w400,
-              color: AppColors.text(context),
-            ),
-          ),
-          trailing: Icon(
-            LucideIcons.externalLink,
-            size: 14,
-            color: AppColors.text(context, isMuted: true),
-          ),
-          onTap: () {
-            HapticService.selection();
-            launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
-          },
-          contentPadding: const EdgeInsets.symmetric(horizontal: 16),
-          visualDensity: VisualDensity.compact,
+    children: [
+      ListTile(
+        leading: Icon(
+          icon,
+          size: 18,
+          color: AppColors.text(context, isMuted: true),
         ),
-        if (!isLast) Divider(height: 1, color: AppColors.borderColor(context)),
-      ],
-    );
+        title: Text(
+          title,
+          style: TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.w400,
+            color: AppColors.text(context),
+          ),
+        ),
+        trailing: Icon(
+          LucideIcons.externalLink,
+          size: 14,
+          color: AppColors.text(context, isMuted: true),
+        ),
+        onTap: () {
+          HapticService.selection();
+          launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
+        },
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16),
+        visualDensity: VisualDensity.compact,
+      ),
+      if (!isLast) Divider(height: 1, color: AppColors.borderColor(context)),
+    ],
+  );
 
   Widget _buildTextField({
     required TextEditingController controller,
@@ -906,85 +905,86 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen>
     bool obscureText = false,
     TextInputType keyboardType = TextInputType.text,
   }) => Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          label,
-          style: TextStyle(
-            fontSize: 13,
-            fontWeight: FontWeight.w600,
-            color: AppColors.text(context),
-          ),
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Text(
+        label,
+        style: TextStyle(
+          fontSize: 13,
+          fontWeight: FontWeight.w600,
+          color: AppColors.text(context),
         ),
-        const SizedBox(height: 6),
-        SizedBox(
-          height: 40,
-          child: TextField(
-            controller: controller,
-            obscureText: obscureText,
-            keyboardType: keyboardType,
-            style: const TextStyle(fontSize: 13),
-            decoration: InputDecoration(
-              isDense: true,
-              hintText: hint,
-              hintStyle: TextStyle(
-                color: AppColors.text(context, isMuted: true),
-                fontSize: 13,
-              ),
-              contentPadding: const EdgeInsets.symmetric(
-                horizontal: 12,
-                vertical: 8,
-              ),
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-                borderSide: BorderSide(color: AppColors.borderColor(context)),
-              ),
-              enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-                borderSide: BorderSide(color: AppColors.borderColor(context)),
-              ),
-              focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-                borderSide: const BorderSide(color: AppColors.primary),
-              ),
-              filled: true,
-              fillColor: AppColors.surface(context, level: 2),
+      ),
+      const SizedBox(height: 6),
+      SizedBox(
+        height: 40,
+        child: TextField(
+          controller: controller,
+          obscureText: obscureText,
+          keyboardType: keyboardType,
+          style: const TextStyle(fontSize: 13),
+          decoration: InputDecoration(
+            isDense: true,
+            hintText: hint,
+            hintStyle: TextStyle(
+              color: AppColors.text(context, isMuted: true),
+              fontSize: 13,
             ),
-          ),
-        ),
-      ],
-    );
-
-  Widget _buildOutlineButton(String label, {required VoidCallback onPressed}) => SizedBox(
-      width: double.infinity,
-      height: 40,
-      child: OutlinedButton(
-        onPressed: onPressed,
-        style: OutlinedButton.styleFrom(
-          side: BorderSide(color: AppColors.borderColor(context)),
-          backgroundColor: AppColors.cardColor(context),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
-          ),
-          padding: const EdgeInsets.symmetric(horizontal: 16),
-        ),
-        child: Text(
-          label,
-          style: TextStyle(
-            fontSize: 14,
-            fontWeight: FontWeight.w500,
-            color: AppColors.text(context),
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 12,
+              vertical: 8,
+            ),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: BorderSide(color: AppColors.borderColor(context)),
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: BorderSide(color: AppColors.borderColor(context)),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: const BorderSide(color: AppColors.primary),
+            ),
+            filled: true,
+            fillColor: AppColors.surface(context, level: 2),
           ),
         ),
       ),
-    );
+    ],
+  );
+
+  Widget _buildOutlineButton(String label, {required VoidCallback onPressed}) =>
+      InteractiveWrapper(
+        onPressed: onPressed,
+        borderRadius: BorderRadius.circular(12),
+        hapticType: HapticType.light,
+        child: Container(
+          width: double.infinity,
+          height: 40,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: Colors.transparent,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: AppColors.borderColor(context)),
+          ),
+          child: Text(
+            label,
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w500,
+              color: AppColors.text(context),
+            ),
+          ),
+        ),
+      );
 
   Widget _buildCancelButton(VoidCallback onPressed) => SecondaryButton(
-      onPressed: onPressed,
-      icon: LucideIcons.x,
-      width: 32,
-      height: 32,
-    );
+    onPressed: onPressed,
+    icon: LucideIcons.x,
+    width: 32,
+    height: 32,
+  );
 
   Widget _buildActionButton(
     String label, {
@@ -994,15 +994,13 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen>
     double? width,
     double? height,
   }) => PrimaryButton(
-      text: label,
-      onPressed: onPressed,
-      isLoading: isLoading,
-      width: width ?? 0,
-      height: height ?? 32,
-      backgroundColor: isDestructive
-          ? AppColors.destructive
-          : AppColors.primary,
-      foregroundColor: AppColors.primaryForeground,
-      isDestructive: isDestructive,
-    );
+    text: label,
+    onPressed: onPressed,
+    isLoading: isLoading,
+    width: width ?? 0,
+    height: height ?? 32,
+    backgroundColor: isDestructive ? AppColors.destructive : AppColors.primary,
+    foregroundColor: AppColors.primaryForeground,
+    isDestructive: isDestructive,
+  );
 }

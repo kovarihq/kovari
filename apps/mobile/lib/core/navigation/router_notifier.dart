@@ -67,18 +67,21 @@ class RouterNotifier extends ChangeNotifier {
 
     // 2. Auth Guard
     if (!auth.isAuthenticated) {
-      // Save target redirect URL if it is not login or other auth routes
-      if (!loggingIn &&
-          state.matchedLocation != '/login' &&
-          state.matchedLocation != '/sign-up' &&
-          state.matchedLocation != '/forgot-password' &&
-          state.matchedLocation != '/reset-password') {
+      final isPublicAuthPage =
+          state.matchedLocation == '/login' ||
+          state.matchedLocation == '/sign-up' ||
+          state.matchedLocation == '/forgot-password' ||
+          state.matchedLocation == '/reset-password' ||
+          state.matchedLocation.startsWith('/verify-email');
+
+      if (!isPublicAuthPage) {
         _targetRedirectUrl = state.matchedLocation;
         AppLogger.d(
           '🔒 [RouterNotifier] Saved target redirect URL: $_targetRedirectUrl',
         );
+        return '/login';
       }
-      return loggingIn ? null : '/login';
+      return null;
     }
 
     // 3. Ban Guard

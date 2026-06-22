@@ -274,13 +274,15 @@ class KovariApp extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final router = ref.watch(routerProvider);
+    final auth = ref.watch(authProvider);
+    final themeMode = auth.isAuthenticated ? ref.watch(themeProvider) : ThemeMode.light;
 
     return MaterialApp.router(
       title: 'Kovari',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.lightTheme,
       darkTheme: AppTheme.darkTheme,
-      themeMode: ref.watch(themeProvider),
+      themeMode: themeMode,
       routerConfig: router,
       builder: (context, child) {
         final Widget content = GestureDetector(

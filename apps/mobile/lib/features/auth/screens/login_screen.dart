@@ -247,7 +247,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                             TextButton(
                               onPressed: () {
                                 HapticService.selection();
-                                const ResetPasswordRouteData().go(context);
+                                const ForgotPasswordRouteData().push<void>(context);
                               },
                               style: TextButton.styleFrom(
                                 padding: EdgeInsets.zero,
@@ -293,7 +293,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                       TextButton(
                         onPressed: () {
                           HapticService.selection();
-                          const SignUpRouteData().go(context);
+                          const SignUpRouteData().push<void>(context);
                         },
                         style: TextButton.styleFrom(
                           padding: EdgeInsets.zero,
