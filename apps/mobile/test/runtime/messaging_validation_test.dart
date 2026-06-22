@@ -218,6 +218,9 @@ void main() {
     when(
       () => mockGroupEnc.encryptMessage(any(), any()),
     ).thenAnswer((_) async => null);
+    when(
+      () => mockGroupEnc.isKeyAvailable(any()),
+    ).thenReturn(true);
 
     container = ProviderContainer(
       overrides: [
