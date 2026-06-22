@@ -48,6 +48,9 @@ class Env {
   static String? get geoapifyKey => _getOptional('GEOAPIFY_KEY');
   static String? get sentryDsn => _getOptional('SENTRY_DSN');
 
+  // App Metadata
+  static String get appVersion => _getOptional('APP_VERSION') ?? '1.0.0';
+
   // Google OAuth - REQUIRED for Mobile Auth
   static String? get googleClientId => _getOptional('GOOGLE_CLIENT_ID');
 

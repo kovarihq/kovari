@@ -10,6 +10,7 @@ import 'package:flutter_native_splash/flutter_native_splash.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:hive_flutter/hive_flutter.dart';
+import 'package:mobile/core/auth/token_storage.dart';
 import 'package:mobile/core/config/env.dart';
 import 'package:mobile/core/navigation/router.dart';
 import 'package:mobile/core/network/mutation_queue.dart';
@@ -20,6 +21,7 @@ import 'package:mobile/core/runtime/runtime_init.dart';
 import 'package:mobile/core/security/runtime_trust_service.dart';
 import 'package:mobile/core/security/secure_key_manager.dart';
 import 'package:mobile/core/security/trust_state_machine.dart';
+import 'package:mobile/core/services/fcm_service.dart';
 import 'package:mobile/core/telemetry/freeze_monitor.dart';
 import 'package:mobile/core/telemetry/release_health_service.dart';
 import 'package:mobile/core/telemetry/runtime_metrics_service.dart';
@@ -220,6 +222,17 @@ void main() {
             FreezeMonitor().start();
             ReleaseHealthService().reportSessionStart();
             AppLogger.i('✅ Firebase observability connected.');
+
+            // 🔔 [FCM] Initialize push notifications after Firebase is ready
+            try {
+              final tokenStorage = TokenStorage();
+              final deviceId =
+                  await tokenStorage.getDeviceId() ?? await _ensureDeviceId(tokenStorage);
+              await FCMService.instance.init(deviceId: deviceId);
+              AppLogger.i('✅ FCM push notifications initialized.');
+            } catch (e) {
+              AppLogger.w('⚠️ FCM initialization failed (non-fatal): $e');
+            }
           } catch (e) {
             AppLogger.w(
               '⚠️ Firebase/Observability services failed to start: $e',
@@ -360,4 +373,16 @@ class BouncingScrollBehavior extends ScrollBehavior {
 
   @override
   ScrollPhysics getScrollPhysics(BuildContext context) => const BouncingScrollPhysics(parent: AlwaysScrollableScrollPhysics());
+}
+
+/// Ensures a stable device ID exists in TokenStorage.
+/// Falls back to creating one if not yet set (e.g. on first launch before
+/// SocketService has had a chance to run).
+Future<String> _ensureDeviceId(TokenStorage storage) async {
+  // We generate a simple time-based ID here to avoid importing the uuid package
+  // into main. SocketService will also call saveDeviceId on first connect —
+  // both calls write the same key so the second write is a safe no-op.
+  final id = '${DateTime.now().millisecondsSinceEpoch.toRadixString(16)}-fcm-bootstrap';
+  await storage.saveDeviceId(id);
+  return id;
 }

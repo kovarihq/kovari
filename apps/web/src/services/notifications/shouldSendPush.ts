@@ -8,15 +8,21 @@ import { pubClient, connectRedis } from "../socket/redis";
 import { createAdminSupabaseClient } from "@kovari/api";
 
 interface ShouldSendPushParams {
-  userId: string;
+  userId: string;       // Clerk ID
   type: NotificationType;
   entityId?: string | null;
   entityType?: EntityType;
 }
 
 /**
- * Decision engine for push notifications.
- * Optimizes for user attention and avoids spam.
+ * Room-aware push suppression engine.
+ *
+ * Decision tree:
+ *   LOW priority            → suppress always
+ *   User offline            → send
+ *   User online + in chat   → suppress (already looking at the conversation)
+ *   User online + elsewhere → send    (user won't see the message otherwise)
+ *   Match/request online    → suppress (real-time socket event already fired)
  */
 export async function shouldSendPush({
   userId,
@@ -25,31 +31,56 @@ export async function shouldSendPush({
   entityType,
 }: ShouldSendPushParams): Promise<boolean> {
   await connectRedis();
+
   const priority = NotificationPriorityMap[type] || NotificationPriority.LOW;
 
-  // 1. Low priority -> never push
+  // 1. Low priority — never push regardless of presence
   if (priority === NotificationPriority.LOW) return false;
 
-  // 2. Check if user is already online (Socket.IO + Redis presence)
-  const userSocketsKey = `user_socket:${userId}`; 
+  // 2. Check online presence
+  const userSocketsKey = `user_socket:${userId}`;
   const isOnlineCount = await pubClient.sCard(userSocketsKey);
-  
-  if (isOnlineCount && isOnlineCount > 0) {
-    // User is active in-app, skip push to avoid double-alerting
-    return false;
+  const isOnline = isOnlineCount > 0;
+
+  if (!isOnline) {
+    // User is fully offline → eligible for push (proceed to priority check below)
+  } else {
+    // User is online. Apply room-aware suppression for chat/group messages.
+    if ((entityType === "chat" || entityType === "group") && entityId) {
+      const activeChatsKey = `user_chats:${userId}`;
+      const isViewingTargetRoom = await pubClient.sIsMember(activeChatsKey, entityId);
+
+      if (isViewingTargetRoom) {
+        // User is actively looking at this exact conversation — suppress push.
+        // The socket layer already delivered a real-time `receive_message` event.
+        return false;
+      }
+
+      // User is online but NOT in this room (e.g. on Explore, Groups, Profile).
+      // Fall through → send push so they see the unread indicator.
+    } else {
+      // For match / request / system notifications: the socket layer already
+      // fired a `new_notification` event in real-time. Suppress FCM to avoid
+      // double-alerting (one in-app banner + one system notification).
+      return false;
+    }
   }
 
-  // 3. High priority eligibility (online check passed)
+  // 3. HIGH priority — always eligible if we reached here
   if (priority === NotificationPriority.HIGH) return true;
 
-  // 4. Medium priority conditional relevance
+  // 4. MEDIUM priority — apply entity-specific rules
   if (priority === NotificationPriority.MEDIUM) {
-    // Example: Group Join Request (only notify admins/relevant parties)
-    if (type === NotificationType.GROUP_JOIN_REQUEST_RECEIVED && entityType === "group" && entityId) {
-      return await isUserGroupAdmin(userId, entityId);
+    // Group join requests: only notify group admins
+    if (
+      type === NotificationType.GROUP_JOIN_REQUEST_RECEIVED &&
+      entityType === "group" &&
+      entityId
+    ) {
+      return isUserGroupAdmin(userId, entityId);
     }
-    
-    // Default for medium if no specific rule: true
+
+    // Default: send for medium priority
     return true;
   }
 
@@ -57,18 +88,17 @@ export async function shouldSendPush({
 }
 
 /**
- * Helper to check if a user is an admin of a group.
+ * Checks if a Clerk user is an admin of a group (used for GROUP_JOIN_REQUEST_RECEIVED).
  */
-async function isUserGroupAdmin(userId: string, groupId: string): Promise<boolean> {
+async function isUserGroupAdmin(clerkId: string, groupId: string): Promise<boolean> {
   const supabase = createAdminSupabaseClient();
-  
-  // Need to resolve Supabase User UUID from Clerk ID
+
   const { data: user } = await supabase
     .from("users")
     .select("id")
-    .eq("clerk_user_id", userId)
+    .eq("clerk_user_id", clerkId)
     .single();
-    
+
   if (!user) return false;
 
   const { data: membership } = await supabase
@@ -80,5 +110,3 @@ async function isUserGroupAdmin(userId: string, groupId: string): Promise<boolea
 
   return membership?.role === "admin" || membership?.role === "owner";
 }
-
-

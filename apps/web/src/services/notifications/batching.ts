@@ -60,8 +60,10 @@ async function processBuffer(userId: string, chatId: string, senderName: string,
   console.log(`[Batching] Processing buffer for user: ${userId}, chat: ${chatId}. Messages: ${messages.length}, senderName: ${senderName}, senderId: ${senderId}`);
 
   const count = messages.length;
-  const title = `New message from ${senderName}`;
-  const body = count > 1 ? `Sent ${count} messages. Latest: ${messages[count-1]}` : messages[0];
+  // 🔒 E2EE Privacy: never include sender name or message content in push payloads.
+  // The notification tray is not an E2EE channel.
+  const title = count > 1 ? `${count} new messages` : "New message";
+  const body = "Open Kovari to view message";
 
   // For direct chats, chatId is "uuid1_uuid2" which is NOT a valid PostgreSQL UUID.
   // Use senderId (a real UUID) so the notifications.entity_id column accepts it.

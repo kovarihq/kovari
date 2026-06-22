@@ -12,6 +12,7 @@ import { sendPushNotification } from "@/services/notifications/push";
 import { pubClient, connectRedis } from "@/services/socket/redis";
 
 import { createAdminSupabaseClient } from "@kovari/api";
+import { PushService } from "@/services/notifications/pushService";
 
 /**
  * Server-only function to create a notification.
@@ -128,7 +129,8 @@ async function evaluatePushNotifications(
   // 0. Ensure Redis is connected (important for Next.js API routes)
   await connectRedis();
 
-  // 1. Decision Engine Check (Uses Clerk ID for presence)
+  // Note: shouldSendPush() is called internally by PushService.sendPush().
+  // We run it here first only to gate the web-push subscription path below.
   const eligible = await shouldSendPush({ userId: clerkId, type, entityId, entityType });
   if (!eligible) return;
 
@@ -138,6 +140,37 @@ async function evaluatePushNotifications(
   if (!isDuplicate) {
     console.log(`[Push] Deduplicated notification: ${notificationId}`);
     return;
+  }
+
+  // 3. Dispatch FCM Mobile Push Notification (Android/iOS)
+  try {
+    const fcmBody = type === NotificationType.NEW_MESSAGE ? "Open Kovari to view message" : message;
+    const pushResult = await PushService.sendPush({
+      supabaseId,
+      clerkId,
+      type,
+      title,
+      body: fcmBody,
+      entityType,
+      entityId,
+      data: {
+        notificationId,
+      },
+    });
+
+    // 📊 [Observability] Write push delivery outcome back to the notification row
+    // This enables beta debugging: "why didn't they get the push?"
+    const supabaseAdmin = createAdminSupabaseClient();
+    await supabaseAdmin
+      .from("notifications")
+      .update({
+        push_attempted_at: new Date().toISOString(),
+        push_status: pushResult.pushStatus,
+      })
+      .eq("id", notificationId);
+
+  } catch (fcmErr) {
+    console.error("[Notification] Mobile FCM Push Dispatch failed (best-effort):", fcmErr);
   }
 
   // 3. Fetch Subs and Send (Uses Supabase UUID)

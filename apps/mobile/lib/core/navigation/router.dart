@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:mobile/core/navigation/router_notifier.dart';
 import 'package:mobile/core/navigation/routes.dart';
+import 'package:mobile/core/services/fcm_service.dart';
 import 'package:mobile/core/utils/app_logger.dart';
 import 'package:mobile/core/utils/nav_observer.dart';
 import 'package:mobile/features/chat/screens/chat_screen.dart';
@@ -66,6 +67,34 @@ final routerProvider = Provider<GoRouter>((ref) {
         AppLogger.i('🔗 [DeepLink] Routing initial link to: $location');
         router.go(location);
       }
+    }
+  });
+
+  // 🔔 [FCM] Notification tap routing
+  // entity_type + entity_id are included in every FCM data payload by PushService.
+  FCMService.onNotificationEvent.listen((data) {
+    // Foreground events are NOT routed — they are shown as toasts by the shell.
+    final isForeground = data['__foreground'] == true;
+    if (isForeground) return;
+
+    final entityType = data['entity_type'] as String?;
+    final entityId = data['entity_id'] as String?;
+
+    AppLogger.i('🔔 [FCM] Routing tap: entityType=$entityType entityId=$entityId');
+
+    switch (entityType) {
+      case 'chat':
+        if (entityId != null) router.push('/chat/$entityId');
+      case 'group':
+        if (entityId != null) router.push('/groups/$entityId');
+      case 'match':
+      case 'request':
+        router.push('/requests');
+      case 'notification':
+        router.push('/notifications');
+      default:
+        AppLogger.w('🔔 [FCM] Unknown entityType: $entityType — routing to notifications.');
+        router.push('/notifications');
     }
   });
 
