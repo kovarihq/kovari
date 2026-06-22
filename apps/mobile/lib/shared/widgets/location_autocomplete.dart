@@ -135,6 +135,25 @@ class _LocationAutocompleteState extends ConsumerState<LocationAutocomplete> {
     overlay.insert(_overlayEntry!);
   }
 
+  String _getSecondaryLabel(GeoapifyResult suggestion) {
+    final parts = <String>[];
+    if (suggestion.name.isNotEmpty &&
+        suggestion.city.isNotEmpty &&
+        suggestion.name.toLowerCase() != suggestion.city.toLowerCase()) {
+      parts.add(suggestion.city);
+    }
+    if (suggestion.state.isNotEmpty) parts.add(suggestion.state);
+    if (suggestion.country.isNotEmpty) parts.add(suggestion.country);
+    return parts.isNotEmpty ? parts.join(', ') : suggestion.formatted;
+  }
+
+  String _getPrimaryLabel(GeoapifyResult suggestion) {
+    if (suggestion.name.isNotEmpty) return suggestion.name;
+    if (suggestion.city.isNotEmpty) return suggestion.city;
+    if (suggestion.addressLine1.isNotEmpty) return suggestion.addressLine1;
+    return suggestion.formatted.split(',')[0];
+  }
+
   Widget _buildOverlayContent(BuildContext context) {
     if (_isLoading) {
       return Padding(
@@ -200,9 +219,7 @@ class _LocationAutocompleteState extends ConsumerState<LocationAutocomplete> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      suggestion.city.isNotEmpty
-                          ? suggestion.city
-                          : suggestion.formatted.split(',')[0],
+                      _getPrimaryLabel(suggestion),
                       style: AppTextStyles.bodyMedium.copyWith(
                         fontWeight: FontWeight.w500,
                         height: 1.1,
@@ -211,7 +228,7 @@ class _LocationAutocompleteState extends ConsumerState<LocationAutocomplete> {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      suggestion.formatted,
+                      _getSecondaryLabel(suggestion),
                       style: AppTextStyles.bodySmall.copyWith(
                         color: AppColors.text(context, isMuted: true),
                         height: 1.1,

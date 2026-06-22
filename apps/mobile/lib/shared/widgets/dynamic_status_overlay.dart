@@ -86,7 +86,13 @@ class _DynamicStatusOverlayState extends ConsumerState<DynamicStatusOverlay> {
 
     final activeRoute = ref.watch(activeRouteProvider);
     final isChatScreen =
-        activeRoute.contains('/chat/') || activeRoute == 'chat_screen';
+        activeRoute.contains('/chat/') ||
+        activeRoute == 'chat_screen' ||
+        activeRoute.contains('/groups/');
+
+    if (isChatScreen) {
+      return const SizedBox.shrink();
+    }
 
     final safeTop = MediaQuery.of(context).padding.top;
     final safeBottom = MediaQuery.of(context).padding.bottom;
@@ -120,89 +126,91 @@ class _DynamicStatusOverlayState extends ConsumerState<DynamicStatusOverlay> {
 
           final accentColor = status.type.defaultAccentColor;
 
-          return Padding(
-            padding: const EdgeInsets.only(top: 8),
-            child: AnimatedOpacity(
-              duration: const Duration(milliseconds: 400),
-              opacity: isStillActive ? 1.0 : 0.0,
-              curve: isStillActive ? Curves.easeOutCubic : Curves.easeInQuint,
-              child: TweenAnimationBuilder<double>(
-                duration: const Duration(milliseconds: 600),
-                curve: isStillActive ? Curves.easeOutBack : Curves.easeInBack,
-                tween: Tween(begin: 0.0, end: isStillActive ? 1.0 : 0.0),
-                builder: (context, value, child) {
-                  final scaleValue = 0.6 + (0.4 * value);
-                  return Transform.scale(scale: scaleValue, child: child);
-                },
-                child: SizedBox(
-                  width: MediaQuery.of(context).size.width - 32,
-                  child: _SwipeToDismiss(
-                    key: ValueKey(
-                      'dismiss_${status.timestamp.toIso8601String()}',
+          return TweenAnimationBuilder<double>(
+            duration: const Duration(milliseconds: 400),
+            curve: isStillActive ? Curves.easeOutCubic : Curves.easeInQuint,
+            tween: Tween(begin: 0.0, end: isStillActive ? 1.0 : 0.0),
+            builder: (context, value, child) {
+              return Align(
+                alignment: isChatScreen
+                    ? Alignment.topCenter
+                    : Alignment.bottomCenter,
+                heightFactor: value,
+                child: Opacity(
+                  opacity: value,
+                  child: Transform.scale(
+                    scale: 0.8 + (0.2 * value),
+                    child: Padding(
+                      padding: const EdgeInsets.only(top: 8),
+                      child: child,
                     ),
-                    onDismissed: () {
-                      if (isManual) {
-                        ref
-                            .read(statusOverlayProvider.notifier)
-                            .hide(status.timestamp);
-                      }
-                    },
-                    child: AnimatedSize(
-                      duration: const Duration(milliseconds: 400),
-                      curve: Curves.easeOutExpo,
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(
-                          24,
-                        ), // More card-like for multi-line
-                        child: BackdropFilter(
-                          filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-                          child: Container(
-                            constraints: const BoxConstraints(minHeight: 40),
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 20,
-                              vertical: 10,
-                            ),
-                            decoration: BoxDecoration(
-                              color: AppColors.cardColor(context),
-                              borderRadius: BorderRadius.circular(24),
-                              border: Border.all(
-                                color: AppColors.borderColor(context),
-                              ),
-                            ),
-                            child: _StatusPillContent(
-                              key: ValueKey(
-                                'content_${status.timestamp.toIso8601String()}',
-                              ),
-                              icon:
-                                  status.customIcon ?? status.type.defaultIcon,
-                              label: status.message,
-                              accentColor:
-                                  accentColor ??
-                                  (Theme.of(context).brightness ==
-                                          Brightness.dark
-                                      ? Colors.white
-                                      : Colors.black),
-                              isSpinning: status.type == StatusType.syncing,
-                              onAction: status.onAction,
-                              actionLabel: status.actionLabel,
-                            ),
+                  ),
+                ),
+              );
+            },
+            child: SizedBox(
+              width: MediaQuery.of(context).size.width - 32,
+              child: _SwipeToDismiss(
+                key: ValueKey('dismiss_${status.timestamp.toIso8601String()}'),
+                onDismissed: () {
+                  if (isManual) {
+                    ref
+                        .read(statusOverlayProvider.notifier)
+                        .hide(status.timestamp);
+                  }
+                },
+                child: AnimatedSize(
+                  duration: const Duration(milliseconds: 400),
+                  curve: Curves.easeOutExpo,
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(
+                      24,
+                    ), // More card-like for multi-line
+                    child: BackdropFilter(
+                      filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+                      child: Container(
+                        constraints: const BoxConstraints(minHeight: 40),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 20,
+                          vertical: 10,
+                        ),
+                        decoration: BoxDecoration(
+                          color: AppColors.cardColor(context),
+                          borderRadius: BorderRadius.circular(24),
+                          border: Border.all(
+                            color: AppColors.borderColor(context),
                           ),
+                        ),
+                        child: _StatusPillContent(
+                          key: ValueKey(
+                            'content_${status.timestamp.toIso8601String()}',
+                          ),
+                          icon: status.customIcon ?? status.type.defaultIcon,
+                          label: status.message,
+                          accentColor:
+                              accentColor ??
+                              (Theme.of(context).brightness == Brightness.dark
+                                  ? Colors.white
+                                  : Colors.black),
+                          isSpinning: status.type == StatusType.syncing,
+                          onAction: status.onAction,
+                          actionLabel: status.actionLabel,
                         ),
                       ),
                     ),
                   ),
                 ),
               ),
-              onEnd: () {
-                if (!isStillActive && isManual) {
-                  setState(() {
-                    _displayList.removeWhere(
-                      (m) => m.timestamp == status.timestamp,
-                    );
-                  });
-                }
-              },
             ),
+            onEnd: () {
+              if (!isStillActive && isManual) {
+                setState(() {
+                  _displayList.removeWhere(
+                    (m) => m.timestamp == status.timestamp,
+                  );
+                });
+              }
+            },
           );
         }).toList(),
       ),

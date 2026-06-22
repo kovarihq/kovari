@@ -45,69 +45,73 @@ class _NotificationsScreenState extends ConsumerState<NotificationsScreen> {
     return Scaffold(
       backgroundColor: AppColors.backgroundColor(context),
       body: SafeArea(
-        child: RefreshIndicator(
-          onRefresh: () => ref
-              .read(notificationProvider.notifier)
-              .refresh(ignoreCache: true),
-          color: AppColors.primary,
-          child: CustomScrollView(
-            controller: _scrollController,
-            physics: const AlwaysScrollableScrollPhysics(),
-            slivers: [
-              // 1. Header
-              SliverToBoxAdapter(child: _buildHeader(context, ref)),
-
-              // 2. Main Content
-              if (notificationsAsync.isLoading &&
-                  notificationsAsync.notifications.isEmpty)
-                _buildSliverSkeleton(context)
-              else if (notificationsAsync.error != null &&
-                  notificationsAsync.notifications.isEmpty)
-                SliverFillRemaining(
-                  hasScrollBody: false,
-                  child: _buildErrorState(context, ref),
-                )
-              else if (notificationsAsync.notifications.isEmpty)
-                SliverFillRemaining(
-                  hasScrollBody: false,
-                  child: _buildEmptyState(context),
-                )
-              else
-                SliverList(
-                  delegate: SliverChildBuilderDelegate((context, index) {
-                    final notification =
-                        notificationsAsync.notifications[index];
-                    return RepaintBoundary(
-                      child: NotificationItem(
-                        notification: notification,
-                        onTap: () {
-                          if (!notification.isRead) {
-                            ref
-                                .read(notificationProvider.notifier)
-                                .markAsRead(notification.id);
-                          }
-                        },
+        child: Column(
+          children: [
+            _buildHeader(context, ref),
+            Expanded(
+              child: RefreshIndicator(
+                onRefresh: () => ref
+                    .read(notificationProvider.notifier)
+                    .refresh(ignoreCache: true),
+                color: AppColors.primary,
+                child: CustomScrollView(
+                  controller: _scrollController,
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  slivers: [
+                    // Main Content
+                    if (notificationsAsync.isLoading &&
+                        notificationsAsync.notifications.isEmpty)
+                      _buildSliverSkeleton(context)
+                    else if (notificationsAsync.error != null &&
+                        notificationsAsync.notifications.isEmpty)
+                      SliverFillRemaining(
+                        hasScrollBody: false,
+                        child: _buildErrorState(context, ref),
+                      )
+                    else if (notificationsAsync.notifications.isEmpty)
+                      SliverFillRemaining(
+                        hasScrollBody: false,
+                        child: _buildEmptyState(context),
+                      )
+                    else
+                      SliverList(
+                        delegate: SliverChildBuilderDelegate((context, index) {
+                          final notification =
+                              notificationsAsync.notifications[index];
+                          return RepaintBoundary(
+                            child: NotificationItem(
+                              notification: notification,
+                              onTap: () {
+                                if (!notification.isRead) {
+                                  ref
+                                      .read(notificationProvider.notifier)
+                                      .markAsRead(notification.id);
+                                }
+                              },
+                            ),
+                          );
+                        }, childCount: notificationsAsync.notifications.length),
                       ),
-                    );
-                  }, childCount: notificationsAsync.notifications.length),
-                ),
 
-              // 3. Pagination Loading Indicator
-              if (!notificationsAsync.isLoading &&
-                  notificationsAsync.notifications.isNotEmpty &&
-                  notificationsAsync.isFetchingNextPage)
-                const SliverToBoxAdapter(
-                  child: Padding(
-                    padding: EdgeInsets.symmetric(vertical: 20),
-                    child: Center(
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    ),
-                  ),
-                ),
+                    // Pagination Loading Indicator
+                    if (!notificationsAsync.isLoading &&
+                        notificationsAsync.notifications.isNotEmpty &&
+                        notificationsAsync.isFetchingNextPage)
+                      const SliverToBoxAdapter(
+                        child: Padding(
+                          padding: EdgeInsets.symmetric(vertical: 20),
+                          child: Center(
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          ),
+                        ),
+                      ),
 
-              const SliverToBoxAdapter(child: SizedBox(height: 40)),
-            ],
-          ),
+                    const SliverToBoxAdapter(child: SizedBox(height: 40)),
+                  ],
+                ),
+              ),
+            ),
+          ],
         ),
       ),
     );

@@ -77,6 +77,11 @@ class StatusOverlayNotifier extends Notifier<List<StatusMessage>> {
     VoidCallback? onAction,
     String? actionLabel,
   }) {
+    // Prevent duplicate messages of the same type showing concurrently
+    if (state.any((m) => m.message == message && m.type == type)) {
+      return;
+    }
+
     final status = StatusMessage(
       message: message,
       type: type,

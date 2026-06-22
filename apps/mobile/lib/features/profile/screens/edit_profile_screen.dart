@@ -23,7 +23,6 @@ import 'package:mobile/shared/utils/url_utils.dart';
 import 'package:mobile/shared/widgets/flat_date_picker.dart';
 import 'package:mobile/shared/widgets/kovari_snackbar.dart';
 import 'package:mobile/shared/widgets/location_autocomplete.dart';
-import 'package:mobile/shared/widgets/nationality_autocomplete.dart';
 import 'package:mobile/shared/widgets/profile_section_card.dart';
 import 'package:mobile/shared/widgets/select_chip.dart';
 import 'package:mobile/shared/widgets/select_field.dart';
@@ -576,13 +575,6 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
                   ],
                   itemLabelBuilder: (val) => val,
                   onChanged: (val) => setState(() => _gender = val ?? ''),
-                ),
-                const SizedBox(height: AppSpacing.md),
-                NationalityAutocomplete(
-                  label: 'Nationality',
-                  initialValue: _nationality,
-                  fillColor: AppColors.surface(context, level: 2),
-                  onSelect: (val) => setState(() => _nationality = val),
                 ),
                 const SizedBox(height: AppSpacing.md),
                 LocationAutocomplete(
