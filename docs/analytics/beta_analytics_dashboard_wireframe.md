@@ -35,42 +35,42 @@ The dashboard utilizes a clean, content-driven layout optimized for dark mode se
 ## Responsive Grid Layout Specification
 
 ```
-+---------------------------------------------------------------------------------------+
-|  HEADER: Beta Analytics Dashboard           [Refresh v] [Batch: All v] [Range: 30d v] |
-+---------------------------------------------------------------------------------------+
-|  KPI GRID:                                                                            |
-|  [Total Users]  [Activated]  [Returned]  [Retention %]  [Active Conversations]        |
-+---------------------------------------------------------------------------------------+
-|  MIDDLE GRID (2 Columns on Desktop, Stacked on Mobile):                               |
-|  +---------------------------------------+ +---------------------------------------+ |
-|  | LEFT: USER CONVERSION FUNNEL          | | RIGHT: MESSAGING VOLUME GROWTH CHART  | |
-|  | 1. Invited     [████████████████] 100%| |    |                                  | |
-|  | 2. Activated   [██████████████░] 93.3%| | 100|      /\                          | |
-|  | 3. Onboarded   [██████████░░░░] 66.7% | |  50|  ___/  \____                     | |
-|  | 4. Trv Intent  [██████████░░░░] 66.7% | |   0+-------------                     | |
-|  | 5. Explore View[░░░░░░░░░░░░░░] N/A   | |    20  21  22  23                     | |
-|  | 6. Interest Snt[█████░░░░░░░░░] 33.3% | +---------------------------------------+ |
-|  | 7. Int Accept  [░░░░░░░░░░░░░░] 0.0%  | | RIGHT: PUSH NOTIFICATION HEALTH CARD  | |
-|  | 8. Conversated [░░░░░░░░░░░░░░] 0.0%  | | Created: 45      Read Rate: 42.2%     | |
-|  | 9. Msg Sent    [░░░░░░░░░░░░░░] 0.0%  | | Success: 12 (30.0%)  Failed: 3 (7.5%)  | |
-|  |                                       | | No Token: 25 (62.5%)  <-- 🚨 WARN     | |
-|  +---------------------------------------+ +---------------------------------------+ |
-+---------------------------------------------------------------------------------------+
-|  BOTTOM TABLES GRID (3 Columns or Stacked):                                           |
++-------------------------------------------------------------------------------------------------------+
+|  HEADER: Beta Analytics Dashboard                     [Refresh v] [Batch: All v] [Range: 30d v]       |
++-------------------------------------------------------------------------------------------------------+
+|  KPI GRID:                                                                                            |
+|  [Users]  [Activated]  [Returned]  [Retention %]  [Interests]  [Conversations]  [Acceptance Rate %]   |
++-------------------------------------------------------------------------------------------------------+
+|  MIDDLE GRID (2 Columns on Desktop, Stacked on Mobile):                                               |
+|  +---------------------------------------+ +---------------------------------------------------------+ |
+|  | LEFT: USER CONVERSION FUNNEL          | | RIGHT: MESSAGING VOLUME GROWTH CHART                    | |
+|  | 1. Invited     [████████████████] 100%| |    |                                                    | |
+|  | 2. Activated   [██████████████░] 93.3%| | 100|      /\                                            | |
+|  | 3. Onboarded   [██████████░░░░] 66.7% | |  50|  ___/  \____                                       | |
+|  | 4. Trv Intent  [██████████░░░░] 66.7% | |   0+-------------                                       | |
+|  | 5. Explore View[░░░░░░░░░░░░░░] N/A   | |    20  21  22  23                                       | |
+|  | 6. Interest Snt[█████░░░░░░░░░] 33.3% | +---------------------------------------------------------+ |
+|  | 7. Int Accept  [░░░░░░░░░░░░░░] 0.0%  | | RIGHT: PUSH NOTIFICATION HEALTH CARD                    | |
+|  | 8. Conversated [░░░░░░░░░░░░░░] 0.0%  | | Created: 45      Read Rate: 42.2%                       | |
+|  | 9. Msg Sent    [░░░░░░░░░░░░░░] 0.0%  | | Success: 12 (30.0%)  Failed: 3 (7.5%)                    | |
+|  |                                       | | No Token: 25 (62.5%)  <-- 🚨 WARN                       | |
+|  +---------------------------------------+ +---------------------------------------------------------+ |
++-------------------------------------------------------------------------------------------------------+
+|  BOTTOM TABLES GRID (3 Columns or Stacked):                                                           |
 |  +---------------------+ +----------------------+ +--------------------------------+ |
 |  | Recent Interests    | | Recent Notifications | | Recent Conversations           | |
 |  | User | Target|Status| | User | Type | Status  | | Participants | Msg | Last Act  | |
 |  +---------------------+ +----------------------+ +--------------------------------+ |
-+---------------------------------------------------------------------------------------+
++-------------------------------------------------------------------------------------------------------+
 ```
 
 ### Grid Viewports Behavior
 - **Desktop (>= 1024px)**:
-  - Executive KPIs: `grid grid-cols-5 gap-4` (5 parallel cards).
+  - Executive KPIs: `grid grid-cols-6 gap-4` (6 parallel cards).
   - Middle Columns: `grid grid-cols-12 gap-6` (Funnel spans 7 columns, Messaging Chart and Notifications stack in 5 columns).
   - Tables: `grid grid-cols-3 gap-6` (3 side-by-side tables).
 - **Tablet (768px - 1023px)**:
-  - Executive KPIs: `grid grid-cols-3 gap-4` (3 cards on row 1, 2 cards on row 2).
+  - Executive KPIs: `grid grid-cols-3 gap-4` (3 cards per row, 2 rows).
   - Middle Columns: `grid grid-cols-1 gap-6` (Funnel and Messaging Charts stack vertically).
   - Tables: `grid grid-cols-1 gap-6` (tables stack vertically).
 - **Mobile (< 768px)**:
@@ -98,7 +98,7 @@ Provides immediate, scannable visibility into core business volumes and activati
 
 ## Layout Grid
 ```
-[ Users ]   [ Activation ]   [ Retention ]   [ Interests ]   [ Conversations ]
+[ Users ]   [ Activation ]   [ Retention ]   [ Interests ]   [ Conversations ]   [ Interest Acceptance Rate ]
 ```
 
 ### 1. KPI Card: Users
@@ -135,6 +135,31 @@ Provides immediate, scannable visibility into core business volumes and activati
 - **Display Format**: Count `[0]`.
 - **Trend Indicator**: Neutral.
 - **Comparison Period**: vs. previous 30 days.
+- **Existing Component**: Reuses `MetricCard.tsx`.
+
+### 6. KPI Card: Interest Acceptance Rate
+- **Definition**: Percentage of organic stranger interests sent that were accepted by the recipient.
+- **Formula**: `(Organic Stranger Accepted Interests) / (Organic Stranger Sent Interests) * 100.0` (overall) or decided-based rate.
+- **Source Table**: `public.match_interests`
+- **SQL Query**:
+  ```sql
+  WITH organic_users AS (
+    SELECT id FROM public.users
+    WHERE id NOT IN (
+      SELECT DISTINCT usr.id FROM public.users usr
+      LEFT JOIN public.profiles prf ON usr.id = prf.user_id
+      JOIN public.admins adm ON LOWER(COALESCE(prf.email, usr.email)) = LOWER(adm.email)
+    ) AND "isDeleted" = false
+  )
+  SELECT 
+    ROUND(COUNT(CASE WHEN status = 'accepted' THEN 1 END) * 100.0 / 
+          NULLIF(COUNT(CASE WHEN status IN ('accepted', 'rejected') THEN 1 END), 0), 2) AS stranger_acceptance_rate_pct
+  FROM public.match_interests
+  WHERE from_user_id IN (SELECT id FROM organic_users)
+    AND to_user_id IN (SELECT id FROM organic_users);
+  ```
+- **Empty State Behaviour**: Displays `0.00%` when no matching decisions have been recorded.
+- **Refresh Strategy**: Every 5 minutes (promoted to Executive Overview for real-time validation of matching bottlenecks).
 - **Existing Component**: Reuses `MetricCard.tsx`.
 
 ---
@@ -370,11 +395,11 @@ Dashboard component boundaries isolate failures:
   Closed-beta cohort tracking and operational indicators.
   
   [ Date Range: Last 30 Days v ]     [ Cohort Batch: All Batches v ]    [ Refresh Index ]
------------------------------------------------------------------------------------------
-  [ Total Users ]   [ Activated ]     [ Returned ]     [ Retention ]    [ Conversations ]
-  |     15      |   |  14 (93%) |     |    0     |     |   0.00%   |    |       0       |
-  | +0% last 7d |   | sync webhook    | last_seen_at   | telemetry gap  | stranger-only |
------------------------------------------------------------------------------------------
+----------------------------------------------------------------------------------------------------------------------------------
+  [ Total Users ] [ Activated ] [ Returned ] [ Retention % ] [ Interests Sent ] [ Conversations ] [ Interest Acceptance ]
+  |     15      | |  14 (93%) | |    0     | |   0.00%     | |      5        | |       0       | |        0.00%        |
+  | +0% last 7d | | sync webhook| |last_seen_at| |telemetry gap| | stranger-only | | stranger-only | |  decided-based rate |
+----------------------------------------------------------------------------------------------------------------------------------
  
   ACTIVATION PROGRESSION FUNNEL (LEFT)         MESSAGING GROWTH CHART (RIGHT)
   +---------------------------------------+   +---------------------------------------+

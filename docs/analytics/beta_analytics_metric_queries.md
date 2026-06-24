@@ -423,10 +423,10 @@ WHERE m.status = 'pending'
 
 ---
 
-## Metric: Acceptance Rate
+## Metric: Interest Acceptance Rate
 
 ### Purpose
-Answers the business question: "What proportion of matching requests are successfully accepted?"
+Answers the business question: "What proportion of organic matching requests are successfully accepted by recipient users?" This is the primary business funnel bottleneck identified in the June beta audit.
 
 ### Source Tables
 - `public.match_interests` (m)
@@ -441,53 +441,58 @@ Answers the business question: "What proportion of matching requests are success
 - `match_interests.to_user_id`
 - `profiles.user_id`
 - `profiles.email`
+- `users.email`
 - `admins.email`
 
+### Formulas
+The widget exposes two rates to track different aspects of engagement:
+1. **Decided-Based Interest Acceptance Rate (Primary Dashboard Rate)**:
+   $$\text{Acceptance Rate (Decided)} = \frac{\text{Organic Accepted Interests}}{\text{Organic Accepted Interests} + \text{Organic Rejected Interests}} \times 100\%$$
+   *Purpose*: Measures the selectivity and compatibility of matches for active decisions.
+2. **Overall Interest Acceptance Rate**:
+   $$\text{Acceptance Rate (Overall)} = \frac{\text{Organic Accepted Interests}}{\text{Total Organic Interests Sent}} \times 100\%$$
+   *Purpose*: Measures overall conversions including outstanding pending matches.
+
 ### SQL Query
-Calculates two rate formulas:
-1. **Overall Acceptance Rate**: `total_accepted / total_sent` (measures system efficiency).
-2. **Decided-Based Acceptance Rate**: `total_accepted / (total_accepted + total_rejected)` (measures selectivity).
+This query filters out testing/admin accounts from both sender and recipient ends, ensuring only stranger-to-stranger organic matching is computed.
 ```sql
-WITH organic_interests AS (
-  SELECT status
-  FROM public.match_interests m
-  WHERE m.from_user_id NOT IN (
-      SELECT DISTINCT usr.id
-      FROM public.users usr
-      JOIN public.profiles prf ON usr.id = prf.user_id
-      JOIN public.admins adm ON LOWER(prf.email) = LOWER(adm.email)
-    )
-    AND m.to_user_id NOT IN (
-      SELECT DISTINCT usr.id
-      FROM public.users usr
-      JOIN public.profiles prf ON usr.id = prf.user_id
-      JOIN public.admins adm ON LOWER(prf.email) = LOWER(adm.email)
-    )
+WITH organic_users AS (
+  SELECT DISTINCT usr.id AS user_id
+  FROM public.users usr
+  LEFT JOIN public.profiles prf ON usr.id = prf.user_id
+  JOIN public.admins adm ON LOWER(COALESCE(prf.email, usr.email)) = LOWER(adm.email)
 )
 SELECT 
   COUNT(*) AS total_sent,
   COUNT(CASE WHEN status = 'accepted' THEN 1 END) AS total_accepted,
   ROUND(COUNT(CASE WHEN status = 'accepted' THEN 1 END) * 100.0 / NULLIF(COUNT(*), 0), 2) AS acceptance_rate_overall_pct,
   ROUND(COUNT(CASE WHEN status = 'accepted' THEN 1 END) * 100.0 / NULLIF(COUNT(CASE WHEN status IN ('accepted', 'rejected') THEN 1 END), 0), 2) AS acceptance_rate_decided_pct
-FROM organic_interests;
+FROM public.match_interests m
+WHERE m.from_user_id IN (SELECT user_id FROM organic_users)
+  AND m.to_user_id IN (SELECT user_id FROM organic_users);
 ```
 
 ### Expected Output
 ```json
 {
-  "total_sent": 5,
+  "total_sent": 7,
   "total_accepted": 0,
   "acceptance_rate_overall_pct": 0.00,
-  "acceptance_rate_decided_pct": null
+  "acceptance_rate_decided_pct": 0.00
 }
 ```
 
+### Empty State Behaviour
+If no interests have been sent (resulting in `total_sent = 0`) or if no decisions have been made, `NULLIF` is utilized in the query to return `NULL`. The backend transforms `NULL` values to `0.00%` before returning it in the API payload. The UI card displays `0.00%` and a helper tooltip indicating "No matching decisions recorded in range."
+
 ### Refresh Strategy
-- **Every 15 minutes**
-- *Reason*: Aggregate percentage updates do not need real-time calculations.
+- **Every 5 minutes**
+- *Reason*: Promoted to the Executive Overview panel to monitor real-time matching bottleneck changes during marketing rollouts.
 
 ### Performance Considerations
 - **Expected query cost**: Low.
+- **Recommended indexes**:
+  - `CREATE INDEX idx_match_interests_state_users ON public.match_interests(status, from_user_id, to_user_id);`
 - **Feasibility**: Available today.
 
 ---
@@ -904,7 +909,7 @@ The table below illustrates dependencies between beta metrics and defines potent
 | **Interests Sent** | `public.match_interests`, `public.profiles` | Low | Simple aggregation on match signals. |
 | **Accepted Interests**| `public.match_interests`, `public.profiles` | Low | Standard counts of mutual acceptance signals. |
 | **Pending Interests** | `public.match_interests`, `public.profiles` | Low | Traces unanswered interest bottlenecks. |
-| **Acceptance Rate** | **Interests Sent**, **Accepted Interests** | Low | Percentage rates calculation. |
+| **Interest Acceptance Rate** | **Interests Sent**, **Accepted Interests** | Low | Percentage rates calculation. |
 | **Conversations Created**| `public.conversations`, `public.profiles` | Low | Identifies communication channels opened between organic users. |
 | **Messages Sent** | `public.direct_messages`, `public.profiles` | **Medium** | Messaging tables grow rapidly. Risk of slow queries if indexes are omitted. |
 | **Notifications Created**| `public.notifications`, `public.profiles` | Low | Aggregate count of system alerts. |
@@ -1031,7 +1036,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_mv_retention_cohort ON public.mv_daily_ret
 | **Interests Sent** | **Yes** | No | **Yes** | Fully supported. |
 | **Accepted Interests**| **Yes** | No | **Yes** | Fully supported. |
 | **Pending Interests** | **Yes** | No | **Yes** | Fully supported. |
-| **Acceptance Rate** | **Yes** | No | **Yes** | Fully supported. |
+| **Interest Acceptance Rate** | **Yes** | No | **Yes** | Fully supported. |
 | **Conversations Created**| **Yes** | No | **Yes** | Fully supported. |
 | **Messages Sent** | **Yes** | No | **Yes** | Fully supported. Composite index recommended. |
 | **Notifications Created**| **Yes** | No | **Yes** | Fully supported. |

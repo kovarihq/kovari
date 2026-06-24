@@ -34,6 +34,9 @@ We recommend a **Hybrid Approach**:
 | **Activated Users KPI** | Overview | `public.users`, `public.profiles` | `GET /api/admin/beta-analytics/overview` |
 | **Returned Users KPI** | Overview | `public.users`, `public.profiles` | `GET /api/admin/beta-analytics/overview` |
 | **Retention Rate KPI** | Overview | `public.users`, `public.profiles` | `GET /api/admin/beta-analytics/overview` |
+| **Interests Sent KPI** | Overview | `public.match_interests`, `public.profiles` | `GET /api/admin/beta-analytics/overview` |
+| **Conversations Created KPI**| Overview | `public.conversations`, `public.profiles` | `GET /api/admin/beta-analytics/overview` |
+| **Interest Acceptance Rate KPI**| Overview | `public.match_interests`, `public.profiles` | `GET /api/admin/beta-analytics/overview` |
 | **Interest Funnel Widget** | Funnel | `public.match_interests`, `public.profiles` | `GET /api/admin/beta-analytics/funnel` |
 | **Messaging Activity Chart** | Growth | `public.direct_messages`, `public.users` | `GET /api/admin/beta-analytics/messaging` |
 | **Notification Health Widget**| Engagement | `public.notifications`, `public.profiles` | `GET /api/admin/beta-analytics/notifications` |
@@ -83,7 +86,7 @@ We recommend **Option B: Widget-Based Endpoints**. It is standard for dashboards
 
 # Widget Contracts
 
-## 1. Overview KPIs (Total, Activated, Returned, Retention)
+## 1. Overview KPIs (Total, Activated, Returned, Retention, Interests, Conversations, Interest Acceptance Rate)
 
 ### Endpoint
 `GET /api/admin/beta-analytics/overview`
@@ -120,12 +123,27 @@ Query Parameters:
     "value": 0.00,
     "change": 0.0,
     "trend": "neutral"
+  },
+  "interestsSent": {
+    "value": 5,
+    "change": 25.0,
+    "trend": "up"
+  },
+  "conversationsCreated": {
+    "value": 0,
+    "change": 0.0,
+    "trend": "neutral"
+  },
+  "interestAcceptanceRate": {
+    "value": 0.00,
+    "change": 0.0,
+    "trend": "neutral"
   }
 }
 ```
 
 ### Loading State Requirements
-- Renders 4 separate rectangular Shadcn/iOS-style KPI block **skeletons** corresponding to the overview card positions.
+- Renders 7 separate rectangular Shadcn/iOS-style KPI block **skeletons** corresponding to the overview card positions.
 - No spinner overlays.
 
 ### Error Handling Requirements
@@ -133,8 +151,8 @@ Query Parameters:
 - Fallback values default to `0` or `0.00%` on backend response parsing errors.
 
 ### Refresh Requirements
-- **Every 15 minutes**
-- *Reason*: Overview KPIs are highly visible but do not require real-time database loads on every click loop.
+- **Every 5 minutes**
+- *Reason*: Overview KPIs now include real-time match intent and acceptance rate conversions, which are essential for active closed-beta bottleneck monitoring.
 
 ---
 
@@ -271,6 +289,9 @@ interface BetaAnalyticsOverviewResponse {
   activatedUsers: KpiStat;
   returnedUsers: KpiStat;
   retentionRate: KpiStat;
+  interestsSent: KpiStat;
+  conversationsCreated: KpiStat;
+  interestAcceptanceRate: KpiStat;
 }
 ```
 
