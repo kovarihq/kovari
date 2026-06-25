@@ -1,6 +1,19 @@
 import { UserProfile } from "@kovari/types";
 
 /**
+ * Supported date range selection filter options.
+ */
+export type DateRange = '7d' | '30d' | '60d' | 'all';
+
+/**
+ * Filter properties applied globally to metrics selection queries.
+ */
+export interface AnalyticsFilter {
+  dateRange?: DateRange;
+  batchId?: string;
+}
+
+/**
  * Directional helper for semantic indicator color highlights.
  */
 export type TrendDirection = 'up' | 'down' | 'neutral';
@@ -27,6 +40,19 @@ export interface AnalyticsOverview {
   notificationsSent: KpiStat;
   feedbackSubmitted: KpiStat;
   waitlistConversions: KpiStat;
+}
+
+/**
+ * Contract mapping for the GET /api/admin/beta-analytics/overview endpoint.
+ */
+export interface BetaAnalyticsOverviewResponse {
+  totalUsers: KpiStat;
+  activatedUsers: KpiStat;
+  returnedUsers: KpiStat;
+  retentionRate: KpiStat;
+  interestsSent: KpiStat;
+  conversationsCreated: KpiStat;
+  interestAcceptanceRate: KpiStat;
 }
 
 /**
@@ -69,6 +95,16 @@ export interface TravelIntentionMetrics {
 }
 
 /**
+ * Paged response contract for travel intentions.
+ */
+export interface DestinationResponse {
+  rows: DestinationPopularity[];
+  total: number;
+  page: number;
+  pageSize: number;
+}
+
+/**
  * Individual conversion funnel stage metrics.
  */
 export interface FunnelStepItem {
@@ -77,6 +113,23 @@ export interface FunnelStepItem {
   count: number | null;
   pct: number | null;
   warning?: string;
+}
+
+/**
+ * Generic single funnel step conversion state.
+ */
+export interface FunnelMetric {
+  value: number;
+}
+
+/**
+ * Contract mapping for the GET /api/admin/beta-analytics/funnel endpoint.
+ */
+export interface InterestFunnelResponse {
+  interestsSent: FunnelMetric;
+  acceptedInterests: FunnelMetric;
+  pendingInterests: FunnelMetric;
+  acceptanceRate: FunnelMetric;
 }
 
 /**
@@ -103,15 +156,81 @@ export interface ActiveUserMessagingRow {
 }
 
 /**
+ * Individual active user table item.
+ */
+export interface ActiveUserRow {
+  id: string;
+  name: string;
+  email: string;
+  sent: number;
+}
+
+/**
+ * Paged response contract for most active users.
+ */
+export interface ActiveUsersResponse {
+  rows: ActiveUserRow[];
+  total: number;
+  page: number;
+  pageSize: number;
+}
+
+/**
+ * Aggregated messaging logs for a single day.
+ */
+export interface DailyMessagingItem {
+  date: string;          // Format: "YYYY-MM-DD"
+  messages: number;      // Total messages sent on this day (excluding 'init')
+  conversations: number; // Total stranger conversations created on this day
+}
+
+/**
+ * Contract mapping for the GET /api/admin/beta-analytics/messaging endpoint.
+ */
+export interface MessagingAnalyticsResponse {
+  conversationsCreated: number;
+  messagesSent: number;
+  dailyActivity: DailyMessagingItem[];
+}
+
+/**
  * Active user messaging volume, text exchange counts, and chat logs.
  */
 export interface ConversationMetrics {
   totalConversations: number;
   totalMessagesSent: number;
-  dailyMessagingActivity: {
-    date: string;                // Date format: "YYYY-MM-DD"
-    messages: number;
-    conversations: number;
-  }[];
+  dailyMessagingActivity: DailyMessagingItem[];
   mostActiveUsers: ActiveUserMessagingRow[];
+}
+
+/**
+ * Contract mapping for the GET /api/admin/beta-analytics/notifications endpoint.
+ */
+export interface NotificationAnalyticsResponse {
+  notificationsCreated: number;
+  notificationsRead: number;
+  pushSuccess: number;
+  pushFailure: number;
+  noTokenCount: number;
+}
+
+/**
+ * Data item representing customer issues logged.
+ */
+export interface FeedbackRow {
+  id: string;
+  name: string;
+  type: string;
+  message: string;
+  created_at: string;
+}
+
+/**
+ * Paged response contract for recent feedback.
+ */
+export interface FeedbackResponse {
+  rows: FeedbackRow[];
+  total: number;
+  page: number;
+  pageSize: number;
 }
