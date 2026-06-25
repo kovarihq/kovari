@@ -15,7 +15,9 @@ import {
   DestinationPopularity,
   FunnelStepItem,
   ActiveUserMessagingRow,
-  DateRange
+  DateRange,
+  OrganicUser,
+  ProfileJoined
 } from "../../types/analytics";
 import { incrementErrorCounter } from "../../../lib/incrementErrorCounter";
 
@@ -56,13 +58,13 @@ export class AnalyticsService {
    * Helper function to query organic users (excluding admins/founders).
    * Fetches users and merges profiles to run anti-joins in memory.
    */
-  private static async getOrganicUsers(): Promise<any[]> {
+  private static async getOrganicUsers(): Promise<OrganicUser[]> {
     try {
       const adminEmails = await this.getAdminEmailsSet();
 
       const { data: users, error } = await supabaseAdmin
         .from('users')
-        .select('id, email, beta_status, onboarding_completed, isDeleted, last_seen_at, activation_date, profiles(email, name, travel_intentions, created_at, username, profile_photo)')
+        .select('id, email, beta_status, onboarding_completed, isDeleted, last_seen_at, activation_date, clerk_user_id, profiles(email, name, travel_intentions, created_at, username, profile_photo)')
         .eq('isDeleted', false);
 
       if (error) {
@@ -72,12 +74,14 @@ export class AnalyticsService {
         return [];
       }
 
-      return (users || []).filter((u: any) => {
+      const rawUsers = (users || []) as any[];
+
+      return rawUsers.filter((u: any) => {
         if (!u) return false;
         const profile = u.profiles && !Array.isArray(u.profiles) ? u.profiles : (Array.isArray(u.profiles) && u.profiles.length > 0 ? u.profiles[0] : null);
         const email = (profile?.email || u.email || '')?.toLowerCase();
         return email && !adminEmails.has(email);
-      });
+      }) as OrganicUser[];
     } catch (e) {
       console.error("[Analytics Service] getOrganicUsers critically failed:", e);
       Sentry.captureException(e);
@@ -216,7 +220,7 @@ export class AnalyticsService {
   public static async getActivatedUsers(): Promise<number> {
     try {
       const organicUsers = await this.getOrganicUsers();
-      return organicUsers.filter((u: any) => u && u.beta_status === 'activated').length;
+      return organicUsers.filter((u: OrganicUser) => u && u.beta_status === 'activated').length;
     } catch (e) {
       console.error("[Analytics Service] getActivatedUsers failed:", e);
       Sentry.captureException(e);
@@ -235,7 +239,7 @@ export class AnalyticsService {
     try {
       const organicUsers = await this.getOrganicUsers();
       
-      const returned = organicUsers.filter((u: any) => {
+      const returned = organicUsers.filter((u: OrganicUser) => {
         if (!u || u.beta_status !== 'activated' || !u.last_seen_at || !u.activation_date) return false;
         
         try {
@@ -267,13 +271,13 @@ export class AnalyticsService {
     return this.fetchWithCache(cacheKey, 7200, async () => {
       try {
         const organicUsers = await this.getOrganicUsers();
-        const activatedOrganic = organicUsers.filter((u: any) => u && u.beta_status === 'activated');
+        const activatedOrganic = organicUsers.filter((u: OrganicUser) => u && u.beta_status === 'activated');
 
         const destinationsMap: Record<string, number> = {};
         let totalIntentionsCount = 0;
         const timelineMap: Record<string, number> = {};
 
-        activatedOrganic.forEach((u: any) => {
+        activatedOrganic.forEach((u: OrganicUser) => {
           if (!u) return;
           const profile = u.profiles && !Array.isArray(u.profiles) ? u.profiles : (Array.isArray(u.profiles) && u.profiles.length > 0 ? u.profiles[0] : null);
           if (!profile || !profile.travel_intentions) return;
@@ -354,7 +358,7 @@ export class AnalyticsService {
     return this.fetchWithCache(cacheKey, 300, async () => {
       try {
         const organicUsers = await this.getOrganicUsers();
-        const organicUserIds = new Set(organicUsers.map((u: any) => u.id));
+        const organicUserIds = new Set(organicUsers.map((u: OrganicUser) => u.id));
         const adminEmails = await this.getAdminEmailsSet();
 
         // 1. Waitlist (Funnel Stage 1)
@@ -375,9 +379,9 @@ export class AnalyticsService {
         }
 
         // 2. Activated, Onboarded, and Intent Completes (Stages 2, 3, 4)
-        const activatedCount = organicUsers.filter((u: any) => u && u.beta_status === 'activated').length;
-        const onboardedCount = organicUsers.filter((u: any) => u && u.beta_status === 'activated' && u.onboarding_completed).length;
-        const travelIntentCount = organicUsers.filter((u: any) => {
+        const activatedCount = organicUsers.filter((u: OrganicUser) => u && u.beta_status === 'activated').length;
+        const onboardedCount = organicUsers.filter((u: OrganicUser) => u && u.beta_status === 'activated' && u.onboarding_completed).length;
+        const travelIntentCount = organicUsers.filter((u: OrganicUser) => {
           if (!u || u.beta_status !== 'activated') return false;
           const profile = u.profiles && !Array.isArray(u.profiles) ? u.profiles : (Array.isArray(u.profiles) && u.profiles.length > 0 ? u.profiles[0] : null);
           if (!profile || !profile.travel_intentions) return false;
@@ -500,7 +504,7 @@ export class AnalyticsService {
     return this.fetchWithCache(cacheKey, 300, async () => {
       try {
         const organicUsers = await this.getOrganicUsers();
-        const organicUserIds = new Set(organicUsers.map((u: any) => u.id));
+        const organicUserIds = new Set(organicUsers.map((u: OrganicUser) => u.id));
 
         let organicConversations: any[] = [];
         try {
@@ -575,8 +579,8 @@ export class AnalyticsService {
         });
 
         const mostActiveUsers: ActiveUserMessagingRow[] = organicUsers
-          .filter((u: any) => !!u)
-          .map((u: any) => {
+          .filter((u: OrganicUser) => !!u)
+          .map((u: OrganicUser) => {
             const profileObj = u.profiles && !Array.isArray(u.profiles) ? u.profiles : (Array.isArray(u.profiles) && u.profiles.length > 0 ? u.profiles[0] : null);
             return {
               userId: u.id,
@@ -585,11 +589,11 @@ export class AnalyticsService {
               messagesSent: userSentMap[u.id] || 0,
               messagesReceived: userReceivedMap[u.id] || 0,
               userProfile: profileObj ? {
-                name: profileObj.name,
-                username: profileObj.username,
-                profile_photo: profileObj.profile_photo,
+                name: profileObj.name || undefined,
+                username: profileObj.username || undefined,
+                profile_photo: profileObj.profile_photo || undefined,
                 deleted: !!u.isDeleted,
-                clerk_id: u.clerk_user_id
+                clerk_id: u.clerk_user_id || undefined
               } : undefined
             };
           })
@@ -864,7 +868,9 @@ export class AnalyticsService {
 
         const rows = paginatedFeedback.map((f: any) => {
           const u = organicUsers.find((user: any) => user && user.id === f.user_id);
-          const profile = u?.profiles && !Array.isArray(u.profiles) ? u.profiles : (Array.isArray(u.profiles) && u.profiles.length > 0 ? u.profiles[0] : null);
+          const profile = u?.profiles 
+            ? (Array.isArray(u.profiles) ? (u.profiles.length > 0 ? u.profiles[0] : null) : u.profiles)
+            : null;
           return {
             id: f.id,
             name: profile?.name || u?.email || 'Unknown',

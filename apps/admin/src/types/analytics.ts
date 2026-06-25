@@ -234,3 +234,30 @@ export interface FeedbackResponse {
   page: number;
   pageSize: number;
 }
+
+/**
+ * Profile structure returned from Supabase profiles relationship join.
+ */
+export interface ProfileJoined {
+  email: string | null;
+  name: string | null;
+  travel_intentions: any;
+  created_at: string | null;
+  username: string | null;
+  profile_photo: string | null;
+}
+
+/**
+ * Combined organic user and profile query result.
+ */
+export interface OrganicUser {
+  id: string;
+  email: string | null;
+  beta_status: string | null;
+  onboarding_completed: boolean;
+  isDeleted: boolean;
+  last_seen_at: string | null;
+  activation_date: string | null;
+  clerk_user_id: string | null;
+  profiles: ProfileJoined | ProfileJoined[] | null;
+}
