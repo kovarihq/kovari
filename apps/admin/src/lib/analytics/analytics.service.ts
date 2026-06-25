@@ -1,4 +1,5 @@
 import { supabaseAdmin, redis, ensureRedisConnection } from "@kovari/api";
+import * as Sentry from "@sentry/nextjs";
 import { 
   AnalyticsFilter,
   BetaAnalyticsOverviewResponse,
@@ -33,28 +34,56 @@ export class AnalyticsService {
   private static CACHE_PREFIX = "cache:beta_analytics";
 
   /**
+   * Helper function to fetch all admin email addresses.
+   * Returns a lowercase Set of admin emails for fast exclusions.
+   */
+  private static async getAdminEmailsSet(): Promise<Set<string>> {
+    try {
+      const { data: admins, error } = await supabaseAdmin.from('admins').select('email');
+      if (error) {
+        console.warn("[Analytics Service] Failed to fetch admins, proceeding without exclusions:", error.message);
+        Sentry.captureException(error, { tags: { query: 'fetch_admins_error' } });
+      }
+      return new Set(admins?.map((a: any) => a?.email?.toLowerCase()).filter(Boolean) || []);
+    } catch (e) {
+      console.error("[Analytics Service] getAdminEmailsSet critically failed:", e);
+      Sentry.captureException(e);
+      return new Set<string>();
+    }
+  }
+
+  /**
    * Helper function to query organic users (excluding admins/founders).
    * Fetches users and merges profiles to run anti-joins in memory.
    */
   private static async getOrganicUsers(): Promise<any[]> {
-    const { data: admins } = await supabaseAdmin.from('admins').select('email');
-    const adminEmails = new Set(admins?.map((a: { email: string }) => a.email?.toLowerCase()).filter(Boolean) || []);
+    try {
+      const adminEmails = await this.getAdminEmailsSet();
 
-    const { data: users, error } = await supabaseAdmin
-      .from('users')
-      .select('id, email, beta_status, onboarding_completed, isDeleted, last_seen_at, activation_date, profiles(email, name, travel_intentions, created_at, username, profile_photo)')
-      .eq('isDeleted', false);
+      const { data: users, error } = await supabaseAdmin
+        .from('users')
+        .select('id, email, beta_status, onboarding_completed, isDeleted, last_seen_at, activation_date, profiles(email, name, travel_intentions, created_at, username, profile_photo)')
+        .eq('isDeleted', false);
 
-    if (error) {
+      if (error) {
+        console.error("[Analytics Service] getOrganicUsers query failed:", error.message);
+        Sentry.captureException(error, { tags: { query: 'fetch_organic_users_error' } });
+        await incrementErrorCounter();
+        return [];
+      }
+
+      return (users || []).filter((u: any) => {
+        if (!u) return false;
+        const profile = u.profiles && !Array.isArray(u.profiles) ? u.profiles : (Array.isArray(u.profiles) && u.profiles.length > 0 ? u.profiles[0] : null);
+        const email = (profile?.email || u.email || '')?.toLowerCase();
+        return email && !adminEmails.has(email);
+      });
+    } catch (e) {
+      console.error("[Analytics Service] getOrganicUsers critically failed:", e);
+      Sentry.captureException(e);
       await incrementErrorCounter();
-      throw error;
+      return [];
     }
-
-    return (users || []).filter((u: any) => {
-      const profile = u.profiles && !Array.isArray(u.profiles) ? u.profiles : (Array.isArray(u.profiles) ? u.profiles[0] : null);
-      const email = (profile?.email || u.email)?.toLowerCase();
-      return email && !adminEmails.has(email);
-    });
   }
 
   /**
@@ -91,6 +120,7 @@ export class AnalyticsService {
       }
     } catch (e) {
       console.warn(`[Analytics Cache] Read failure for key ${cacheKey}. Falling back to DB:`, e);
+      Sentry.captureException(e, { tags: { cache: 'read_error', cacheKey } });
     }
 
     const data = await fetchFn();
@@ -100,6 +130,7 @@ export class AnalyticsService {
       await redis.setEx(cacheKey, ttlSeconds, JSON.stringify(data));
     } catch (e) {
       console.warn(`[Analytics Cache] Write failure for key ${cacheKey}:`, e);
+      Sentry.captureException(e, { tags: { cache: 'write_error', cacheKey } });
     }
 
     return data;
@@ -119,6 +150,7 @@ export class AnalyticsService {
       }
     } catch (e) {
       console.error("[Analytics Cache] Failed to invalidate cache keys:", e);
+      Sentry.captureException(e, { tags: { cache: 'invalidation_error' } });
     }
   }
 
@@ -173,6 +205,7 @@ export class AnalyticsService {
       return organicUsers.length;
     } catch (e) {
       console.error("[Analytics Service] getTotalUsers failed:", e);
+      Sentry.captureException(e);
       return 0;
     }
   }
@@ -183,9 +216,10 @@ export class AnalyticsService {
   public static async getActivatedUsers(): Promise<number> {
     try {
       const organicUsers = await this.getOrganicUsers();
-      return organicUsers.filter((u: any) => u.beta_status === 'activated').length;
+      return organicUsers.filter((u: any) => u && u.beta_status === 'activated').length;
     } catch (e) {
       console.error("[Analytics Service] getActivatedUsers failed:", e);
+      Sentry.captureException(e);
       return 0;
     }
   }
@@ -202,18 +236,23 @@ export class AnalyticsService {
       const organicUsers = await this.getOrganicUsers();
       
       const returned = organicUsers.filter((u: any) => {
-        if (u.beta_status !== 'activated' || !u.last_seen_at || !u.activation_date) return false;
+        if (!u || u.beta_status !== 'activated' || !u.last_seen_at || !u.activation_date) return false;
         
-        // Convert to timezone-accurate localized dates
-        const lastSeenDate = new Date(u.last_seen_at).toLocaleDateString('en-US', { timeZone: 'Asia/Kolkata' });
-        const activationDate = new Date(u.activation_date).toLocaleDateString('en-US', { timeZone: 'Asia/Kolkata' });
-        
-        return new Date(lastSeenDate) > new Date(activationDate);
+        try {
+          // Convert to timezone-accurate localized dates safely
+          const lastSeenDate = new Date(u.last_seen_at).toLocaleDateString('en-US', { timeZone: 'Asia/Kolkata' });
+          const activationDate = new Date(u.activation_date).toLocaleDateString('en-US', { timeZone: 'Asia/Kolkata' });
+          
+          return new Date(lastSeenDate) > new Date(activationDate);
+        } catch {
+          return false;
+        }
       });
 
       return returned.length;
     } catch (e) {
       console.error("[Analytics Service] getReturnedUsers failed:", e);
+      Sentry.captureException(e);
       return 0;
     }
   }
@@ -228,14 +267,15 @@ export class AnalyticsService {
     return this.fetchWithCache(cacheKey, 7200, async () => {
       try {
         const organicUsers = await this.getOrganicUsers();
-        const activatedOrganic = organicUsers.filter((u: any) => u.beta_status === 'activated');
+        const activatedOrganic = organicUsers.filter((u: any) => u && u.beta_status === 'activated');
 
         const destinationsMap: Record<string, number> = {};
         let totalIntentionsCount = 0;
         const timelineMap: Record<string, number> = {};
 
         activatedOrganic.forEach((u: any) => {
-          const profile = u.profiles && !Array.isArray(u.profiles) ? u.profiles : (Array.isArray(u.profiles) ? u.profiles[0] : null);
+          if (!u) return;
+          const profile = u.profiles && !Array.isArray(u.profiles) ? u.profiles : (Array.isArray(u.profiles) && u.profiles.length > 0 ? u.profiles[0] : null);
           if (!profile || !profile.travel_intentions) return;
 
           let intentions: any[] = [];
@@ -247,17 +287,24 @@ export class AnalyticsService {
             intentions = profile.travel_intentions;
           }
 
+          if (!Array.isArray(intentions)) return;
+
           intentions.forEach((intent: any) => {
             const dest = intent?.destination_name || intent?.destination;
-            if (dest) {
-              destinationsMap[dest] = (destinationsMap[dest] || 0) + 1;
-              totalIntentionsCount++;
+            if (dest && typeof dest === 'string') {
+              const normalized = dest.trim();
+              if (normalized) {
+                destinationsMap[normalized] = (destinationsMap[normalized] || 0) + 1;
+                totalIntentionsCount++;
+              }
             }
           });
 
           if (profile.created_at && intentions.length > 0) {
-            const dateStr = new Date(profile.created_at).toISOString().split('T')[0];
-            timelineMap[dateStr] = (timelineMap[dateStr] || 0) + intentions.length;
+            try {
+              const dateStr = new Date(profile.created_at).toISOString().split('T')[0];
+              timelineMap[dateStr] = (timelineMap[dateStr] || 0) + intentions.length;
+            } catch {}
           }
         });
 
@@ -286,6 +333,7 @@ export class AnalyticsService {
         };
       } catch (e) {
         console.error("[Analytics Service] getTravelIntentionMetrics failed:", e);
+        Sentry.captureException(e);
         return {
           rows: [],
           totalDestinations: 0,
@@ -307,59 +355,99 @@ export class AnalyticsService {
       try {
         const organicUsers = await this.getOrganicUsers();
         const organicUserIds = new Set(organicUsers.map((u: any) => u.id));
-
-        const { data: admins } = await supabaseAdmin.from('admins').select('email');
-        const adminEmails = new Set(admins?.map((a: { email: string }) => a.email.toLowerCase()).filter(Boolean) || []);
+        const adminEmails = await this.getAdminEmailsSet();
 
         // 1. Waitlist (Funnel Stage 1)
-        const { data: waitlist } = await supabaseAdmin.from('waitlist').select('email, status');
-        const invitedCount = (waitlist || []).filter((w: any) => 
-          ['beta_invited', 'beta_active'].includes(w.status) && !adminEmails.has(w.email.toLowerCase())
-        ).length;
+        let invitedCount = 0;
+        try {
+          const { data: waitlist, error: waitErr } = await supabaseAdmin.from('waitlist').select('email, status');
+          if (waitErr) {
+            console.warn("[Analytics Service] waitlist fetch failed, defaulting to 0:", waitErr.message);
+            Sentry.captureException(waitErr);
+          } else {
+            invitedCount = (waitlist || []).filter((w: any) => 
+              w?.email && ['beta_invited', 'beta_active'].includes(w.status) && !adminEmails.has(w.email.toLowerCase())
+            ).length;
+          }
+        } catch (e) {
+          console.error("[Analytics Service] waitlist query crashed:", e);
+          Sentry.captureException(e);
+        }
 
         // 2. Activated, Onboarded, and Intent Completes (Stages 2, 3, 4)
-        const activatedCount = organicUsers.filter((u: any) => u.beta_status === 'activated').length;
-        const onboardedCount = organicUsers.filter((u: any) => u.beta_status === 'activated' && u.onboarding_completed).length;
+        const activatedCount = organicUsers.filter((u: any) => u && u.beta_status === 'activated').length;
+        const onboardedCount = organicUsers.filter((u: any) => u && u.beta_status === 'activated' && u.onboarding_completed).length;
         const travelIntentCount = organicUsers.filter((u: any) => {
-          if (u.beta_status !== 'activated') return false;
-          const profile = u.profiles && !Array.isArray(u.profiles) ? u.profiles : (Array.isArray(u.profiles) ? u.profiles[0] : null);
+          if (!u || u.beta_status !== 'activated') return false;
+          const profile = u.profiles && !Array.isArray(u.profiles) ? u.profiles : (Array.isArray(u.profiles) && u.profiles.length > 0 ? u.profiles[0] : null);
           if (!profile || !profile.travel_intentions) return false;
           return Array.isArray(profile.travel_intentions) && profile.travel_intentions.length > 0;
         }).length;
 
         // 3. Interactions (Stages 6, 7, 8, 9)
-        const { data: interests, error: intErr } = await supabaseAdmin
-          .from('match_interests')
-          .select('from_user_id, to_user_id, status');
-        if (intErr) throw intErr;
+        let organicInterests: any[] = [];
+        try {
+          const { data: interests, error: intErr } = await supabaseAdmin
+            .from('match_interests')
+            .select('from_user_id, to_user_id, status');
+          if (intErr) {
+            console.warn("[Analytics Service] match_interests fetch failed, defaulting to empty:", intErr.message);
+            Sentry.captureException(intErr);
+          } else {
+            organicInterests = (interests || []).filter(
+              (m: any) => m && organicUserIds.has(m.from_user_id) && organicUserIds.has(m.to_user_id)
+            );
+          }
+        } catch (e) {
+          console.error("[Analytics Service] match_interests query crashed:", e);
+          Sentry.captureException(e);
+        }
 
-        const organicInterests = (interests || []).filter(
-          (m: any) => organicUserIds.has(m.from_user_id) && organicUserIds.has(m.to_user_id)
-        );
-
-        const interestsSent = organicInterests.filter((m: any) => organicUserIds.has(m.from_user_id)).length;
-        const pendingInterests = organicInterests.filter((m: any) => m.status === 'pending').length;
-        const acceptedInterests = organicInterests.filter((m: any) => m.status === 'accepted').length;
-        const decidedInterests = organicInterests.filter((m: any) => ['accepted', 'rejected'].includes(m.status)).length;
+        const interestsSent = organicInterests.filter((m: any) => m && organicUserIds.has(m.from_user_id)).length;
+        const pendingInterests = organicInterests.filter((m: any) => m && m.status === 'pending').length;
+        const acceptedInterests = organicInterests.filter((m: any) => m && m.status === 'accepted').length;
+        const decidedInterests = organicInterests.filter((m: any) => m && ['accepted', 'rejected'].includes(m.status)).length;
         const acceptanceRate = decidedInterests ? Number(((acceptedInterests / decidedInterests) * 100).toFixed(2)) : 0.0;
 
-        const uniqueSentIds = new Set(organicInterests.map((m: any) => m.from_user_id));
+        const uniqueSentIds = new Set(organicInterests.map((m: any) => m?.from_user_id).filter(Boolean));
         const interestSentCount = uniqueSentIds.size;
 
-        const { data: conversations } = await supabaseAdmin.from('conversations').select('user_a_id, user_b_id');
-        const organicConversations = (conversations || []).filter((c: any) => 
-          organicUserIds.has(c.user_a_id) && organicUserIds.has(c.user_b_id)
-        );
-        const conversationCount = organicConversations.length;
+        // Conversations
+        let conversationCount = 0;
+        try {
+          const { data: conversations, error: convErr } = await supabaseAdmin.from('conversations').select('user_a_id, user_b_id');
+          if (convErr) {
+            console.warn("[Analytics Service] conversations fetch failed, defaulting to 0:", convErr.message);
+            Sentry.captureException(convErr);
+          } else {
+            conversationCount = (conversations || []).filter((c: any) => 
+              c && organicUserIds.has(c.user_a_id) && organicUserIds.has(c.user_b_id)
+            ).length;
+          }
+        } catch (e) {
+          console.error("[Analytics Service] conversations query crashed:", e);
+          Sentry.captureException(e);
+        }
 
-        const { data: messages } = await supabaseAdmin
-          .from('direct_messages')
-          .select('sender_id, receiver_id, media_type')
-          .neq('media_type', 'init');
-        const organicMessages = (messages || []).filter((m: any) => 
-          organicUserIds.has(m.sender_id) && organicUserIds.has(m.receiver_id)
-        );
-        const messageSentCount = organicMessages.length;
+        // Direct Messages
+        let messageSentCount = 0;
+        try {
+          const { data: messages, error: msgErr } = await supabaseAdmin
+            .from('direct_messages')
+            .select('sender_id, receiver_id, media_type')
+            .neq('media_type', 'init');
+          if (msgErr) {
+            console.warn("[Analytics Service] direct_messages fetch failed, defaulting to 0:", msgErr.message);
+            Sentry.captureException(msgErr);
+          } else {
+            messageSentCount = (messages || []).filter((m: any) => 
+              m && organicUserIds.has(m.sender_id) && organicUserIds.has(m.receiver_id)
+            ).length;
+          }
+        } catch (e) {
+          console.error("[Analytics Service] direct_messages query crashed:", e);
+          Sentry.captureException(e);
+        }
 
         // Construct 9-stage conversion funnel steps
         const getPct = (val: number | null, base: number) => {
@@ -390,6 +478,7 @@ export class AnalyticsService {
         };
       } catch (e) {
         console.error("[Analytics Service] getInterestMetrics failed:", e);
+        Sentry.captureException(e);
         return {
           interestsSent: 0,
           acceptedInterests: 0,
@@ -413,38 +502,60 @@ export class AnalyticsService {
         const organicUsers = await this.getOrganicUsers();
         const organicUserIds = new Set(organicUsers.map((u: any) => u.id));
 
-        const { data: conversations, error: convErr } = await supabaseAdmin
-          .from('conversations')
-          .select('id, user_a_id, user_b_id, created_at');
-        if (convErr) throw convErr;
+        let organicConversations: any[] = [];
+        try {
+          const { data: conversations, error: convErr } = await supabaseAdmin
+            .from('conversations')
+            .select('id, user_a_id, user_b_id, created_at');
+          if (convErr) {
+            console.warn("[Analytics Service] conversations fetch failed inside getConversationMetrics:", convErr.message);
+            Sentry.captureException(convErr);
+          } else {
+            organicConversations = (conversations || []).filter((c: any) => 
+              c && organicUserIds.has(c.user_a_id) && organicUserIds.has(c.user_b_id)
+            );
+          }
+        } catch (e) {
+          console.error("[Analytics Service] conversations fetch critically failed:", e);
+          Sentry.captureException(e);
+        }
 
-        const organicConversations = (conversations || []).filter((c: any) => 
-          organicUserIds.has(c.user_a_id) && organicUserIds.has(c.user_b_id)
-        );
-
-        const { data: messages, error: msgErr } = await supabaseAdmin
-          .from('direct_messages')
-          .select('id, sender_id, receiver_id, created_at, media_type');
-        if (msgErr) throw msgErr;
-
-        const organicMessages = (messages || []).filter((m: any) => 
-          m.media_type !== 'init' && organicUserIds.has(m.sender_id) && organicUserIds.has(m.receiver_id)
-        );
+        let organicMessages: any[] = [];
+        try {
+          const { data: messages, error: msgErr } = await supabaseAdmin
+            .from('direct_messages')
+            .select('id, sender_id, receiver_id, created_at, media_type');
+          if (msgErr) {
+            console.warn("[Analytics Service] direct_messages fetch failed inside getConversationMetrics:", msgErr.message);
+            Sentry.captureException(msgErr);
+          } else {
+            organicMessages = (messages || []).filter((m: any) => 
+              m && m.media_type !== 'init' && organicUserIds.has(m.sender_id) && organicUserIds.has(m.receiver_id)
+            );
+          }
+        } catch (e) {
+          console.error("[Analytics Service] direct_messages fetch critically failed:", e);
+          Sentry.captureException(e);
+        }
 
         const dailyActivityMap: Record<string, { messages: number, conversations: number }> = {};
 
         organicConversations.forEach((c: any) => {
-          if (!c.created_at) return;
-          const dateStr = new Date(c.created_at).toISOString().split('T')[0];
-          if (!dailyActivityMap[dateStr]) dailyActivityMap[dateStr] = { messages: 0, conversations: 0 };
-          dailyActivityMap[dateStr].conversations++;
+          if (!c || !c.created_at) return;
+          try {
+            const dateStr = new Date(c.created_at).toISOString().split('T')[0];
+            if (!dailyActivityMap[dateStr]) dailyActivityMap[dateStr] = { messages: 0, conversations: 0 };
+            dailyActivityMap[dateStr].conversations++;
+          } catch {}
         });
 
         organicMessages.forEach((m: any) => {
-          if (!m.created_at) return;
-          const dateStr = new Date(m.created_at).toISOString().split('T')[0];
-          if (!dailyActivityMap[dateStr]) dailyActivityMap[dateStr] = { messages: 0, conversations: 0 };
-          dailyActivityMap[dateStr].messages++;
+          if (!m || !m.created_at) return;
+          try {
+            const dateStr = new Date(m.created_at).toISOString().split('T')[0];
+            if (!dailyActivityMap[dateStr]) dailyActivityMap[dateStr] = { messages: 0, conversations: 0 };
+            dailyActivityMap[dateStr].messages++;
+          } catch {}
         });
 
         const dailyMessagingActivity = Object.entries(dailyActivityMap)
@@ -459,30 +570,32 @@ export class AnalyticsService {
         const userReceivedMap: Record<string, number> = {};
 
         organicMessages.forEach((m: any) => {
-          userSentMap[m.sender_id] = (userSentMap[m.sender_id] || 0) + 1;
-          userReceivedMap[m.receiver_id] = (userReceivedMap[m.receiver_id] || 0) + 1;
+          if (m?.sender_id) userSentMap[m.sender_id] = (userSentMap[m.sender_id] || 0) + 1;
+          if (m?.receiver_id) userReceivedMap[m.receiver_id] = (userReceivedMap[m.receiver_id] || 0) + 1;
         });
 
-        const mostActiveUsers: ActiveUserMessagingRow[] = organicUsers.map((u: any) => {
-          const profileObj = u.profiles && !Array.isArray(u.profiles) ? u.profiles : (Array.isArray(u.profiles) ? u.profiles[0] : null);
-          return {
-            userId: u.id,
-            name: profileObj?.name || u.email || 'Unknown',
-            email: u.email,
-            messagesSent: userSentMap[u.id] || 0,
-            messagesReceived: userReceivedMap[u.id] || 0,
-            userProfile: profileObj ? {
-              name: profileObj.name,
-              username: profileObj.username,
-              profile_photo: profileObj.profile_photo,
-              deleted: u.isDeleted,
-              clerk_id: u.clerk_user_id
-            } : undefined
-          };
-        })
-        .filter((row: any) => row.messagesSent > 0 || row.messagesReceived > 0)
-        .sort((a: any, b: any) => b.messagesSent - a.messagesSent)
-        .slice(0, 10);
+        const mostActiveUsers: ActiveUserMessagingRow[] = organicUsers
+          .filter((u: any) => !!u)
+          .map((u: any) => {
+            const profileObj = u.profiles && !Array.isArray(u.profiles) ? u.profiles : (Array.isArray(u.profiles) && u.profiles.length > 0 ? u.profiles[0] : null);
+            return {
+              userId: u.id,
+              name: profileObj?.name || u.email || 'Unknown',
+              email: u.email || 'Unknown',
+              messagesSent: userSentMap[u.id] || 0,
+              messagesReceived: userReceivedMap[u.id] || 0,
+              userProfile: profileObj ? {
+                name: profileObj.name,
+                username: profileObj.username,
+                profile_photo: profileObj.profile_photo,
+                deleted: !!u.isDeleted,
+                clerk_id: u.clerk_user_id
+              } : undefined
+            };
+          })
+          .filter((row: ActiveUserMessagingRow) => row.messagesSent > 0 || row.messagesReceived > 0)
+          .sort((a: ActiveUserMessagingRow, b: ActiveUserMessagingRow) => b.messagesSent - a.messagesSent)
+          .slice(0, 10);
 
         return {
           totalConversations: organicConversations.length,
@@ -492,6 +605,7 @@ export class AnalyticsService {
         };
       } catch (e) {
         console.error("[Analytics Service] getConversationMetrics failed:", e);
+        Sentry.captureException(e);
         return {
           totalConversations: 0,
           totalMessagesSent: 0,
@@ -512,24 +626,36 @@ export class AnalyticsService {
     const cacheKey = this.getCacheKey("overview", { dateRange, batchId });
 
     return this.fetchWithCache(cacheKey, 900, async () => {
-      const totalUsersVal = await this.getTotalUsers();
-      const activatedUsersVal = await this.getActivatedUsers();
-      const returnedUsersVal = await this.getReturnedUsers();
+      try {
+        const totalUsersVal = await this.getTotalUsers();
+        const activatedUsersVal = await this.getActivatedUsers();
+        const returnedUsersVal = await this.getReturnedUsers();
 
-      // Retrieve additional interest stats to build Overview KPI ratios
-      const interestMetrics = await this.getInterestMetrics({ batchId });
-      const conversationMetrics = await this.getConversationMetrics({ dateRange, batchId });
+        const interestMetrics = await this.getInterestMetrics({ batchId });
+        const conversationMetrics = await this.getConversationMetrics({ dateRange, batchId });
 
-      // TODO: Implement historical offsets delta calculations to get .change & .trend
-      return {
-        totalUsers: { value: totalUsersVal, change: 0.0, trend: 'neutral' },
-        activatedUsers: { value: activatedUsersVal, change: 0.0, trend: 'neutral' },
-        returnedUsers: { value: returnedUsersVal, change: 0.0, trend: 'neutral' },
-        retentionRate: { value: 0.0, change: 0.0, trend: 'neutral' },
-        interestsSent: { value: interestMetrics.interestsSent, change: 0.0, trend: 'neutral' },
-        conversationsCreated: { value: conversationMetrics.totalConversations, change: 0.0, trend: 'neutral' },
-        interestAcceptanceRate: { value: interestMetrics.acceptanceRate, change: 0.0, trend: 'neutral' },
-      };
+        return {
+          totalUsers: { value: totalUsersVal, change: 0.0, trend: 'neutral' },
+          activatedUsers: { value: activatedUsersVal, change: 0.0, trend: 'neutral' },
+          returnedUsers: { value: returnedUsersVal, change: 0.0, trend: 'neutral' },
+          retentionRate: { value: 0.0, change: 0.0, trend: 'neutral' },
+          interestsSent: { value: interestMetrics.interestsSent, change: 0.0, trend: 'neutral' },
+          conversationsCreated: { value: conversationMetrics.totalConversations, change: 0.0, trend: 'neutral' },
+          interestAcceptanceRate: { value: interestMetrics.acceptanceRate, change: 0.0, trend: 'neutral' },
+        };
+      } catch (e) {
+        console.error("[Analytics Service] getOverviewMetrics failed:", e);
+        Sentry.captureException(e);
+        return {
+          totalUsers: { value: 0, change: 0.0, trend: 'neutral' },
+          activatedUsers: { value: 0, change: 0.0, trend: 'neutral' },
+          returnedUsers: { value: 0, change: 0.0, trend: 'neutral' },
+          retentionRate: { value: 0.0, change: 0.0, trend: 'neutral' },
+          interestsSent: { value: 0, change: 0.0, trend: 'neutral' },
+          conversationsCreated: { value: 0, change: 0.0, trend: 'neutral' },
+          interestAcceptanceRate: { value: 0.0, change: 0.0, trend: 'neutral' },
+        };
+      }
     });
   }
 
@@ -543,16 +669,26 @@ export class AnalyticsService {
     const cacheKey = this.getCacheKey("messaging-timelines", { dateRange });
 
     return this.fetchWithCache(cacheKey, 300, async () => {
-      const convMetrics = await this.getConversationMetrics({ dateRange });
-      return {
-        conversationsCreated: convMetrics.totalConversations,
-        messagesSent: convMetrics.totalMessagesSent,
-        dailyActivity: convMetrics.dailyMessagingActivity.map((a: any) => ({
-          date: a.date,
-          messages: a.messages,
-          conversations: a.conversations
-        })),
-      };
+      try {
+        const convMetrics = await this.getConversationMetrics({ dateRange });
+        return {
+          conversationsCreated: convMetrics.totalConversations,
+          messagesSent: convMetrics.totalMessagesSent,
+          dailyActivity: convMetrics.dailyMessagingActivity.map((a: any) => ({
+            date: a.date,
+            messages: a.messages,
+            conversations: a.conversations
+          })),
+        };
+      } catch (e) {
+        console.error("[Analytics Service] getMessagingMetrics failed:", e);
+        Sentry.captureException(e);
+        return {
+          conversationsCreated: 0,
+          messagesSent: 0,
+          dailyActivity: []
+        };
+      }
     });
   }
 
@@ -575,11 +711,13 @@ export class AnalyticsService {
           .select('user_id, is_read, push_status');
 
         if (error) {
+          console.warn("[Analytics Service] notifications fetch failed:", error.message);
+          Sentry.captureException(error, { tags: { query: 'fetch_notifications_error' } });
           await incrementErrorCounter();
           throw error;
         }
 
-        const organicNotifications = (notifications || []).filter((n: any) => organicUserIds.has(n.user_id));
+        const organicNotifications = (notifications || []).filter((n: any) => n && organicUserIds.has(n.user_id));
 
         const notificationsCreated = organicNotifications.length;
         const notificationsRead = organicNotifications.filter((n: any) => n.is_read).length;
@@ -596,6 +734,7 @@ export class AnalyticsService {
         };
       } catch (e) {
         console.error("[Analytics Service] getNotificationMetrics failed:", e);
+        Sentry.captureException(e);
         return {
           notificationsCreated: 0,
           notificationsRead: 0,
@@ -621,16 +760,27 @@ export class AnalyticsService {
     const cacheKey = this.getCacheKey("destinations-paged", { page, pageSize, sortBy, sortOrder, batchId });
 
     return this.fetchWithCache(cacheKey, 7200, async () => {
-      const intentMetrics = await this.getTravelIntentionMetrics({ batchId });
-      const startIndex = (page - 1) * pageSize;
-      const paginatedRows = intentMetrics.rows.slice(startIndex, startIndex + pageSize);
+      try {
+        const intentMetrics = await this.getTravelIntentionMetrics({ batchId });
+        const startIndex = (page - 1) * pageSize;
+        const paginatedRows = intentMetrics.rows.slice(startIndex, startIndex + pageSize);
 
-      return {
-        rows: paginatedRows,
-        total: intentMetrics.rows.length,
-        page,
-        pageSize,
-      };
+        return {
+          rows: paginatedRows,
+          total: intentMetrics.rows.length,
+          page,
+          pageSize,
+        };
+      } catch (e) {
+        console.error("[Analytics Service] getTopDestinations failed:", e);
+        Sentry.captureException(e);
+        return {
+          rows: [],
+          total: 0,
+          page,
+          pageSize
+        };
+      }
     });
   }
 
@@ -645,22 +795,33 @@ export class AnalyticsService {
     const cacheKey = this.getCacheKey("active-users-paged", { page, pageSize });
 
     return this.fetchWithCache(cacheKey, 1800, async () => {
-      const convMetrics = await this.getConversationMetrics({ dateRange: 'all' });
-      const startIndex = (page - 1) * pageSize;
-      const paginatedRows = convMetrics.mostActiveUsers.slice(startIndex, startIndex + pageSize)
-        .map((row: any) => ({
-          id: row.userId,
-          name: row.name,
-          email: row.email,
-          sent: row.messagesSent
-        }));
+      try {
+        const convMetrics = await this.getConversationMetrics({ dateRange: 'all' });
+        const startIndex = (page - 1) * pageSize;
+        const paginatedRows = convMetrics.mostActiveUsers.slice(startIndex, startIndex + pageSize)
+          .map((row: any) => ({
+            id: row.userId,
+            name: row.name,
+            email: row.email,
+            sent: row.messagesSent
+          }));
 
-      return {
-        rows: paginatedRows,
-        total: convMetrics.mostActiveUsers.length,
-        page,
-        pageSize,
-      };
+        return {
+          rows: paginatedRows,
+          total: convMetrics.mostActiveUsers.length,
+          page,
+          pageSize,
+        };
+      } catch (e) {
+        console.error("[Analytics Service] getMostActiveUsers failed:", e);
+        Sentry.captureException(e);
+        return {
+          rows: [],
+          total: 0,
+          page,
+          pageSize
+        };
+      }
     });
   }
 
@@ -679,24 +840,31 @@ export class AnalyticsService {
         const organicUsers = await this.getOrganicUsers();
         const organicUserIds = new Set(organicUsers.map((u: any) => u.id));
 
-        const { data: feedback, error } = await supabaseAdmin
-          .from('feedback')
-          .select('id, user_id, type, message, created_at')
-          .order('created_at', { ascending: false });
+        let organicFeedback: any[] = [];
+        try {
+          const { data: feedback, error } = await supabaseAdmin
+            .from('feedback')
+            .select('id, user_id, type, message, created_at')
+            .order('created_at', { ascending: false });
 
-        if (error) {
-          await incrementErrorCounter();
-          throw error;
+          if (error) {
+            console.warn("[Analytics Service] feedback fetch failed:", error.message);
+            Sentry.captureException(error, { tags: { query: 'fetch_feedback_error' } });
+            await incrementErrorCounter();
+          } else {
+            organicFeedback = (feedback || []).filter((f: any) => f && organicUserIds.has(f.user_id));
+          }
+        } catch (e) {
+          console.error("[Analytics Service] feedback fetch critically failed:", e);
+          Sentry.captureException(e);
         }
-
-        const organicFeedback = (feedback || []).filter((f: any) => organicUserIds.has(f.user_id));
 
         const startIndex = (page - 1) * pageSize;
         const paginatedFeedback = organicFeedback.slice(startIndex, startIndex + pageSize);
 
         const rows = paginatedFeedback.map((f: any) => {
-          const u = organicUsers.find((user: any) => user.id === f.user_id);
-          const profile = u?.profiles && !Array.isArray(u.profiles) ? u.profiles : (Array.isArray(u.profiles) ? u.profiles[0] : null);
+          const u = organicUsers.find((user: any) => user && user.id === f.user_id);
+          const profile = u?.profiles && !Array.isArray(u.profiles) ? u.profiles : (Array.isArray(u.profiles) && u.profiles.length > 0 ? u.profiles[0] : null);
           return {
             id: f.id,
             name: profile?.name || u?.email || 'Unknown',
@@ -714,6 +882,7 @@ export class AnalyticsService {
         };
       } catch (e) {
         console.error("[Analytics Service] getRecentFeedback failed:", e);
+        Sentry.captureException(e);
         return {
           rows: [],
           total: 0,
