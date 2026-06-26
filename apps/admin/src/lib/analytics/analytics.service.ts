@@ -1,5 +1,6 @@
 import { supabaseAdmin, redis, ensureRedisConnection } from "@kovari/api";
 import * as Sentry from "@sentry/nextjs";
+import { cache } from "react";
 import { 
   AnalyticsFilter,
   BetaAnalyticsOverviewResponse,
@@ -39,7 +40,7 @@ export class AnalyticsService {
    * Helper function to fetch all admin email addresses.
    * Returns a lowercase Set of admin emails for fast exclusions.
    */
-  private static async getAdminEmailsSet(): Promise<Set<string>> {
+  private static getAdminEmailsSet = cache(async (): Promise<Set<string>> => {
     try {
       const { data: admins, error } = await supabaseAdmin.from('admins').select('email');
       if (error) {
@@ -52,13 +53,13 @@ export class AnalyticsService {
       Sentry.captureException(e);
       return new Set<string>();
     }
-  }
+  });
 
   /**
    * Helper function to query organic users (excluding admins/founders).
    * Fetches users and merges profiles to run anti-joins in memory.
    */
-  private static async getOrganicUsers(): Promise<OrganicUser[]> {
+  private static getOrganicUsers = cache(async (): Promise<OrganicUser[]> => {
     try {
       const adminEmails = await this.getAdminEmailsSet();
 
@@ -88,7 +89,7 @@ export class AnalyticsService {
       await incrementErrorCounter();
       return [];
     }
-  }
+  });
 
   /**
    * Builds formatted and consistent Redis cache keys based on filters.
@@ -264,7 +265,7 @@ export class AnalyticsService {
   /**
    * Fetch travel intention metrics, including destination tables and growth curves.
    */
-  public static async getTravelIntentionMetrics(filters: AnalyticsFilter): Promise<TravelIntentionMetrics> {
+  public static getTravelIntentionMetrics = cache(async (filters: AnalyticsFilter): Promise<TravelIntentionMetrics> => {
     const { dateRange, batchId } = this.validateFilters(filters);
     const cacheKey = this.getCacheKey("travel-intentions", { dateRange, batchId });
 
@@ -346,12 +347,12 @@ export class AnalyticsService {
         };
       }
     });
-  }
+  });
 
   /**
    * Fetch matching signal counts and funnel progression.
    */
-  public static async getInterestMetrics(filters: Pick<AnalyticsFilter, 'batchId'>): Promise<InterestMetrics> {
+  public static getInterestMetrics = cache(async (filters: Pick<AnalyticsFilter, 'batchId'>): Promise<InterestMetrics> => {
     const batchId = filters.batchId || 'all';
     const cacheKey = this.getCacheKey("interests", { batchId });
 
@@ -492,12 +493,12 @@ export class AnalyticsService {
         };
       }
     });
-  }
+  });
 
   /**
    * Fetch conversation and stranger-messaging statistics.
    */
-  public static async getConversationMetrics(filters: AnalyticsFilter): Promise<ConversationMetrics> {
+  public static getConversationMetrics = cache(async (filters: AnalyticsFilter): Promise<ConversationMetrics> => {
     const { dateRange, batchId } = this.validateFilters(filters);
     const cacheKey = this.getCacheKey("conversations", { dateRange, batchId });
 
@@ -618,7 +619,7 @@ export class AnalyticsService {
         };
       }
     });
-  }
+  });
 
   /**
    * Fetch overview stats comparing current values against baseline offsets.
