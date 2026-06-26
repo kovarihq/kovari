@@ -30,11 +30,11 @@ export function BetaAnalyticsFilters({
 
   return (
     <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2">
-      <label className="text-xs font-semibold uppercase tracking-widest text-muted-foreground ml-1">
+      <label htmlFor="date-range-select" className="text-xs font-semibold uppercase tracking-widest text-muted-foreground ml-1">
         Date Range
       </label>
       <Select value={initialDateRange} onValueChange={handleDateRangeChange}>
-        <SelectTrigger className="w-[180px] h-9 rounded-xl bg-card border-border shadow-none cursor-pointer font-medium text-xs">
+        <SelectTrigger id="date-range-select" className="w-[180px] h-9 rounded-xl bg-card border-border shadow-none cursor-pointer font-medium text-xs">
           <SelectValue placeholder="Select date range" />
         </SelectTrigger>
         <SelectContent className="rounded-xl">

@@ -2,7 +2,6 @@
 
 import * as React from "react";
 import { cn } from "@kovari/utils";
-import { LucideIcon } from "lucide-react";
 import { GroupContainer } from "@/components/ui/ios/GroupContainer";
 import { ListRow } from "@/components/ui/ios/ListRow";
 
@@ -84,8 +83,6 @@ export function AnalyticsStatGroup({
   return (
     <GroupContainer className={className}>
       {items.map((item) => {
-        const Icon = item.icon;
-        
         // Construct the trend element if provided
         const trendEl = item.trend ? (
           <span

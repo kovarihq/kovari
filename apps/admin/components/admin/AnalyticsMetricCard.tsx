@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { cn } from "@kovari/utils";
-import { LucideIcon, HelpCircle } from "lucide-react";
+import { HelpCircle } from "lucide-react";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -81,6 +81,7 @@ export function AnalyticsMetricCard({
               <Tooltip>
                 <TooltipTrigger asChild>
                   <button 
+                    type="button"
                     aria-label={`Info about ${title}`}
                     className="text-muted-foreground/50 hover:text-muted-foreground cursor-pointer rounded-full focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:outline-none focus:outline-none transition-shadow"
                   >

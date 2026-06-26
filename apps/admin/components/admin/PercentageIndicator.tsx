@@ -73,6 +73,7 @@ export function PercentageIndicator({
       aria-valuenow={normalizedValue}
       aria-valuemin={0}
       aria-valuemax={100}
+      aria-label={typeof label === "string" ? label : "Progress indicator"}
     >
       {(label || showValue) && (
         <div className="flex justify-between items-baseline text-xs font-semibold uppercase tracking-wider text-muted-foreground">
@@ -84,6 +85,7 @@ export function PercentageIndicator({
                   <Tooltip>
                     <TooltipTrigger asChild>
                       <button 
+                        type="button"
                         aria-label={`Info about ${typeof label === "string" ? label : "stage"}`}
                         className="text-muted-foreground/50 hover:text-muted-foreground cursor-pointer rounded-full focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:outline-none focus:outline-none transition-shadow"
                       >
