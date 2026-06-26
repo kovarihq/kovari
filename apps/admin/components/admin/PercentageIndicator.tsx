@@ -83,7 +83,10 @@ export function PercentageIndicator({
                 <TooltipProvider delayDuration={150}>
                   <Tooltip>
                     <TooltipTrigger asChild>
-                      <button className="text-muted-foreground/50 hover:text-muted-foreground cursor-pointer focus:outline-none">
+                      <button 
+                        aria-label={`Info about ${typeof label === "string" ? label : "stage"}`}
+                        className="text-muted-foreground/50 hover:text-muted-foreground cursor-pointer rounded-full focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:outline-none focus:outline-none transition-shadow"
+                      >
                         <HelpCircle className="h-3 w-3" />
                       </button>
                     </TooltipTrigger>

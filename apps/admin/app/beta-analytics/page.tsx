@@ -124,14 +124,14 @@ async function UsersSection() {
           <AnalyticsMetricCard
             title="Total Users"
             value={totalUsers.toLocaleString()}
-            icon={Users}
+            icon={<Users className="h-4 w-4 text-muted-foreground/60 shrink-0" />}
             description="Registered organic cohort size"
             tooltipText="Excludes Kovari admins and founders to track only organic metrics."
           />
           <AnalyticsMetricCard
             title="Activated Users"
             value={activatedUsers.toLocaleString()}
-            icon={Activity}
+            icon={<Activity className="h-4 w-4 text-muted-foreground/60 shrink-0" />}
             description="Users who joined the platform"
             trend={{
               value: activationRate,
@@ -142,7 +142,7 @@ async function UsersSection() {
           <AnalyticsMetricCard
             title="Returned Users"
             value={returnedUsers.toLocaleString()}
-            icon={ArrowRightLeft}
+            icon={<ArrowRightLeft className="h-4 w-4 text-muted-foreground/60 shrink-0" />}
             description="Users active after activation day"
             trend={{
               value: returnRate,
@@ -185,7 +185,7 @@ async function TravelIntentionsSection({ filters }: { filters: AnalyticsFilter }
               key: row.destination,
               label: `${row.rank}. ${row.destination}`,
               value: `${row.count} signups`,
-              icon: MapPin,
+              icon: <MapPin className="h-4 w-4 text-muted-foreground/60 shrink-0" />,
               secondary: `${row.percentage}% of overall intent`
             }))}
           />
@@ -230,13 +230,13 @@ async function MatchInterestsSection({ filters }: { filters: AnalyticsFilter }) 
             <AnalyticsMetricCard
               title="Interests Sent"
               value={interestMetrics.interestsSent.toLocaleString()}
-              icon={Share2}
+              icon={<Share2 className="h-4 w-4 text-muted-foreground/60 shrink-0" />}
               description="Total matching signals dispatched"
             />
             <AnalyticsMetricCard
               title="Acceptance Rate"
               value={`${interestMetrics.acceptanceRate}%`}
-              icon={TrendingUp}
+              icon={<TrendingUp className="h-4 w-4 text-muted-foreground/60 shrink-0" />}
               description="Accept/Decide connection ratio"
               trend={{
                 value: interestMetrics.acceptanceRate,
@@ -314,13 +314,13 @@ async function ConversationsSection({ filters }: { filters: AnalyticsFilter }) {
               <AnalyticsMetricCard
                 title="Total Connections"
                 value={conversationMetrics.totalConversations.toLocaleString()}
-                icon={ArrowRightLeft}
+                icon={<ArrowRightLeft className="h-4 w-4 text-muted-foreground/60 shrink-0" />}
                 description="Stranger connections formed"
               />
               <AnalyticsMetricCard
                 title="Messages Sent"
                 value={conversationMetrics.totalMessagesSent.toLocaleString()}
-                icon={MessageSquare}
+                icon={<MessageSquare className="h-4 w-4 text-muted-foreground/60 shrink-0" />}
                 description="Exchanged direct texts"
               />
             </MetricGrid>
@@ -362,16 +362,18 @@ async function ConversationsSection({ filters }: { filters: AnalyticsFilter }) {
                 ) : (
                   <div className="divide-y divide-border/60">
                     {conversationMetrics.mostActiveUsers.slice(0, 5).map((user) => (
-                      <div key={user.userId} className="flex justify-between items-center px-4 py-3 text-xs">
-                        <div className="flex flex-col min-w-0">
-                          <span className="font-semibold text-foreground truncate">{user.name}</span>
-                          <span className="text-muted-foreground truncate text-[10px]">{user.email}</span>
-                        </div>
-                        <div className="flex flex-col items-end shrink-0">
-                          <span className="font-bold text-foreground font-mono">{user.messagesSent} sent</span>
-                          <span className="text-[10px] text-muted-foreground font-mono">{user.messagesReceived} rcvd</span>
-                        </div>
-                      </div>
+                      <ListRow
+                        key={user.userId}
+                        icon={<Sparkles className="text-muted-foreground/60 h-4 w-4" />}
+                        label={user.name}
+                        secondary={`${user.messagesReceived} rcvd • ${user.email}`}
+                        trailing={
+                          <span className="font-semibold font-mono text-foreground text-xs leading-none">
+                            {user.messagesSent} sent
+                          </span>
+                        }
+                        showChevron={false}
+                      />
                     ))}
                   </div>
                 )}
@@ -437,28 +439,26 @@ function UsersSectionSkeleton() {
 function TravelIntentionsSectionSkeleton() {
   return (
     <AnalyticsSection title="2. Travel Intentions">
-      <div className="rounded-xl border bg-card overflow-hidden">
-        <div className="flex items-center px-4 py-3 min-h-[52px]">
-          <div className="flex items-center gap-3 w-full">
-            <Skeleton className="h-5 w-5 rounded-full" />
-            <Skeleton className="h-4 w-1/4" />
-          </div>
+      <GroupContainer>
+        <ListRow
+          icon={<Skeleton className="h-5 w-5 rounded-full" />}
+          label={<Skeleton className="h-4 w-24" />}
+          secondary={<Skeleton className="h-3 w-36" />}
+          showChevron={false}
+        />
+        <div className="divide-y divide-border border-t border-border">
+          {[1, 2, 3, 4, 5].map((i) => (
+            <ListRow
+              key={i}
+              icon={<Skeleton className="h-4 w-4 rounded-full" />}
+              label={<Skeleton className="h-4 w-32" />}
+              secondary={<Skeleton className="h-3 w-24" />}
+              trailing={<Skeleton className="h-4 w-12" />}
+              showChevron={false}
+            />
+          ))}
         </div>
-        <div className="border-t border-border p-6 min-h-[300px] flex flex-col justify-between space-y-4">
-          <div className="space-y-4">
-            {[1, 2, 3].map((i) => (
-              <div key={i} className="flex justify-between items-center py-2 border-b border-border/50 last:border-0">
-                <div className="flex items-center gap-3 w-1/2">
-                  <Skeleton className="h-3 w-4" />
-                  <Skeleton className="h-3 w-full" />
-                </div>
-                <Skeleton className="h-3 w-12" />
-              </div>
-            ))}
-          </div>
-          <Skeleton className="h-3 w-1/3 mx-auto" />
-        </div>
-      </div>
+      </GroupContainer>
     </AnalyticsSection>
   );
 }
@@ -482,25 +482,22 @@ function MatchInterestsSectionSkeleton() {
           ))}
         </MetricGrid>
 
-        <div className="rounded-xl border bg-card overflow-hidden">
-          <div className="flex items-center px-4 py-3 min-h-[52px]">
-            <div className="flex items-center gap-3 w-full">
-              <Skeleton className="h-5 w-5 rounded-full" />
-              <Skeleton className="h-4 w-1/4" />
-            </div>
+        <GroupContainer>
+          <ListRow
+            icon={<Skeleton className="h-5 w-5 rounded-full" />}
+            label={<Skeleton className="h-4 w-24" />}
+            secondary={<Skeleton className="h-3 w-36" />}
+            showChevron={false}
+          />
+          <div className="border-t border-border p-6 space-y-4">
+            {[1, 2, 3, 4].map((i) => (
+              <div key={i} className="space-y-1">
+                <Skeleton className="h-3 w-24" />
+                <Skeleton className="h-2.5 w-full rounded-full" />
+              </div>
+            ))}
           </div>
-          <div className="border-t border-border p-6 min-h-[300px] flex flex-col justify-between space-y-4">
-            <div className="space-y-3">
-              {[1, 2, 3, 4].map((i) => (
-                <div key={i} className="space-y-1">
-                  <Skeleton className="h-3 w-24" />
-                  <Skeleton className="h-2.5 w-full rounded-full" />
-                </div>
-              ))}
-            </div>
-            <Skeleton className="h-3 w-1/3 mx-auto" />
-          </div>
-        </div>
+        </GroupContainer>
       </div>
     </AnalyticsSection>
   );
@@ -525,33 +522,27 @@ function ConversationsSectionSkeleton() {
               </div>
             ))}
           </MetricGrid>
-          <div className="rounded-xl border bg-card overflow-hidden">
-            <div className="flex items-center justify-between px-4 py-3 min-h-[52px]">
-              <div className="flex items-center gap-3 w-full">
-                <Skeleton className="h-5 w-5 rounded-full" />
-                <div className="space-y-1 w-2/3">
-                  <Skeleton className="h-4 w-1/3" />
-                  <Skeleton className="h-3 w-1/2" />
-                </div>
-              </div>
-            </div>
-            <div className="h-[180px] border-t border-border flex items-center justify-center p-6">
+          <GroupContainer>
+            <ListRow
+              icon={<Skeleton className="h-5 w-5 rounded-full" />}
+              label={<Skeleton className="h-4 w-24" />}
+              secondary={<Skeleton className="h-3 w-36" />}
+              showChevron={false}
+            />
+            <div className="h-[180px] border-t border-border flex items-center justify-center p-6 bg-secondary/5">
               <Skeleton className="h-full w-full rounded-lg" />
             </div>
-          </div>
+          </GroupContainer>
         </div>
 
         <div>
-          <div className="rounded-xl border bg-card overflow-hidden h-full flex flex-col">
-            <div className="flex items-center px-4 py-3 min-h-[52px]">
-              <div className="flex items-center gap-3 w-full">
-                <Skeleton className="h-5 w-5 rounded-full" />
-                <div className="space-y-1 w-2/3">
-                  <Skeleton className="h-4 w-1/3" />
-                  <Skeleton className="h-3 w-1/2" />
-                </div>
-              </div>
-            </div>
+          <GroupContainer className="h-full flex flex-col justify-between">
+            <ListRow
+              icon={<Skeleton className="h-5 w-5 rounded-full" />}
+              label={<Skeleton className="h-4 w-24" />}
+              secondary={<Skeleton className="h-3 w-36" />}
+              showChevron={false}
+            />
             <div className="flex-1 border-t border-border p-4 flex flex-col justify-between space-y-4">
               <div className="space-y-3">
                 {[1, 2, 3, 4].map((i) => (
@@ -566,7 +557,7 @@ function ConversationsSectionSkeleton() {
               </div>
               <Skeleton className="h-3 w-1/2 mx-auto mt-4" />
             </div>
-          </div>
+          </GroupContainer>
         </div>
       </div>
     </AnalyticsSection>

@@ -10,7 +10,7 @@ export interface StatItem {
   key: string;
   label: React.ReactNode;
   value: React.ReactNode;
-  icon?: LucideIcon;
+  icon?: React.ReactNode;
   secondary?: React.ReactNode;
   trend?: {
     value: number;
@@ -35,7 +35,6 @@ export function AnalyticsStatGroup({
     return (
       <div className={cn("grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4 w-full", className)}>
         {items.map((item) => {
-          const Icon = item.icon;
           return (
             <div
               key={item.key}
@@ -49,9 +48,7 @@ export function AnalyticsStatGroup({
                 <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground truncate max-w-full">
                   {item.label}
                 </span>
-                {Icon && (
-                  <Icon className={cn("h-4 w-4 shrink-0 text-muted-foreground/60", item.destructive && "text-red-500")} />
-                )}
+                {item.icon}
               </div>
               <div className="flex items-baseline justify-between gap-1 flex-wrap">
                 <span className={cn(
@@ -112,7 +109,7 @@ export function AnalyticsStatGroup({
         return (
           <ListRow
             key={item.key}
-            icon={Icon ? <Icon className="h-4 w-4" /> : undefined}
+            icon={item.icon}
             label={item.label}
             secondary={secondaryCombined}
             trailing={

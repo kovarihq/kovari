@@ -25,7 +25,7 @@ export interface AnalyticsSubStat {
 export interface AnalyticsMetricCardProps {
   title: string;
   value: string | number;
-  icon: LucideIcon;
+  icon: React.ReactNode;
   description?: string;
   trend?: {
     value: number;
@@ -40,7 +40,7 @@ export interface AnalyticsMetricCardProps {
 export function AnalyticsMetricCard({
   title,
   value,
-  icon: Icon,
+  icon,
   description,
   trend,
   loading = false,
@@ -80,7 +80,10 @@ export function AnalyticsMetricCard({
             <TooltipProvider delayDuration={150}>
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <button className="text-muted-foreground/50 hover:text-muted-foreground cursor-pointer focus:outline-none">
+                  <button 
+                    aria-label={`Info about ${title}`}
+                    className="text-muted-foreground/50 hover:text-muted-foreground cursor-pointer rounded-full focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:outline-none focus:outline-none transition-shadow"
+                  >
                     <HelpCircle className="h-3.5 w-3.5" />
                   </button>
                 </TooltipTrigger>
@@ -91,7 +94,7 @@ export function AnalyticsMetricCard({
             </TooltipProvider>
           )}
         </div>
-        <Icon className="h-4 w-4 text-muted-foreground/60 shrink-0" />
+        {icon}
       </CardHeader>
       <CardContent className="space-y-1">
         <div className="text-2xl font-bold font-mono tracking-tight leading-tight text-foreground">
