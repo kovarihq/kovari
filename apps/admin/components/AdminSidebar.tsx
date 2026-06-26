@@ -18,6 +18,7 @@ import {
   MoreVertical,
   Loader2,
   MessageSquare,
+  TrendingUp,
 } from "lucide-react";
 import {
   Sidebar,
@@ -85,6 +86,11 @@ const menuItems = [
     title: "Waitlist",
     url: "/waitlist",
     icon: BarChart3,
+  },
+  {
+    title: "Beta Analytics",
+    url: "/beta-analytics",
+    icon: TrendingUp,
   },
   {
     title: "Emails",

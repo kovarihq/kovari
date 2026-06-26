@@ -51,7 +51,7 @@ export function AnalyticsStatGroup({
               </div>
               <div className="flex items-baseline justify-between gap-1 flex-wrap">
                 <span className={cn(
-                  "text-lg font-bold tracking-tight text-foreground font-mono leading-none",
+                  "text-lg font-bold tracking-tight text-foreground leading-none",
                   item.destructive && "text-red-500"
                 )}>
                   {item.value}
@@ -59,7 +59,7 @@ export function AnalyticsStatGroup({
                 {item.trend && (
                   <span
                     className={cn(
-                      "text-[10px] font-bold font-mono tracking-tight",
+                      "text-[10px] font-bold tracking-tight",
                       item.trend.isPositive ? "text-emerald-500" : "text-rose-500"
                     )}
                   >
@@ -87,7 +87,7 @@ export function AnalyticsStatGroup({
         const trendEl = item.trend ? (
           <span
             className={cn(
-              "text-[11px] font-bold font-mono ml-2 shrink-0 leading-none",
+              "text-[11px] font-bold ml-2 shrink-0 leading-none",
               item.trend.isPositive ? "text-emerald-500" : "text-rose-500"
             )}
           >
@@ -110,7 +110,7 @@ export function AnalyticsStatGroup({
             label={item.label}
             secondary={secondaryCombined}
             trailing={
-              <span className={cn("font-semibold font-mono text-foreground text-sm leading-none", item.destructive && "text-red-500")}>
+              <span className={cn("font-semibold text-foreground text-sm leading-none", item.destructive && "text-red-500")}>
                 {item.value}
               </span>
             }
