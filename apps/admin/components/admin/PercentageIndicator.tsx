@@ -3,6 +3,14 @@
 import * as React from "react";
 import { cn } from "@kovari/utils";
 
+import { HelpCircle } from "lucide-react";
+import {
+  Tooltip,
+  TooltipTrigger,
+  TooltipContent,
+  TooltipProvider,
+} from "@/components/ui/tooltip";
+
 export interface PercentageIndicatorProps {
   value: number; // 0 to 100
   label?: React.ReactNode;
@@ -11,6 +19,7 @@ export interface PercentageIndicatorProps {
   size?: "sm" | "md" | "lg";
   className?: string;
   animate?: boolean;
+  tooltipText?: string;
 }
 
 export function PercentageIndicator({
@@ -21,6 +30,7 @@ export function PercentageIndicator({
   size = "md",
   className,
   animate = true,
+  tooltipText,
 }: PercentageIndicatorProps) {
   const normalizedValue = Math.min(Math.max(value, 0), 100);
   const [percent, setPercent] = React.useState(animate ? 0 : normalizedValue);
@@ -66,7 +76,27 @@ export function PercentageIndicator({
     >
       {(label || showValue) && (
         <div className="flex justify-between items-baseline text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-          {label ? <span>{label}</span> : <span />}
+          {label ? (
+            <div className="flex items-center gap-1.5">
+              <span>{label}</span>
+              {tooltipText && (
+                <TooltipProvider delayDuration={150}>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <button className="text-muted-foreground/50 hover:text-muted-foreground cursor-pointer focus:outline-none">
+                        <HelpCircle className="h-3 w-3" />
+                      </button>
+                    </TooltipTrigger>
+                    <TooltipContent className="max-w-[200px]" side="top" align="start">
+                      {tooltipText}
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              )}
+            </div>
+          ) : (
+            <span />
+          )}
           {showValue && (
             <span className={cn("font-mono font-bold leading-none tabular-nums", textColors[variant])}>
               {normalizedValue}%
