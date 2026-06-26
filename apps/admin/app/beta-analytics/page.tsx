@@ -40,10 +40,10 @@ export default async function BetaAnalyticsPage({ searchParams }: PageProps) {
   const filters = { dateRange, batchId };
 
   return (
-    <div className="max-w-full mx-auto space-y-8 pb-12">
+    <div className="max-w-full mx-auto space-y-6 pb-8">
       {/* Page Header with Filter Controls */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end gap-4">
-        <div className="space-y-1">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end gap-6">
+        <div className="space-y-0">
           <h1 className="text-lg font-semibold tracking-tight text-foreground">Beta Analytics</h1>
           <p className="text-md text-muted-foreground">
             Monitor cohort growth, matchmaking signals, and user interaction metrics
@@ -54,14 +54,14 @@ export default async function BetaAnalyticsPage({ searchParams }: PageProps) {
         </div>
       </div>
 
-      <div className="space-y-8">
+      <div className="space-y-6">
         {/* Section 1: Users (Wrapped in Suspense) */}
         <Suspense fallback={<UsersSectionSkeleton />}>
           <UsersSection />
         </Suspense>
 
         {/* Responsive Row for Intentions and Interests */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           {/* Section 2: Travel Intentions */}
           <Suspense fallback={<TravelIntentionsSectionSkeleton />}>
             <TravelIntentionsSection filters={filters} />
@@ -308,7 +308,7 @@ async function ConversationsSection({ filters }: { filters: AnalyticsFilter }) {
         title="4. Conversations & Direct Messaging"
         description="Cohort interactions, stranger connections, and messaging leaderboard"
       >
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
           <div className="lg:col-span-2 space-y-4">
             <MetricGrid cols={2}>
               <AnalyticsMetricCard

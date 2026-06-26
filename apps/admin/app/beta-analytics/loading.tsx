@@ -3,18 +3,18 @@ import { Skeleton } from "@/components/ui/skeleton";
 
 export default function BetaAnalyticsLoading() {
   return (
-    <div className="max-w-full mx-auto space-y-8 pb-12">
+    <div className="max-w-full mx-auto space-y-6 pb-8">
       {/* Header Loading State */}
-      <div className="space-y-2">
+      <div className="space-y-1">
         <Skeleton className="h-6 w-48" />
         <Skeleton className="h-4 w-96" />
       </div>
 
-      <div className="space-y-8">
+      <div className="space-y-6">
         {/* Section 1: Users */}
         <section className="space-y-3">
           <SectionHeader>1. Users & Retention</SectionHeader>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div className="md:col-span-2">
               <div className="rounded-xl border bg-card overflow-hidden">
                 <div className="flex items-center justify-between px-4 py-3 min-h-[52px]">
@@ -60,7 +60,7 @@ export default function BetaAnalyticsLoading() {
         </section>
 
         {/* Section 2 & 3: Intentions & Interests */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           <section className="space-y-3">
             <SectionHeader>2. Travel Intentions</SectionHeader>
             <div className="rounded-xl border bg-card overflow-hidden">
@@ -114,7 +114,7 @@ export default function BetaAnalyticsLoading() {
         {/* Section 4: Conversations */}
         <section className="space-y-3">
           <SectionHeader>4. Conversations & Direct Messaging</SectionHeader>
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
             <div className="lg:col-span-2">
               <div className="rounded-xl border bg-card overflow-hidden">
                 <div className="flex items-center justify-between px-4 py-3 min-h-[52px]">
