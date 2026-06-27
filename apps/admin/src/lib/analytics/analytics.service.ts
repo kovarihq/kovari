@@ -244,11 +244,25 @@ export class AnalyticsService {
         if (!u || u.beta_status !== 'activated' || !u.last_seen_at || !u.activation_date) return false;
         
         try {
-          // Convert to timezone-accurate localized dates safely
-          const lastSeenDate = new Date(u.last_seen_at).toLocaleDateString('en-US', { timeZone: 'Asia/Kolkata' });
-          const activationDate = new Date(u.activation_date).toLocaleDateString('en-US', { timeZone: 'Asia/Kolkata' });
+          const getKolkataDateString = (dateInput: string): string => {
+            const date = new Date(dateInput);
+            const formatter = new Intl.DateTimeFormat('en-US', {
+              timeZone: 'Asia/Kolkata',
+              year: 'numeric',
+              month: '2-digit',
+              day: '2-digit',
+            });
+            const parts = formatter.formatToParts(date);
+            const year = parts.find(p => p.type === 'year')?.value || '1970';
+            const month = parts.find(p => p.type === 'month')?.value || '01';
+            const day = parts.find(p => p.type === 'day')?.value || '01';
+            return `${year}-${month}-${day}`;
+          };
+
+          const lastSeenDateStr = getKolkataDateString(u.last_seen_at);
+          const activationDateStr = getKolkataDateString(u.activation_date);
           
-          return new Date(lastSeenDate) > new Date(activationDate);
+          return lastSeenDateStr > activationDateStr;
         } catch {
           return false;
         }
@@ -417,7 +431,15 @@ export class AnalyticsService {
         const uniqueSentIds = new Set(organicInterests.map((m: any) => m?.from_user_id).filter(Boolean));
         const interestSentCount = uniqueSentIds.size;
 
+        const uniqueAcceptedUserIds = new Set<string>();
+        organicInterests.filter((m: any) => m && m.status === 'accepted').forEach((m: any) => {
+          uniqueAcceptedUserIds.add(m.from_user_id);
+          uniqueAcceptedUserIds.add(m.to_user_id);
+        });
+        const interestAcceptedUserCount = uniqueAcceptedUserIds.size;
+
         // Conversations
+        let rawConversations: any[] = [];
         let conversationCount = 0;
         try {
           const { data: conversations, error: convErr } = await supabaseAdmin.from('conversations').select('user_a_id, user_b_id');
@@ -425,16 +447,25 @@ export class AnalyticsService {
             console.warn("[Analytics Service] conversations fetch failed, defaulting to 0:", convErr.message);
             Sentry.captureException(convErr);
           } else {
-            conversationCount = (conversations || []).filter((c: any) => 
+            rawConversations = (conversations || []).filter((c: any) => 
               c && organicUserIds.has(c.user_a_id) && organicUserIds.has(c.user_b_id)
-            ).length;
+            );
+            conversationCount = rawConversations.length;
           }
         } catch (e) {
           console.error("[Analytics Service] conversations query crashed:", e);
           Sentry.captureException(e);
         }
 
+        const uniqueConversationUserIds = new Set<string>();
+        rawConversations.forEach((c: any) => {
+          uniqueConversationUserIds.add(c.user_a_id);
+          uniqueConversationUserIds.add(c.user_b_id);
+        });
+        const conversationUserCount = uniqueConversationUserIds.size;
+
         // Direct Messages
+        let rawMessages: any[] = [];
         let messageSentCount = 0;
         try {
           const { data: messages, error: msgErr } = await supabaseAdmin
@@ -445,14 +476,21 @@ export class AnalyticsService {
             console.warn("[Analytics Service] direct_messages fetch failed, defaulting to 0:", msgErr.message);
             Sentry.captureException(msgErr);
           } else {
-            messageSentCount = (messages || []).filter((m: any) => 
+            rawMessages = (messages || []).filter((m: any) => 
               m && organicUserIds.has(m.sender_id) && organicUserIds.has(m.receiver_id)
-            ).length;
+            );
+            messageSentCount = rawMessages.length;
           }
         } catch (e) {
           console.error("[Analytics Service] direct_messages query crashed:", e);
           Sentry.captureException(e);
         }
+
+        const uniqueMessageSenders = new Set<string>();
+        rawMessages.forEach((m: any) => {
+          uniqueMessageSenders.add(m.sender_id);
+        });
+        const messageSenderUserCount = uniqueMessageSenders.size;
 
         // Construct 9-stage conversion funnel steps
         const getPct = (val: number | null, base: number) => {
@@ -469,9 +507,9 @@ export class AnalyticsService {
           { stage: 'travel_intent', label: 'Travel Intent Added', count: travelIntentCount, pct: getPct(travelIntentCount, base) },
           { stage: 'explore_viewed', label: 'Explore Viewed', count: null, pct: null, warning: 'Requires client telemetry integration' },
           { stage: 'interest_sent', label: 'Interest Sent', count: interestSentCount, pct: getPct(interestSentCount, base) },
-          { stage: 'interest_accepted', label: 'Interest Accepted', count: acceptedInterests, pct: getPct(acceptedInterests, base) },
-          { stage: 'conversation', label: 'Conversation Started', count: conversationCount, pct: getPct(conversationCount, base) },
-          { stage: 'message_sent', label: 'Messages Sent', count: messageSentCount, pct: getPct(messageSentCount, base) },
+          { stage: 'interest_accepted', label: 'Interest Accepted', count: interestAcceptedUserCount, pct: getPct(interestAcceptedUserCount, base) },
+          { stage: 'conversation', label: 'Conversation Started', count: conversationUserCount, pct: getPct(conversationUserCount, base) },
+          { stage: 'message_sent', label: 'Messages Sent', count: messageSenderUserCount, pct: getPct(messageSenderUserCount, base) },
         ];
 
         return {
