@@ -1,8 +1,8 @@
 import { pubClient } from "../socket/redis";
 import { 
-  NotificationType, 
+  NotificationType,
+  CreateNotificationParams,
 } from "@kovari/types";
-import { createNotification } from "@/lib/notifications/createNotification";
 
 /**
  * Buffers notifications to avoid spamming the user with multiple alerts
@@ -72,8 +72,9 @@ async function processBuffer(userId: string, chatId: string, senderName: string,
   const isDirectChat = chatId.includes("_");
   const entityId = isDirectChat ? senderId : chatId;
 
-  // 1. Create DB Notification (This now automatically handles push evaluation and priority)
-  const result = await createNotification({
+  // 1. Dispatch to the Vercel API via HTTP — the socket server is a standalone Node
+  //    process and cannot use Next.js @/ path aliases or import createNotification directly.
+  const payload: CreateNotificationParams = {
     userId,
     type: NotificationType.NEW_MESSAGE,
     title,
@@ -84,10 +85,34 @@ async function processBuffer(userId: string, chatId: string, senderName: string,
     data: {
       chat_type: isDirectChat ? "direct" : "group",
     },
-  });
+  };
 
-  if (!result.success) {
-    console.error("[Batching] Error creating notification:", result.error);
+  const webBaseUrl = process.env.WEB_BASE_URL || "https://kovari.in";
+  const internalSecret = process.env.INTERNAL_NOTIFY_SECRET;
+
+  if (!internalSecret) {
+    console.error("[Batching] INTERNAL_NOTIFY_SECRET is not set — cannot dispatch push notification.");
+    return;
+  }
+
+  try {
+    const response = await fetch(`${webBaseUrl}/api/internal/notify`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-internal-secret": internalSecret,
+      },
+      body: JSON.stringify(payload),
+    });
+
+    if (!response.ok) {
+      const text = await response.text();
+      console.error(`[Batching] Internal notify endpoint returned ${response.status}: ${text}`);
+    } else {
+      console.log(`[Batching] Push dispatched for user ${userId}, chat ${chatId}`);
+    }
+  } catch (err) {
+    console.error("[Batching] Failed to call internal notify endpoint:", err);
   }
 }
 
