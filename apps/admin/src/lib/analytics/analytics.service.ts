@@ -648,7 +648,7 @@ export class AnalyticsService {
    * 
    * @param filters - Active page selectors
    */
-  public static async getOverviewMetrics(filters: AnalyticsFilter): Promise<BetaAnalyticsOverviewResponse> {
+  public static getOverviewMetrics = cache(async (filters: AnalyticsFilter): Promise<BetaAnalyticsOverviewResponse> => {
     const { dateRange, batchId } = this.validateFilters(filters);
     const cacheKey = this.getCacheKey("overview", { dateRange, batchId });
 
@@ -676,14 +676,14 @@ export class AnalyticsService {
         throw e;
       }
     });
-  }
+  });
 
   /**
    * Fetch aggregated daily messaging timelines.
    * 
    * @param filters - Active date limitations
    */
-  public static async getMessagingMetrics(filters: Pick<AnalyticsFilter, 'dateRange'>): Promise<MessagingAnalyticsResponse> {
+  public static getMessagingMetrics = cache(async (filters: Pick<AnalyticsFilter, 'dateRange'>): Promise<MessagingAnalyticsResponse> => {
     const dateRange = filters.dateRange || '30d';
     const cacheKey = this.getCacheKey("messaging-timelines", { dateRange });
 
@@ -705,14 +705,14 @@ export class AnalyticsService {
         throw e;
       }
     });
-  }
+  });
 
   /**
    * Fetch notification dispatch statistics.
    * 
    * @param filters - Active date limitations
    */
-  public static async getNotificationMetrics(filters: Pick<AnalyticsFilter, 'dateRange'>): Promise<NotificationAnalyticsResponse> {
+  public static getNotificationMetrics = cache(async (filters: Pick<AnalyticsFilter, 'dateRange'>): Promise<NotificationAnalyticsResponse> => {
     const dateRange = filters.dateRange || '30d';
     const cacheKey = this.getCacheKey("notifications", { dateRange });
 
@@ -753,7 +753,7 @@ export class AnalyticsService {
         throw e;
       }
     });
-  }
+  });
 
   /**
    * Fetch paginated list of unnested destination popularities.

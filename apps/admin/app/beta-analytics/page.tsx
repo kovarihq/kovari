@@ -57,7 +57,7 @@ export default async function BetaAnalyticsPage({ searchParams }: PageProps) {
       <div className="space-y-6">
         {/* Section 1: Users */}
         <Suspense fallback={<UsersSectionSkeleton />}>
-          <UsersSection />
+          <UsersSection filters={filters} />
         </Suspense>
 
         {/* Section 2: Travel Intentions */}
@@ -96,13 +96,12 @@ export default async function BetaAnalyticsPage({ searchParams }: PageProps) {
 /**
  * Renders Users Acquisition and Return metrics safely.
  */
-async function UsersSection() {
+async function UsersSection({ filters }: { filters: AnalyticsFilter }) {
   try {
-    const [totalUsers, activatedUsers, returnedUsers] = await Promise.all([
-      AnalyticsService.getTotalUsers(),
-      AnalyticsService.getActivatedUsers(),
-      AnalyticsService.getReturnedUsers(),
-    ]);
+    const overview = await AnalyticsService.getOverviewMetrics(filters);
+    const totalUsers = overview.totalUsers.value;
+    const activatedUsers = overview.activatedUsers.value;
+    const returnedUsers = overview.returnedUsers.value;
 
     // Handle empty state: zero users registered
     if (totalUsers === 0) {
