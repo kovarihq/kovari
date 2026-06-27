@@ -72,7 +72,7 @@ export class AnalyticsService {
         console.error("[Analytics Service] getOrganicUsers query failed:", error.message);
         Sentry.captureException(error, { tags: { query: 'fetch_organic_users_error' } });
         await incrementErrorCounter();
-        return [];
+        throw error;
       }
 
       const rawUsers = (users || []) as any[];
@@ -87,7 +87,7 @@ export class AnalyticsService {
       console.error("[Analytics Service] getOrganicUsers critically failed:", e);
       Sentry.captureException(e);
       await incrementErrorCounter();
-      return [];
+      throw e;
     }
   });
 
@@ -211,7 +211,7 @@ export class AnalyticsService {
     } catch (e) {
       console.error("[Analytics Service] getTotalUsers failed:", e);
       Sentry.captureException(e);
-      return 0;
+      throw e;
     }
   }
 
@@ -225,7 +225,7 @@ export class AnalyticsService {
     } catch (e) {
       console.error("[Analytics Service] getActivatedUsers failed:", e);
       Sentry.captureException(e);
-      return 0;
+      throw e;
     }
   }
 
@@ -272,7 +272,7 @@ export class AnalyticsService {
     } catch (e) {
       console.error("[Analytics Service] getReturnedUsers failed:", e);
       Sentry.captureException(e);
-      return 0;
+      throw e;
     }
   }
 
@@ -353,12 +353,7 @@ export class AnalyticsService {
       } catch (e) {
         console.error("[Analytics Service] getTravelIntentionMetrics failed:", e);
         Sentry.captureException(e);
-        return {
-          rows: [],
-          totalDestinations: 0,
-          totalIntentionsCount: 0,
-          intentionsGrowthTimeline: []
-        };
+        throw e;
       }
     });
   });
@@ -522,13 +517,7 @@ export class AnalyticsService {
       } catch (e) {
         console.error("[Analytics Service] getInterestMetrics failed:", e);
         Sentry.captureException(e);
-        return {
-          interestsSent: 0,
-          acceptedInterests: 0,
-          pendingInterests: 0,
-          acceptanceRate: 0.0,
-          funnelSteps: []
-        };
+        throw e;
       }
     });
   });
@@ -649,12 +638,7 @@ export class AnalyticsService {
       } catch (e) {
         console.error("[Analytics Service] getConversationMetrics failed:", e);
         Sentry.captureException(e);
-        return {
-          totalConversations: 0,
-          totalMessagesSent: 0,
-          dailyMessagingActivity: [],
-          mostActiveUsers: []
-        };
+        throw e;
       }
     });
   });
@@ -689,15 +673,7 @@ export class AnalyticsService {
       } catch (e) {
         console.error("[Analytics Service] getOverviewMetrics failed:", e);
         Sentry.captureException(e);
-        return {
-          totalUsers: { value: 0, change: 0.0, trend: 'neutral' },
-          activatedUsers: { value: 0, change: 0.0, trend: 'neutral' },
-          returnedUsers: { value: 0, change: 0.0, trend: 'neutral' },
-          retentionRate: { value: 0.0, change: 0.0, trend: 'neutral' },
-          interestsSent: { value: 0, change: 0.0, trend: 'neutral' },
-          conversationsCreated: { value: 0, change: 0.0, trend: 'neutral' },
-          interestAcceptanceRate: { value: 0.0, change: 0.0, trend: 'neutral' },
-        };
+        throw e;
       }
     });
   }
@@ -726,11 +702,7 @@ export class AnalyticsService {
       } catch (e) {
         console.error("[Analytics Service] getMessagingMetrics failed:", e);
         Sentry.captureException(e);
-        return {
-          conversationsCreated: 0,
-          messagesSent: 0,
-          dailyActivity: []
-        };
+        throw e;
       }
     });
   }
@@ -778,13 +750,7 @@ export class AnalyticsService {
       } catch (e) {
         console.error("[Analytics Service] getNotificationMetrics failed:", e);
         Sentry.captureException(e);
-        return {
-          notificationsCreated: 0,
-          notificationsRead: 0,
-          pushSuccess: 0,
-          pushFailure: 0,
-          noTokenCount: 0
-        };
+        throw e;
       }
     });
   }
@@ -817,12 +783,7 @@ export class AnalyticsService {
       } catch (e) {
         console.error("[Analytics Service] getTopDestinations failed:", e);
         Sentry.captureException(e);
-        return {
-          rows: [],
-          total: 0,
-          page,
-          pageSize
-        };
+        throw e;
       }
     });
   }
@@ -858,12 +819,7 @@ export class AnalyticsService {
       } catch (e) {
         console.error("[Analytics Service] getMostActiveUsers failed:", e);
         Sentry.captureException(e);
-        return {
-          rows: [],
-          total: 0,
-          page,
-          pageSize
-        };
+        throw e;
       }
     });
   }
@@ -928,12 +884,7 @@ export class AnalyticsService {
       } catch (e) {
         console.error("[Analytics Service] getRecentFeedback failed:", e);
         Sentry.captureException(e);
-        return {
-          rows: [],
-          total: 0,
-          page,
-          pageSize
-        };
+        throw e;
       }
     });
   }

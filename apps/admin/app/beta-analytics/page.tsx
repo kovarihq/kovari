@@ -9,6 +9,7 @@ import { GroupContainer } from "@/components/ui/ios/GroupContainer";
 import { ListRow } from "@/components/ui/ios/ListRow";
 import { SectionHeader } from "@/components/ui/ios/SectionHeader";
 import { Skeleton } from "@/components/ui/skeleton";
+import { SectionRetryButton } from "@/components/admin/SectionRetryButton";
 import { cn } from "@/lib/utils";
 import { 
   Users, 
@@ -433,8 +434,9 @@ function SectionErrorState({ title, errorText }: { title: string; errorText: str
           </div>
           <div className="space-y-1">
             <span className="text-sm font-semibold text-foreground">Section Load Failed</span>
-            <p className="text-xs text-muted-foreground leading-normal">{errorText} Please reload the dashboard to try again.</p>
+            <p className="text-xs text-muted-foreground leading-normal">{errorText}</p>
           </div>
+          <SectionRetryButton />
         </div>
       </GroupContainer>
     </section>
