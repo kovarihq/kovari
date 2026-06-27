@@ -4,11 +4,14 @@ import 'package:flutter_riverpod/legacy.dart';
 import 'package:mobile/core/network/api_client.dart';
 import 'package:mobile/core/providers/auth_provider.dart';
 import 'package:mobile/core/realtime/socket_service.dart';
+import 'package:mobile/core/services/fcm_service.dart';
 import 'package:mobile/core/utils/app_logger.dart';
 import 'package:mobile/core/security/encryption_service.dart';
 import 'package:mobile/features/chat/models/conversation_entity.dart';
 import 'package:mobile/features/chat/models/message_entity.dart';
+import 'package:mobile/features/chat/providers/chat_runtime_providers.dart';
 import 'package:mobile/features/chat/providers/conversation_runtime_store.dart';
+import 'package:mobile/shared/models/kovari_user.dart';
 
 import 'package:mobile/core/network/sync_engine.dart';
 
@@ -28,6 +31,22 @@ class ConversationStore extends Notifier<Map<String, ConversationEntity>> {
 
   @override
   Map<String, ConversationEntity> build() {
+    // Listen to user changes. If user transitions to non-null and has a resolved UUID, fetch inbox
+    ref.listen<KovariUser?>(authProvider.select((s) => s.user), (
+      previous,
+      next,
+    ) {
+      if (next != null && next.resolvedUuid != null) {
+        Future.microtask(() => fetchInbox());
+      }
+    });
+
+    // If user is already loaded and has resolved UUID, fetch inbox eagerly
+    final myUser = ref.read(authProvider).user;
+    if (myUser != null && myUser.resolvedUuid != null) {
+      Future.microtask(() => fetchInbox());
+    }
+
     // Subscribe to socket events that affect conversation metadata
     final events = ref.watch(socketServiceProvider.notifier).events;
     final sub = events.listen(_handleSocketEvent);
@@ -100,7 +119,7 @@ class ConversationStore extends Notifier<Map<String, ConversationEntity>> {
         return;
       }
 
-      final myUuid = myUser.uuid ?? myUser.id;
+      final myUuid = myUser.resolvedUuid ?? myUser.id;
 
       for (final msg in messages) {
         // --- Group Conversation Detection ---
@@ -289,7 +308,9 @@ class ConversationStore extends Notifier<Map<String, ConversationEntity>> {
     };
 
     // Propagate to ConversationRuntimeStore to ensure inbox UI updates instantly
-    ref.read(conversationRuntimeStoreProvider.notifier).updateLastMessage(
+    ref
+        .read(conversationRuntimeStoreProvider.notifier)
+        .updateLastMessage(
           chatId: chatId,
           messageId: finalMsg.id,
           snippet: finalMsg.text,
@@ -407,6 +428,30 @@ class ConversationStore extends Notifier<Map<String, ConversationEntity>> {
           isOnline: false,
           lastSeen: lastSeenStr != null ? DateTime.tryParse(lastSeenStr) : null,
         );
+      case 'new_notification':
+        final currentChatId = ref.read(activeConversationProvider);
+        AppLogger.d(
+          '[ConversationStore] Received new_notification. ActiveChatId: $currentChatId, TargetChatId: $chatId',
+        );
+        if (currentChatId != chatId) {
+          incrementUnread(chatId);
+          final conv = state[chatId];
+          if (conv == null) {
+            fetchInbox(forceRefresh: true);
+          }
+          final senderName =
+              conv?.displayName ?? (data['title'] as String?) ?? 'New Message';
+          final bodyMessage =
+              data['message'] as String? ?? 'Open Kovari to view message';
+          AppLogger.i(
+            '[ConversationStore] Triggering local notification: "$senderName" - "$bodyMessage"',
+          );
+          FCMService.instance.showLocalNotification(
+            title: senderName,
+            body: bodyMessage,
+            data: {'entity_type': 'chat', 'entity_id': chatId},
+          );
+        }
       case 'receive_message':
         final msgData = data['message'] ?? data;
         if (msgData is Map<String, dynamic>) {

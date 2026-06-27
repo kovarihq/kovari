@@ -16,7 +16,8 @@ class ConnectivityState {
   bool get isDegraded => status == ConnectionStatus.degraded;
 }
 
-class ConnectivityNotifier extends Notifier<ConnectivityState> with WidgetsBindingObserver {
+class ConnectivityNotifier extends Notifier<ConnectivityState>
+    with WidgetsBindingObserver {
   final Connectivity _connectivity = Connectivity();
   StreamSubscription? _subscription;
   Timer? _heartbeatTimer;
@@ -34,15 +35,17 @@ class ConnectivityNotifier extends Notifier<ConnectivityState> with WidgetsBindi
     Duration(seconds: 5),
   ];
 
-  final Dio _dio = Dio(BaseOptions(
-    connectTimeout: const Duration(seconds: 5),
-    receiveTimeout: const Duration(seconds: 5),
-  ));
+  final Dio _dio = Dio(
+    BaseOptions(
+      connectTimeout: const Duration(seconds: 15),
+      receiveTimeout: const Duration(seconds: 15),
+    ),
+  );
 
   @override
   ConnectivityState build() {
     WidgetsBinding.instance.addObserver(this);
-    
+
     ref.onDispose(() {
       WidgetsBinding.instance.removeObserver(this);
       _subscription?.cancel();
@@ -66,11 +69,12 @@ class ConnectivityNotifier extends Notifier<ConnectivityState> with WidgetsBindi
 
     // Passive foreground heartbeat (5 minutes)
     _heartbeatTimer = Timer.periodic(const Duration(minutes: 5), (_) {
-      if (!state.isOffline && WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed) {
+      if (!state.isOffline &&
+          WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed) {
         triggerHealthCheck();
       }
     });
-    
+
     triggerHealthCheck();
   }
 
@@ -91,7 +95,9 @@ class ConnectivityNotifier extends Notifier<ConnectivityState> with WidgetsBindi
 
     // 2. Online Stability (Require 3 consecutive successes)
     if (newStatus == ConnectionStatus.online && _successCount < 3) {
-      debugPrint('🌐 Connectivity Stability check: Success $_successCount/3. Staying ${state.status.name}');
+      debugPrint(
+        '🌐 Connectivity Stability check: Success $_successCount/3. Staying ${state.status.name}',
+      );
       return;
     }
 
@@ -118,7 +124,9 @@ class ConnectivityNotifier extends Notifier<ConnectivityState> with WidgetsBindi
   Future<void> _transitionTo(ConnectionStatus newStatus) async {
     final oldStatus = state.status;
     final type = await _getConnectivityType();
-    debugPrint('🚀 [CONNECTIVITY] Transitioning: ${oldStatus.name.toUpperCase()} -> ${newStatus.name.toUpperCase()} (via $type)');
+    debugPrint(
+      '🚀 [CONNECTIVITY] Transitioning: ${oldStatus.name.toUpperCase()} -> ${newStatus.name.toUpperCase()} (via $type)',
+    );
     state = ConnectivityState(status: newStatus);
   }
 
@@ -167,7 +175,11 @@ class ConnectivityNotifier extends Notifier<ConnectivityState> with WidgetsBindi
         }
       } else {
         _successCount = 0;
-        _handleFailure(url, 'STATUS_${response.statusCode}', 'Non-200 response');
+        _handleFailure(
+          url,
+          'STATUS_${response.statusCode}',
+          'Non-200 response',
+        );
       }
     } catch (e) {
       _successCount = 0;
@@ -194,12 +206,18 @@ class ConnectivityNotifier extends Notifier<ConnectivityState> with WidgetsBindi
     }
 
     // Exponential Backoff
-    final delay = _backoffDelays[_retryAttempt.clamp(0, _backoffDelays.length - 1)];
+    final delay =
+        _backoffDelays[_retryAttempt.clamp(0, _backoffDelays.length - 1)];
     _retryAttempt++;
     _backoffTimer = Timer(delay, triggerHealthCheck);
 
-    debugPrint('⚠️ Connectivity Check Failed: $url | Type: $type | Next Retry: ${delay.inSeconds}s');
+    debugPrint(
+      '⚠️ Connectivity Check Failed: $url | Type: $type | Next Retry: ${delay.inSeconds}s',
+    );
   }
 }
 
-final connectivityProvider = NotifierProvider<ConnectivityNotifier, ConnectivityState>(ConnectivityNotifier.new);
+final connectivityProvider =
+    NotifierProvider<ConnectivityNotifier, ConnectivityState>(
+      ConnectivityNotifier.new,
+    );

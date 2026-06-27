@@ -82,7 +82,8 @@ export async function GET(req: NextRequest) {
                 .from("notifications")
                 .select("id", { count: "exact", head: true })
                 .eq("user_id", userId)
-                .eq("is_read", false),
+                .eq("is_read", false)
+                .neq("type", "NEW_MESSAGE"),
 
             // Pending Invitations Count
             supabase
@@ -96,6 +97,7 @@ export async function GET(req: NextRequest) {
                 .from("notifications")
                 .select("*")
                 .eq("user_id", userId)
+                .neq("type", "NEW_MESSAGE")
                 .order("created_at", { ascending: false })
                 .range(0, 4),
 

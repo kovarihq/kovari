@@ -47,6 +47,7 @@ export async function GET(request: NextRequest) {
       .from("notifications")
       .select("*")
       .eq("user_id", userId)
+      .neq("type", "NEW_MESSAGE")
       .order("created_at", { ascending: false })
       .range(offset, offset + limit - 1);
 

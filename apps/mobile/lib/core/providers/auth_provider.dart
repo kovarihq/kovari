@@ -6,6 +6,7 @@ import 'package:mobile/core/auth/session_manager.dart';
 import 'package:mobile/core/auth/token_storage.dart';
 import 'package:mobile/core/network/api_client.dart';
 import 'package:mobile/core/network/api_endpoints.dart';
+import 'package:mobile/core/providers/connectivity_provider.dart';
 import 'package:mobile/core/utils/app_logger.dart';
 import 'package:mobile/shared/models/kovari_user.dart';
 
@@ -74,13 +75,29 @@ class AuthNotifier extends Notifier<AuthState> {
       isBootstrapping: false,
     );
 
-    // 💎 Instagram-Pro: Eagerly heal the profile if UUID is missing from cache
-    if (user != null && user.resolvedUuid == null) {
-      AppLogger.w(
-        '🛡️ [AuthNotifier] UUID missing for ClerkID: ${user.id}. Triggering profile sync...',
-      );
-      syncProfile();
+    // Eagerly heal/sync profile if authenticated but user info is missing or incomplete
+    if (session.isAuthenticated) {
+      if (user == null || user.resolvedUuid == null) {
+        AppLogger.w(
+          '🛡️ [AuthNotifier] Eagerly triggering profile sync (user missing or UUID not resolved)',
+        );
+        syncProfile();
+      }
     }
+
+    // Auto-retry syncProfile when connectivity is restored
+    ref.listen(connectivityProvider, (previous, next) {
+      if (next.isOnline && previous?.status != ConnectionStatus.online) {
+        final currentUser = state.user;
+        if (session.isAuthenticated &&
+            (currentUser == null || currentUser.resolvedUuid == null)) {
+          AppLogger.i(
+            '🛡️ [AuthNotifier] Connection restored. Retrying profile sync...',
+          );
+          syncProfile();
+        }
+      }
+    });
   }
 
   /// Eagerly fetch the latest profile to ensure we have the UUID for encryption.
@@ -99,14 +116,12 @@ class AuthNotifier extends Notifier<AuthState> {
 
       if (response.success && response.data != null) {
         final freshUser = response.data!;
-        if (freshUser.uuid != null) {
-          AppLogger.i(
-            '🛡️ [AuthNotifier] Profile sync successful. UUID resolved: ${freshUser.uuid}',
-          );
-          final storage = TokenStorage();
-          await storage.saveUserData(jsonEncode(freshUser.toJson()));
-          state = state.copyWith(user: freshUser);
-        }
+        AppLogger.i(
+          '🛡️ [AuthNotifier] Profile sync successful. User ID: ${freshUser.id}, UUID: ${freshUser.uuid}',
+        );
+        final storage = TokenStorage();
+        await storage.saveUserData(jsonEncode(freshUser.toJson()));
+        state = state.copyWith(user: freshUser);
       }
     } catch (e) {
       AppLogger.e('🛡️ [AuthNotifier] Profile sync failed', error: e);

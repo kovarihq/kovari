@@ -81,6 +81,9 @@ async function processBuffer(userId: string, chatId: string, senderName: string,
     entityType: "chat",
     entityId,
     imageUrl: senderAvatar || undefined,
+    data: {
+      chat_type: isDirectChat ? "direct" : "group",
+    },
   });
 
   if (!result.success) {

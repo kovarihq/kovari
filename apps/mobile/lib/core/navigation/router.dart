@@ -4,10 +4,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:mobile/core/navigation/router_notifier.dart';
 import 'package:mobile/core/navigation/routes.dart';
+import 'package:mobile/core/providers/auth_provider.dart';
 import 'package:mobile/core/services/fcm_service.dart';
 import 'package:mobile/core/utils/app_logger.dart';
 import 'package:mobile/core/utils/nav_observer.dart';
+import 'package:mobile/features/chat/providers/conversation_store.dart';
 import 'package:mobile/features/chat/screens/chat_screen.dart';
+import 'package:mobile/features/chat/utils/direct_chat_id.dart';
+import 'package:mobile/features/groups/providers/entity_stores.dart';
 
 final routerProvider = Provider<GoRouter>((ref) {
   final notifier = ref.watch(routerNotifierProvider);
@@ -84,10 +88,38 @@ final routerProvider = Provider<GoRouter>((ref) {
 
     switch (entityType) {
       case 'chat':
-        if (entityId != null) router.push('/chat/$entityId');
+        if (entityId != null) {
+          String targetChatId = entityId;
+          final chatType = data['chat_type'] as String?;
+          final isGroup = chatType == 'group';
+          
+          if (!isGroup && !entityId.contains('_')) {
+            final hasGroup = ref.read(groupStoreProvider).containsKey(entityId);
+            final hasConversation = ref.read(conversationStoreProvider).containsKey(entityId);
+            if (!hasGroup && !hasConversation) {
+              final myUuid = ref.read(authProvider).user?.resolvedUuid;
+              if (myUuid != null) {
+                targetChatId = directChatId(myUuid, entityId);
+              }
+            }
+          }
+          router.push('/chat/$targetChatId');
+        }
       case 'group':
         if (entityId != null) router.push('/groups/$entityId');
       case 'match':
+        if (entityId != null) {
+          final type = data['type'] as String?;
+          if (type == 'MATCH_ACCEPTED') {
+            final myUuid = ref.read(authProvider).user?.resolvedUuid;
+            if (myUuid != null) {
+              final targetChatId = directChatId(myUuid, entityId);
+              router.push('/chat/$targetChatId');
+              break;
+            }
+          }
+        }
+        router.push('/requests');
       case 'request':
         router.push('/requests');
       case 'notification':

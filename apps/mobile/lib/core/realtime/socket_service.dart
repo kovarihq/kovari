@@ -82,7 +82,9 @@ class SocketService extends Notifier<SocketState> {
 
   /// Manually disconnects and cleans up the active socket connection.
   void disconnect() {
-    AppLogger.i('🔌 [SocketService] [$_instanceId] Manual disconnect requested');
+    AppLogger.i(
+      '🔌 [SocketService] [$_instanceId] Manual disconnect requested',
+    );
     _disposeSocket();
   }
 
@@ -236,6 +238,10 @@ class SocketService extends Notifier<SocketState> {
 
     _socket!.on('receive_message', (data) {
       _safeAddEvent(SocketEvent(type: 'receive_message', data: data));
+    });
+
+    _socket!.on('new_notification', (data) {
+      _safeAddEvent(SocketEvent(type: 'new_notification', data: data));
     });
 
     _socket!.on('message_persisted', (data) {

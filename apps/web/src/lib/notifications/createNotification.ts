@@ -100,7 +100,7 @@ export async function createNotification(
     // 4. Async Push Evaluation (Non-blocking)
     // Pass both clerkId (for presence) and supabaseId (for subscriptions)
     if (clerkId && supabaseId) {
-      evaluatePushNotifications(clerkId, supabaseId, type, entityId, entityType as EntityType, title, message, imageUrl, notificationId, priority)
+      evaluatePushNotifications(clerkId, supabaseId, type, entityId, entityType as EntityType, title, message, imageUrl, notificationId, priority, params.data)
         .catch(err => console.error("[Notification] Async Push Error:", err));
     }
 
@@ -124,7 +124,8 @@ async function evaluatePushNotifications(
   message: string,
   imageUrl: string | null,
   notificationId: string,
-  priority: NotificationPriority
+  priority: NotificationPriority,
+  extraData?: Record<string, string>
 ) {
   // 0. Ensure Redis is connected (important for Next.js API routes)
   await connectRedis();
@@ -154,6 +155,7 @@ async function evaluatePushNotifications(
       entityType,
       entityId,
       data: {
+        ...extraData,
         notificationId,
       },
     });

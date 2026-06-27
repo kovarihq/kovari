@@ -99,6 +99,7 @@ export class PushService {
                 // Route to the correct Android notification channel
                 channelId: getChannelId(entityType),
                 clickAction: "FLUTTER_NOTIFICATION_CLICK",
+                visibility: "public" as const,
               },
             },
             apns: {

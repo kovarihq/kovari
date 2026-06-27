@@ -134,6 +134,9 @@ io.on("connection", (socket) => {
   const supabaseId = socket.data.supabaseId || null;
   console.log(`[Socket] User connected: ${userId} supabaseId: ${supabaseId} (Socket ID: ${socket.id})`);
 
+  // Join the user-specific room so that events (like new_notification) sent to this user are received by this socket.
+  socket.join(`user_socket:${userId}`);
+
   PresenceManager.userConnected(userId, socket.id);
 
   registerSocketEvents(io, socket);

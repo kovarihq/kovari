@@ -49,14 +49,24 @@ const _channelGroups = AndroidNotificationChannel(
 class FCMService {
   FCMService._();
   static final FCMService instance = FCMService._();
+  static final Completer<void> _firebaseReady = Completer<void>();
 
-  final FirebaseMessaging _messaging = FirebaseMessaging.instance;
+  FirebaseMessaging get _messaging => FirebaseMessaging.instance;
   final TokenStorage _tokenStorage = TokenStorage();
   final FlutterLocalNotificationsPlugin _localNotifications =
       FlutterLocalNotificationsPlugin();
 
   static const _storage = FlutterSecureStorage();
   static const _lastFcmTokenKey = 'kovari_last_fcm_token';
+
+  bool _initialized = false;
+
+  /// Call this when Firebase has been initialized in main.dart
+  static void markFirebaseReady() {
+    if (!_firebaseReady.isCompleted) {
+      _firebaseReady.complete();
+    }
+  }
 
   // The stream that the router/shell listens to for notification taps and
   // foreground toasts. Emits FCM data payload on each event.
@@ -67,7 +77,19 @@ class FCMService {
   // -------------------------------------------------------------------------
   // init — call once after Firebase.initializeApp()
   // -------------------------------------------------------------------------
-  Future<void> init({required String deviceId}) async {
+  Future<void> init({required String deviceId, bool force = false}) async {
+    // Wait for Firebase to be initialized first
+    await _firebaseReady.future;
+
+    if (_initialized) {
+      AppLogger.i(
+        '🔔 [FCM] Already initialized. Re-registering token (force: $force).',
+      );
+      await _registerToken(deviceId: deviceId, force: force);
+      return;
+    }
+    _initialized = true;
+
     // 1. Register background handler (must be first Firebase Messaging call)
     FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
 
@@ -79,16 +101,23 @@ class FCMService {
 
     // 4. Request permission (Android 13+ / iOS require explicit grant)
     final settings = await _messaging.requestPermission();
-    AppLogger.i(
-      '🔔 [FCM] Permission: ${settings.authorizationStatus.name}',
-    );
+    AppLogger.i('🔔 [FCM] Permission: ${settings.authorizationStatus.name}');
     if (settings.authorizationStatus == AuthorizationStatus.denied) {
       AppLogger.w('🔔 [FCM] User denied notification permission.');
       return;
     }
 
+    final androidPlugin = _localNotifications
+        .resolvePlatformSpecificImplementation<
+          AndroidFlutterLocalNotificationsPlugin
+        >();
+    if (androidPlugin != null) {
+      final granted = await androidPlugin.requestNotificationsPermission();
+      AppLogger.i('🔔 [FCM] Android Local Notifications Permission: $granted');
+    }
+
     // 5. Register token with backend (debounced — skips if token unchanged)
-    await _registerToken(deviceId: deviceId);
+    await _registerToken(deviceId: deviceId, force: force);
 
     // 6. Listen for token refreshes
     _messaging.onTokenRefresh.listen((newToken) async {
@@ -121,13 +150,17 @@ class FCMService {
       final token = await _tokenStorage.getAccessToken();
       if (token == null) return;
 
+      final baseUrl = Env.apiBaseUrl.endsWith('/')
+          ? Env.apiBaseUrl.substring(0, Env.apiBaseUrl.length - 1)
+          : Env.apiBaseUrl;
+
       await http.post(
-        Uri.parse('${Env.apiBaseUrl}/api/devices/unregister'),
+        Uri.parse('$baseUrl/devices/unregister'),
         headers: {
           'Content-Type': 'application/json',
           'Authorization': 'Bearer $token',
         },
-        body: jsonEncode({'device_id': deviceId}),
+        body: jsonEncode({'deviceId': deviceId}),
       );
 
       // Clear cached token so next login re-registers fresh
@@ -145,7 +178,8 @@ class FCMService {
   Future<void> _createNotificationChannels() async {
     final androidPlugin = _localNotifications
         .resolvePlatformSpecificImplementation<
-            AndroidFlutterLocalNotificationsPlugin>();
+          AndroidFlutterLocalNotificationsPlugin
+        >();
     if (androidPlugin == null) return;
 
     await androidPlugin.createNotificationChannel(_channelMessages);
@@ -199,18 +233,22 @@ class FCMService {
         return;
       }
 
+      final baseUrl = Env.apiBaseUrl.endsWith('/')
+          ? Env.apiBaseUrl.substring(0, Env.apiBaseUrl.length - 1)
+          : Env.apiBaseUrl;
+
       final response = await http.post(
-        Uri.parse('${Env.apiBaseUrl}/api/devices/register'),
+        Uri.parse('$baseUrl/devices/register'),
         headers: {
           'Content-Type': 'application/json',
           'Authorization': 'Bearer $authToken',
         },
         body: jsonEncode({
-          'device_id': deviceId,
-          'fcm_token': fcmToken,
+          'deviceId': deviceId,
+          'fcmToken': fcmToken,
           'platform': 'android',
-          'app_version': Env.appVersion,
-          'device_name': 'Android Device',
+          'appVersion': Env.appVersion,
+          'deviceName': 'Android Device',
         }),
       );
 
@@ -229,19 +267,39 @@ class FCMService {
     }
   }
 
-  void _handleForegroundMessage(RemoteMessage message) {
-    AppLogger.i(
-      '🔔 [FCM] Foreground message: ${message.notification?.title}',
-    );
+  final Map<String, DateTime> _lastShownNotifications = {};
 
-    final entityType = message.data['entity_type'] as String?;
+  bool _shouldShowNotification(String? chatId) {
+    if (chatId == null || chatId.isEmpty) return true;
+    final lastShown = _lastShownNotifications[chatId];
+    if (lastShown != null) {
+      final difference = DateTime.now().difference(lastShown);
+      if (difference.inSeconds < 15) {
+        AppLogger.d(
+          '🔔 [FCM] Deduplicated notification for $chatId (within 15s)',
+        );
+        return false;
+      }
+    }
+    _lastShownNotifications[chatId] = DateTime.now();
+    return true;
+  }
+
+  void showLocalNotification({
+    required String title,
+    required String body,
+    required Map<String, dynamic> data,
+  }) {
+    final entityId = data['entity_id'] as String?;
+    if (!_shouldShowNotification(entityId)) return;
+
+    final entityType = data['entity_type'] as String?;
     final channelId = _channelIdForEntityType(entityType);
 
-    // Show as a real system notification even when app is in foreground
     _localNotifications.show(
-      message.hashCode,
-      message.notification?.title ?? 'Kovari',
-      message.notification?.body ?? '',
+      data.hashCode,
+      title,
+      body,
       NotificationDetails(
         android: AndroidNotificationDetails(
           channelId,
@@ -249,10 +307,40 @@ class FCMService {
           importance: Importance.high,
           priority: Priority.high,
           icon: '@mipmap/ic_launcher',
+          visibility: NotificationVisibility.public,
         ),
       ),
-      payload: jsonEncode(message.data),
+      payload: jsonEncode(data),
     );
+  }
+
+  void _handleForegroundMessage(RemoteMessage message) {
+    final entityType = message.data['entity_type'] as String?;
+    final entityId = message.data['entity_id'] as String?;
+
+    AppLogger.i(
+      '🔔 [FCM] Foreground message: ${message.notification?.title} (entityId: $entityId)',
+    );
+
+    if (_shouldShowNotification(entityId)) {
+      final channelId = _channelIdForEntityType(entityType);
+      _localNotifications.show(
+        message.hashCode,
+        message.notification?.title ?? 'Kovari',
+        message.notification?.body ?? '',
+        NotificationDetails(
+          android: AndroidNotificationDetails(
+            channelId,
+            _channelNameForEntityType(entityType),
+            importance: Importance.high,
+            priority: Priority.high,
+            icon: '@mipmap/ic_launcher',
+            visibility: NotificationVisibility.public,
+          ),
+        ),
+        payload: jsonEncode(message.data),
+      );
+    }
 
     // Also emit to stream so the shell can react (e.g. in-app badge update)
     _tapBroadcast.emit({
@@ -266,9 +354,7 @@ class FCMService {
   void _handleNotificationTap(RemoteMessage message) {
     final entityType = message.data['entity_type'];
     final entityId = message.data['entity_id'];
-    AppLogger.i(
-      '🔔 [FCM] Tap: entityType=$entityType entityId=$entityId',
-    );
+    AppLogger.i('🔔 [FCM] Tap: entityType=$entityType entityId=$entityId');
     _tapBroadcast.emit({...message.data, '__foreground': false});
   }
 
@@ -308,10 +394,10 @@ class _SimpleBroadcast<T> {
   final List<_BroadcastSink<T>> _sinks = [];
 
   Stream<T> get stream => Stream<T>.multi((controller) {
-        final sink = _BroadcastSink<T>(controller);
-        _sinks.add(sink);
-        controller.onCancel = () => _sinks.remove(sink);
-      });
+    final sink = _BroadcastSink<T>(controller);
+    _sinks.add(sink);
+    controller.onCancel = () => _sinks.remove(sink);
+  });
 
   void emit(T event) {
     for (final sink in List<_BroadcastSink<T>>.of(_sinks)) {

@@ -48,5 +48,6 @@ export interface CreateNotificationParams {
   entityId?: string;
   imageUrl?: string;
   priority?: NotificationPriority; // Optional override
+  data?: Record<string, string>; // Custom metadata dictionary
 }
 

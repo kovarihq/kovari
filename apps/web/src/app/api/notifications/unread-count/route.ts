@@ -31,7 +31,8 @@ export async function GET(request: NextRequest) {
       .from("notifications")
       .select("*", { count: "exact", head: true })
       .eq("user_id", userId)
-      .eq("is_read", false);
+      .eq("is_read", false)
+      .neq("type", "NEW_MESSAGE");
     logPerformanceMetric("unread_count_query_ms", performance.now() - queryStart, { requestId });
 
     if (error) {

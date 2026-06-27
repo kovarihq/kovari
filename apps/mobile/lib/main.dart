@@ -161,6 +161,45 @@ void main() {
         // Initialize Authentication State
         await container.read(authProvider.notifier).init();
 
+        // 🔔 [FCM] Listen for authentication state changes to register/unregister FCM token
+        container.listen<AuthState>(authProvider, (previous, next) async {
+          if (next.isAuthenticated) {
+            if (previous == null || !previous.isAuthenticated) {
+              try {
+                final tokenStorage = TokenStorage();
+                final deviceId =
+                    await tokenStorage.getDeviceId() ??
+                    await _ensureDeviceId(tokenStorage);
+                await FCMService.instance.init(deviceId: deviceId, force: true);
+                AppLogger.i(
+                  '✅ FCM push notifications registered on auth state change.',
+                );
+              } catch (e) {
+                AppLogger.w(
+                  '⚠️ FCM registration failed on auth state change (non-fatal): $e',
+                );
+              }
+            }
+          } else {
+            if (previous != null && previous.isAuthenticated) {
+              try {
+                final tokenStorage = TokenStorage();
+                final deviceId = await tokenStorage.getDeviceId();
+                if (deviceId != null) {
+                  await FCMService.instance.dispose(deviceId: deviceId);
+                  AppLogger.i(
+                    '✅ FCM push notifications unregistered on logout.',
+                  );
+                }
+              } catch (e) {
+                AppLogger.w(
+                  '⚠️ FCM unregistration failed on logout (non-fatal): $e',
+                );
+              }
+            }
+          }
+        }, fireImmediately: true);
+
         // Start background cache maintenance
         Timer.periodic(const Duration(minutes: 15), (_) {
           container.read(localCacheProvider).cleanupExpired();
@@ -217,6 +256,7 @@ void main() {
           try {
             AppLogger.i('📊 [Sovereign] Connecting external observability...');
             await Firebase.initializeApp();
+            FCMService.markFirebaseReady();
             await TelemetryService().init();
             RuntimeMetricsService().init();
             FreezeMonitor().start();
@@ -227,9 +267,18 @@ void main() {
             try {
               final tokenStorage = TokenStorage();
               final deviceId =
-                  await tokenStorage.getDeviceId() ?? await _ensureDeviceId(tokenStorage);
-              await FCMService.instance.init(deviceId: deviceId);
-              AppLogger.i('✅ FCM push notifications initialized.');
+                  await tokenStorage.getDeviceId() ??
+                  await _ensureDeviceId(tokenStorage);
+              final isAuthenticated = container
+                  .read(authProvider)
+                  .isAuthenticated;
+              await FCMService.instance.init(
+                deviceId: deviceId,
+                force: isAuthenticated,
+              );
+              AppLogger.i(
+                '✅ FCM push notifications initialized (force: $isAuthenticated).',
+              );
             } catch (e) {
               AppLogger.w('⚠️ FCM initialization failed (non-fatal): $e');
             }
@@ -269,10 +318,7 @@ void main() {
       }
     },
     (error, stackTrace) {
-      AppLogger.e(
-        'Uncaught Zone Error: $error',
-        stackTrace: stackTrace,
-      );
+      AppLogger.e('Uncaught Zone Error: $error', stackTrace: stackTrace);
 
       if (kReleaseMode) {
         Sentry.captureException(error, stackTrace: stackTrace);
@@ -288,7 +334,9 @@ class KovariApp extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final router = ref.watch(routerProvider);
     final auth = ref.watch(authProvider);
-    final themeMode = auth.isAuthenticated ? ref.watch(themeProvider) : ThemeMode.light;
+    final themeMode = auth.isAuthenticated
+        ? ref.watch(themeProvider)
+        : ThemeMode.light;
 
     return MaterialApp.router(
       title: 'Kovari',
@@ -372,7 +420,8 @@ class BouncingScrollBehavior extends ScrollBehavior {
   const BouncingScrollBehavior();
 
   @override
-  ScrollPhysics getScrollPhysics(BuildContext context) => const BouncingScrollPhysics(parent: AlwaysScrollableScrollPhysics());
+  ScrollPhysics getScrollPhysics(BuildContext context) =>
+      const BouncingScrollPhysics(parent: AlwaysScrollableScrollPhysics());
 }
 
 /// Ensures a stable device ID exists in TokenStorage.
@@ -382,7 +431,8 @@ Future<String> _ensureDeviceId(TokenStorage storage) async {
   // We generate a simple time-based ID here to avoid importing the uuid package
   // into main. SocketService will also call saveDeviceId on first connect —
   // both calls write the same key so the second write is a safe no-op.
-  final id = '${DateTime.now().millisecondsSinceEpoch.toRadixString(16)}-fcm-bootstrap';
+  final id =
+      '${DateTime.now().millisecondsSinceEpoch.toRadixString(16)}-fcm-bootstrap';
   await storage.saveDeviceId(id);
   return id;
 }
