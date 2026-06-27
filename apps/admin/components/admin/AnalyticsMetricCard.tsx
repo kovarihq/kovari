@@ -50,7 +50,7 @@ export function AnalyticsMetricCard({
 }: AnalyticsMetricCardProps) {
   if (loading) {
     return (
-      <Card className={cn("overflow-hidden w-full", className)}>
+      <Card className={cn("overflow-hidden w-full shadow-none", className)}>
         <CardHeader className="flex flex-row items-center justify-between pb-2">
           <Skeleton className="h-4 w-24" />
           <Skeleton className="h-4 w-4 rounded-full" />
@@ -70,7 +70,7 @@ export function AnalyticsMetricCard({
   }
 
   return (
-    <Card className={cn("overflow-hidden w-full transition-all duration-200 hover:shadow-sm", className)}>
+    <Card className={cn("overflow-hidden w-full shadow-none transition-all duration-200", className)}>
       <CardHeader className="flex flex-row items-center justify-between pb-2">
         <div className="flex items-center gap-1.5">
           <CardTitle className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">

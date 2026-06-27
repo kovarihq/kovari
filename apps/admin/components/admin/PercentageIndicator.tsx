@@ -103,7 +103,7 @@ export function PercentageIndicator({
             <span />
           )}
           {showValue && (
-            <span className={cn("font-mono font-bold leading-none tabular-nums", textColors[variant])}>
+            <span className={cn("font-bold leading-none tabular-nums", textColors[variant])}>
               {normalizedValue}%
             </span>
           )}
