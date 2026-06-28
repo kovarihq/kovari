@@ -10,6 +10,7 @@ import { ListRow } from "@/components/ui/ios/ListRow";
 import { SectionHeader } from "@/components/ui/ios/SectionHeader";
 import { Skeleton } from "@/components/ui/skeleton";
 import { SectionRetryButton } from "@/components/admin/SectionRetryButton";
+import { MessagingTimelineChart } from "@/components/admin/MessagingTimelineChart";
 import { cn } from "@/lib/utils";
 import { 
   Users, 
@@ -300,17 +301,7 @@ async function ConversationsTimelineSection({ filters }: { filters: AnalyticsFil
               secondary="Activity trends over dates"
               showChevron={false}
             />
-            <div className="h-[180px] bg-secondary/10 flex items-center justify-center border-t border-border">
-              <div className="flex flex-col items-center space-y-1.5 text-center p-4">
-                <MessageSquare className="h-6 w-6 text-muted-foreground/40" />
-                <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                  Daily Messaging Timeline Chart Placeholder
-                </span>
-                <span className="text-[11px] text-muted-foreground/70">
-                  Renders logs of message volume trends across the selected duration
-                </span>
-              </div>
-            </div>
+            <MessagingTimelineChart data={conversationMetrics.dailyMessagingActivity} />
           </GroupContainer>
         </div>
       </section>
