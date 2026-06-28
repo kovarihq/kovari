@@ -652,8 +652,8 @@ export class AnalyticsService {
         const activatedUsersVal = await this.getActivatedUsers();
         const returnedUsersVal = await this.getReturnedUsers();
 
-        const interestMetrics = await this.getInterestMetrics({ batchId });
-        const conversationMetrics = await this.getConversationMetrics({ dateRange, batchId });
+        const interestMetrics = await this.getInterestMetrics(filters);
+        const conversationMetrics = await this.getConversationMetrics(filters);
 
         return {
           totalUsers: { value: totalUsersVal, change: 0.0, trend: 'neutral' },
