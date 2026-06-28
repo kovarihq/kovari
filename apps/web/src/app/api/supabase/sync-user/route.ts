@@ -95,7 +95,7 @@ async function _POST() {
     const dbStart = performance.now();
     const { data: user, error: fetchError } = await supabase
       .from("users")
-      .select('id, "isDeleted"')
+      .select('id, "isDeleted", beta_status, activation_date')
       .eq("id", userIdFromRpc)
       .single();
     logPerformanceMetric("sync_user_db_ms", performance.now() - dbStart, { requestId: syncRequestId });
@@ -105,12 +105,13 @@ async function _POST() {
       return NextResponse.json({ error: "Failed to verify synced identity" }, { status: 500 });
     }
 
-    if (process.env.LAUNCH_WAITLIST_MODE === "true") {
+    // Always activate users so they can access Kovari and be correctly counted in the analytics dashboard
+    if (user.beta_status !== "activated") {
       const { error: userUpdateError } = await supabase
         .from("users")
         .update({
           beta_status: "activated",
-          activation_date: new Date().toISOString()
+          activation_date: user.activation_date || new Date().toISOString()
         })
         .eq("id", userIdFromRpc);
       if (userUpdateError) {

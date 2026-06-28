@@ -414,14 +414,24 @@ export default function App({
                       </DropdownMenuContent>
                     </DropdownMenu>
                   ) : (
-                    <Link href="/sign-in">
-                      <Button
-                        variant="default"
-                        className="px-4 h-9 rounded-full"
-                      >
-                        Log In
-                      </Button>
-                    </Link>
+                    <div className="flex gap-x-2">
+                      <Link href="/sign-in">
+                        <Button
+                          variant="ghost"
+                          className="hover:bg-secondary hover:text-primary px-4 h-9 rounded-full font-medium"
+                        >
+                          Log In
+                        </Button>
+                      </Link>
+                      <Link href="/sign-up">
+                        <Button
+                          variant="default"
+                          className="px-4 h-9 rounded-full font-medium"
+                        >
+                          Get Started
+                        </Button>
+                      </Link>
+                    </div>
                   )}
                 </div>
                 {/* Hamburger - visible on screens < 1300px (xl breakpoint) */}

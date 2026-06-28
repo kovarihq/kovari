@@ -86,10 +86,10 @@ export default function ProfileSetupPage() {
             <div className="w-12 h-12 rounded-full border-5 border-primary/20 border-t-primary animate-spin" />
           </div>
           <h2 className="text-xl font-semibold font-heading text-foreground mb-2 animate-pulse">
-            Verifying Beta Access...
+            Setting up your profile...
           </h2>
           <p className="text-sm text-muted-foreground max-w-xs leading-relaxed font-sans">
-            Please wait while we check your waitlist invitation status.
+            Please wait while we sync your account and prepare onboarding.
           </p>
         </div>
       </div>

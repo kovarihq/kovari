@@ -47,6 +47,10 @@ const MobileMenuOverlay: React.FC<MobileMenuOverlayProps> = ({
     ["Privacy Policy", "Terms of Service", "Data Deletion", "Community Guidelines"].includes(item.label)
   );
 
+  const isWaitlistLaunchMode =
+    process.env.NEXT_PUBLIC_LAUNCH_WAITLIST_MODE === "true" ||
+    process.env.NEXT_PUBLIC_LAUNCH_WAITLIST_MODE === "1";
+
   return (
     <AnimatePresence>
       {open && (
@@ -96,15 +100,25 @@ const MobileMenuOverlay: React.FC<MobileMenuOverlayProps> = ({
 
             {/* Bottom CTA */}
             <div className="px-8 pb-12 pt-6 w-full max-w-sm mx-auto flex flex-col items-center gap-3">
-              <Button
-                className="w-full h-12 rounded-3xl text-md font-semibold bg-primary text-primary-foreground shadow-md transition-transform active:scale-[0.98]"
-                onClick={() => {
-                  onJoinWaitlist?.();
-                  onClose();
-                }}
-              >
-                Join the waitlist
-              </Button>
+              {isWaitlistLaunchMode ? (
+                <Button
+                  className="w-full h-12 rounded-3xl text-md font-semibold bg-primary text-primary-foreground shadow-md transition-transform active:scale-[0.98]"
+                  onClick={() => {
+                    onJoinWaitlist?.();
+                    onClose();
+                  }}
+                >
+                  Join the waitlist
+                </Button>
+              ) : (
+                <Link href="/sign-up" className="w-full" onClick={onClose}>
+                  <Button
+                    className="w-full h-12 rounded-3xl text-md font-semibold bg-primary text-primary-foreground shadow-md transition-transform active:scale-[0.98]"
+                  >
+                    Get Started
+                  </Button>
+                </Link>
+              )}
               <Link href="/sign-in" className="w-full" onClick={onClose}>
                 <Button
                   className="w-full h-12 rounded-3xl text-md font-semibold text-foreground bg-transparent hover:bg-transparent hover:text-foreground"

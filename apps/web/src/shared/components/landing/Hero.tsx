@@ -28,13 +28,17 @@ interface HeroProps {
 export default function Hero({ onJoinWaitlist, waitlistCount }: HeroProps) {
   const router = useRouter();
 
-  const handleJoinWaitlist = useCallback(() => {
-    if (onJoinWaitlist) {
+  const isWaitlistLaunchMode =
+    process.env.NEXT_PUBLIC_LAUNCH_WAITLIST_MODE === "true" ||
+    process.env.NEXT_PUBLIC_LAUNCH_WAITLIST_MODE === "1";
+
+  const handleCTA = useCallback(() => {
+    if (isWaitlistLaunchMode && onJoinWaitlist) {
       onJoinWaitlist();
     } else {
       router.push("/sign-up");
     }
-  }, [onJoinWaitlist, router]);
+  }, [isWaitlistLaunchMode, onJoinWaitlist, router]);
 
   const hasCount = waitlistCount !== null;
   const formattedCount = hasCount ? new Intl.NumberFormat().format(waitlistCount) : "50";
@@ -65,28 +69,41 @@ export default function Hero({ onJoinWaitlist, waitlistCount }: HeroProps) {
           </p>
           
           <div className="flex flex-col items-center justify-center gap-4 mt-1 animate-fade-in-up [animation-delay:300ms]">
-            <Button
-              className="h-12 sm:h-14 bg-primary text-primary-foreground hover:bg-primary-hover shadow-lg pl-6 pr-4 sm:pl-7 sm:pr-4 flex items-center gap-1 text-sm sm:text-base font-semibold transition-all duration-300"
-              radius="full"
-              variant="solid"
-              aria-label="Join the Waitlist"
-              onPress={handleJoinWaitlist}
-            >
-              <span>Join the waitlist</span>
-              <div className="h-4 w-[1px] bg-primary-foreground/30" />
-              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 sm:py-1 bg-white/15 rounded-full text-[10px] sm:text-xs font-semibold backdrop-blur-sm text-primary-foreground/90">
-                <span className="relative flex h-1.5 w-1.5 animate-pulse">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                  <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-400"></span>
+            {isWaitlistLaunchMode ? (
+              <Button
+                className="h-12 sm:h-14 bg-primary text-primary-foreground hover:bg-primary-hover shadow-lg pl-6 pr-4 sm:pl-7 sm:pr-4 flex items-center gap-1 text-sm sm:text-base font-semibold transition-all duration-300"
+                radius="full"
+                variant="solid"
+                aria-label="Join the Waitlist"
+                onPress={handleCTA}
+              >
+                <span>Join the waitlist</span>
+                <div className="h-4 w-[1px] bg-primary-foreground/30" />
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 sm:py-1 bg-white/15 rounded-full text-[10px] sm:text-xs font-semibold backdrop-blur-sm text-primary-foreground/90">
+                  <span className="relative flex h-1.5 w-1.5 animate-pulse">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-400"></span>
+                  </span>
+                  {formattedCount} joined
                 </span>
-                {formattedCount} joined
-              </span>
-            </Button>
+              </Button>
+            ) : (
+              <Button
+                className="h-12 sm:h-14 bg-primary text-primary-foreground hover:bg-primary-hover shadow-lg px-8 sm:px-10 flex items-center gap-1 text-sm sm:text-base font-semibold transition-all duration-300"
+                radius="full"
+                variant="solid"
+                aria-label="Get Started"
+                onPress={handleCTA}
+              >
+                <span>Get Started</span>
+              </Button>
+            )}
+            
             <Link
               href="/sign-in"
               className="text-xs sm:text-sm text-muted-foreground hover:text-foreground transition-colors font-medium underline underline-offset-4"
             >
-              Already in Closed Beta? Log In
+              {isWaitlistLaunchMode ? "Already in Closed Beta? Log In" : "Already have an account? Log In"}
             </Link>
           </div>
         </div>

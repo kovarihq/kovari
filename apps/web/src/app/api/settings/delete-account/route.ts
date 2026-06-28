@@ -56,10 +56,10 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // 4) Execute GDPR Hard Delete Cascade
+    // 4) Execute GDPR Cascade
     console.log(`[GDPR Delete] Starting cascade for user ${user.id}`);
     
-    // Delete in order to avoid FK constraint violations
+    // Delete in order to avoid FK constraint violations (profiles is handled separately via soft-delete/anonymization)
     const tablesToDelete = [
       { table: 'socket_sessions', col: 'user_id' },
       { table: 'refresh_tokens', col: 'user_id' },
@@ -71,8 +71,7 @@ export async function POST(req: NextRequest) {
       { table: 'match_interests', or: `from_user_id.eq.${user.id},to_user_id.eq.${user.id}` },
       { table: 'reports', col: 'reported_by_user_id' }, // Only where user is the reporter, if they are reported we keep it for admin history or set null
       { table: 'user_follows', or: `follower_id.eq.${user.id},following_id.eq.${user.id}` },
-      { table: 'travel_posts', col: 'author_id' },
-      { table: 'profiles', col: 'user_id' }
+      { table: 'travel_posts', col: 'author_id' }
     ];
 
     for (const step of tablesToDelete) {
@@ -87,10 +86,55 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // Finally delete the root user record
-    const { error: deleteUserError } = await supabaseAdmin.from("users").delete().eq("id", user.id);
+    // Soft delete/Anonymize the profile record
+    const { error: updateProfileError } = await supabaseAdmin
+      .from("profiles")
+      .update({
+        deleted: true,
+        name: "Deleted User",
+        age: null,
+        gender: null,
+        nationality: null,
+        bio: null,
+        languages: null,
+        profile_photo: null,
+        job: null,
+        birthday: null,
+        username: `deleted_user_${user.id.replace(/-/g, "").slice(0, 12)}`,
+        location: null,
+        religion: null,
+        smoking: null,
+        drinking: null,
+        personality: null,
+        food_preference: null,
+        number: null,
+        email: null,
+        interests: [],
+        location_details: {},
+        travel_intentions: []
+      })
+      .eq("user_id", user.id);
+
+    if (updateProfileError) {
+      console.warn("[GDPR Delete] Failed to anonymize profile:", updateProfileError);
+    }
+
+    // Finally soft delete the root user record (instead of delete, since triggers block it)
+    const { error: deleteUserError } = await supabaseAdmin
+      .from("users")
+      .update({
+        isDeleted: true,
+        deletedAt: new Date().toISOString(),
+        clerk_user_id: null,
+        google_id: null,
+        email: null,
+        name: "Deleted User",
+        password_hash: null
+      })
+      .eq("id", user.id);
+
     if (deleteUserError) {
-      console.error("Delete account: Failed to delete root user record", deleteUserError);
+      console.error("Delete account: Failed to soft delete root user record", deleteUserError);
       return NextResponse.json({ error: "Failed to fully delete account" }, { status: 500 });
     }
 

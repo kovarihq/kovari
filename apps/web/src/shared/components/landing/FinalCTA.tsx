@@ -4,28 +4,36 @@ import React, { useCallback } from "react";
 import * as Sentry from "@sentry/nextjs";
 import { Button } from "@heroui/react";
 import { motion } from "framer-motion";
+import { useRouter } from "next/navigation";
 
 interface FinalCTAProps {
   onJoinWaitlist?: () => void;
 }
 
 export default function FinalCTA({ onJoinWaitlist }: FinalCTAProps) {
-  const handleJoinWaitlistClick = useCallback(() => {
+  const router = useRouter();
+  const isWaitlistLaunchMode =
+    process.env.NEXT_PUBLIC_LAUNCH_WAITLIST_MODE === "true" ||
+    process.env.NEXT_PUBLIC_LAUNCH_WAITLIST_MODE === "1";
+
+  const handleCTAClick = useCallback(() => {
     Sentry.startSpan(
       {
         op: "ui.click",
-        name: "Join the Waitlist Button Click",
+        name: isWaitlistLaunchMode ? "Join the Waitlist Button Click" : "Get Started Button Click",
       },
       (span) => {
         span.setAttribute("button_location", "final_cta");
-        span.setAttribute("action", "open_waitlist_modal");
+        span.setAttribute("action", isWaitlistLaunchMode ? "open_waitlist_modal" : "navigate_signup");
 
-        if (onJoinWaitlist) {
+        if (isWaitlistLaunchMode && onJoinWaitlist) {
           onJoinWaitlist();
+        } else {
+          router.push("/sign-up");
         }
       }
     );
-  }, [onJoinWaitlist]);
+  }, [isWaitlistLaunchMode, onJoinWaitlist, router]);
 
   return (
     <section 
@@ -46,7 +54,9 @@ export default function FinalCTA({ onJoinWaitlist }: FinalCTAProps) {
 
           {/* Subtext */}
           <p className="text-muted-foreground text-sm sm:text-base md:text-lg font-light mb-8 max-w-xl mx-auto leading-relaxed">
-            Batch 1 is live. Batch 2 coming soon &mdash; join the waitlist to get early access.
+            {isWaitlistLaunchMode 
+              ? "Batch 1 is live. Batch 2 coming soon — join the waitlist to get early access." 
+              : "KOVARI is live. Sign up today and find your travel partners instantly."}
           </p>
 
           {/* Primary CTA */}
@@ -54,10 +64,10 @@ export default function FinalCTA({ onJoinWaitlist }: FinalCTAProps) {
             className="h-12 sm:h-14 bg-primary text-primary-foreground hover:bg-primary-hover shadow-lg px-12 sm:px-12 py-5 sm:py-6 text-sm sm:text-base font-semibold leading-5 animate-pulse-subtle"
             radius="full"
             variant="solid"
-            aria-label="Request Early Access"
-            onPress={handleJoinWaitlistClick}
+            aria-label={isWaitlistLaunchMode ? "Request Early Access" : "Get Started"}
+            onPress={handleCTAClick}
           >
-            Request early access
+            {isWaitlistLaunchMode ? "Request early access" : "Get Started"}
           </Button>
         </motion.div>
       </div>
