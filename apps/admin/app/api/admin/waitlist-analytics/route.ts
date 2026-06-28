@@ -18,7 +18,6 @@ export async function GET() {
     const thirtyDaysAgo = new Date();
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
     const sixtyDaysAgo = new Date();
-    sixtyDaysAgo.setDate(sixtyDaysAgo.toISOString() === thirtyDaysAgo.toISOString() ? 60 : 60); // Safety
     sixtyDaysAgo.setDate(sixtyDaysAgo.getDate() - 60);
 
     // 1. Basic Counts & Trends

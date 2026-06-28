@@ -136,7 +136,13 @@ export async function PATCH(req: NextRequest, { params }: Params) {
 
   try {
     const { id: feedbackId } = await params;
-    const { status } = await req.json();
+    let body;
+    try {
+      body = await req.json();
+    } catch {
+      return NextResponse.json({ error: "Malformed JSON body" }, { status: 400 });
+    }
+    const { status } = body;
 
     if (!status || !["new", "reviewing", "resolved"].includes(status)) {
       return NextResponse.json({ error: "Invalid status value" }, { status: 400 });
@@ -216,7 +222,13 @@ export async function POST(req: NextRequest, { params }: Params) {
 
   try {
     const { id: feedbackId } = await params;
-    const { note } = await req.json();
+    let body;
+    try {
+      body = await req.json();
+    } catch {
+      return NextResponse.json({ error: "Malformed JSON body" }, { status: 400 });
+    }
+    const { note } = body;
 
     if (!note || typeof note !== "string" || !note.trim()) {
       return NextResponse.json({ error: "Note content is required" }, { status: 400 });
