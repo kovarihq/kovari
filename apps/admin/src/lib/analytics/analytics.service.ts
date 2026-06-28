@@ -4,7 +4,6 @@ import { cache } from "react";
 import { 
   AnalyticsFilter,
   BetaAnalyticsOverviewResponse,
-  InterestFunnelResponse,
   MessagingAnalyticsResponse,
   NotificationAnalyticsResponse,
   DestinationResponse,
@@ -17,8 +16,7 @@ import {
   FunnelStepItem,
   ActiveUserMessagingRow,
   DateRange,
-  OrganicUser,
-  ProfileJoined
+  OrganicUser
 } from "../../types/analytics";
 import { incrementErrorCounter } from "../../../lib/incrementErrorCounter";
 
@@ -435,7 +433,6 @@ export class AnalyticsService {
 
         // Conversations
         let rawConversations: any[] = [];
-        let conversationCount = 0;
         try {
           const { data: conversations, error: convErr } = await supabaseAdmin.from('conversations').select('user_a_id, user_b_id');
           if (convErr) {
@@ -445,7 +442,6 @@ export class AnalyticsService {
             rawConversations = (conversations || []).filter((c: any) => 
               c && organicUserIds.has(c.user_a_id) && organicUserIds.has(c.user_b_id)
             );
-            conversationCount = rawConversations.length;
           }
         } catch (e) {
           console.error("[Analytics Service] conversations query crashed:", e);
@@ -461,7 +457,6 @@ export class AnalyticsService {
 
         // Direct Messages
         let rawMessages: any[] = [];
-        let messageSentCount = 0;
         try {
           const { data: messages, error: msgErr } = await supabaseAdmin
             .from('direct_messages')
@@ -474,7 +469,6 @@ export class AnalyticsService {
             rawMessages = (messages || []).filter((m: any) => 
               m && organicUserIds.has(m.sender_id) && organicUserIds.has(m.receiver_id)
             );
-            messageSentCount = rawMessages.length;
           }
         } catch (e) {
           console.error("[Analytics Service] direct_messages query crashed:", e);

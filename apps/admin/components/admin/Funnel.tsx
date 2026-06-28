@@ -1,6 +1,5 @@
 import { cn } from "@kovari/utils";
 import { 
-  ArrowDown, 
   Eye, 
   MousePointer2, 
   UserPlus 
@@ -40,11 +39,7 @@ export function Funnel({ data }: FunnelProps) {
 
   return (
     <div className="flex flex-col gap-6 py-2 w-full max-w-[90%] mx-auto">
-      {steps.map((step, i) => {
-        const nextStep = steps[i + 1];
-        const conversionRate = nextStep && step.value > 0 
-          ? Math.round((nextStep.value / step.value) * 100) 
-          : 0;
+      {steps.map((step) => {
         const percentageOfTotal = Math.round((step.value / total) * 100);
         const Icon = step.icon;
 
