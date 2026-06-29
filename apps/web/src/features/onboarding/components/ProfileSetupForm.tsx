@@ -274,6 +274,7 @@ export default function ProfileSetupForm() {
 
   const [intentDestination, setIntentDestination] = useState("");
   const [intentDestinationDetails, setIntentDestinationDetails] = useState<any>(null);
+  const [travelIntentError, setTravelIntentError] = useState<string | null>(null);
   const [completeClickedOnce, setCompleteClickedOnce] = useState(false);
   const [showMorePrefs, setShowMorePrefs] = useState(false);
   const [photoError, setPhotoError] = useState<string | null>(null);
@@ -624,7 +625,11 @@ export default function ProfileSetupForm() {
       return;
     }
     if (step === 7) {
-      // Travel intent step — fully optional, always allow proceeding
+      if (travelIntents.length === 0) {
+        setTravelIntentError("Please add at least one travel destination to continue");
+        return;
+      }
+      setTravelIntentError(null);
       setStep(8);
       return;
     }
@@ -1905,6 +1910,7 @@ export default function ProfileSetupForm() {
               ]);
               setIntentDestination("");
               setIntentDestinationDetails(null);
+              setTravelIntentError(null);
             }}
             className="h-9 px-4 shrink-0"
           >
@@ -1925,13 +1931,14 @@ export default function ProfileSetupForm() {
               <button
                 key={dest}
                 type="button"
-                onClick={() =>
+                onClick={() => {
                   setTravelIntents(prev =>
                     prev.length < 3
                       ? [...prev, { destination: dest }]
                       : prev
-                  )
-                }
+                  );
+                  setTravelIntentError(null);
+                }}
                 className="px-3 py-1 rounded-full border border-border text-xs text-muted-foreground hover:border-primary/40 hover:text-primary transition-colors"
               >
                 {dest}
@@ -1943,9 +1950,15 @@ export default function ProfileSetupForm() {
 
       <p className="text-center text-xs text-muted-foreground">
         {travelIntents.length === 0
-          ? "You can skip this and add destinations later from your profile."
+          ? "Please add at least one destination to continue."
           : `${travelIntents.length}/3 added`}
       </p>
+
+      {travelIntentError && (
+        <p className="text-xs text-destructive text-center font-medium animate-in fade-in slide-in-from-top-1 duration-200">
+          {travelIntentError}
+        </p>
+      )}
 
       {/* Navigation */}
       <div className="flex space-x-2 pt-2">
@@ -1960,10 +1973,10 @@ export default function ProfileSetupForm() {
         </Button>
         <Button
           type="button"
-          onClick={() => setStep(8)}
+          onClick={async () => await handleNext()}
           className="flex-1 h-9 text-sm bg-primary text-primary-foreground font-medium rounded-lg flex items-center justify-center gap-1"
         >
-          {travelIntents.length > 0 ? "Continue" : "Skip for now"}
+          Continue
           <ChevronRight className="h-3.5 w-3.5" />
         </Button>
       </div>
