@@ -120,7 +120,11 @@ const step2Schema = z.object({
     .string()
     .max(300, { message: "Bio must be less than 300 characters" })
     .optional(),
-  profilePic: z.any().optional(),
+  profilePic: z
+    .any()
+    .refine((val) => typeof val === "string" && val.length > 0, {
+      message: "Please upload a profile picture to continue",
+    }),
   location: z.string().min(1, { message: "Please select your location" }),
   nationality: z.string().optional(),
   jobType: z.string().optional(),
@@ -546,16 +550,6 @@ export default function ProfileSetupForm() {
     }
   };
 
-  // Skip photo handler: bypass profilePic validation, keep other validations active, and advance step
-  const handleSkipPhoto = async () => {
-    const valid = await step2Form.trigger(["bio"], { shouldFocus: true });
-    if (!valid) return;
-    step2Form.setValue("profilePic", null, { shouldValidate: false });
-    setProfileImage(null);
-    setPhotoError(null);
-    setStep(3);
-  };
-
   // Step-scoped next navigation with partial validation
   const handleNext = async () => {
     if (step === 1) {
@@ -580,12 +574,14 @@ export default function ProfileSetupForm() {
       return;
     }
     if (step === 2) {
-      const isBioValid = await step2Form.trigger(["bio"], { shouldFocus: true });
-      if (!isBioValid) return;
-
-      const profilePicValue = step2Form.getValues("profilePic");
-      if (!profilePicValue) {
-        setPhotoError("Please add a profile photo to continue, or tap 'Skip photo for now'.");
+      const valid = await step2Form.trigger(["bio", "profilePic"], {
+        shouldFocus: true,
+      });
+      if (!valid) {
+        const profilePicValue = step2Form.getValues("profilePic");
+        if (!profilePicValue) {
+          setPhotoError("Please upload a profile picture to continue.");
+        }
         return;
       }
       setPhotoError(null);
@@ -1154,13 +1150,6 @@ export default function ProfileSetupForm() {
                           </Button>
                         )}
                       </div>
-                      <button
-                        type="button"
-                        onClick={handleSkipPhoto}
-                        className="text-xs text-muted-foreground hover:text-foreground underline underline-offset-2 transition-colors self-center md:self-start mt-2"
-                      >
-                        Skip photo for now
-                      </button>
                       {photoError && (
                         <p className="text-xs text-destructive mt-1.5 font-medium text-center md:text-left animate-in fade-in slide-in-from-top-1 duration-200">
                           {photoError}
