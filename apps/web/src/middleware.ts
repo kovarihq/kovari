@@ -7,6 +7,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { logPerformanceMetric } from "@/lib/observability/performance";
 import { generateRequestId } from "@/lib/api/requestId";
+import { activationService } from "@/lib/activation/activation.service";
 
 const isBannedPage = createRouteMatcher(["/banned"]);
 const isAuthPage = createRouteMatcher(["/sign-in(.*)", "/sign-up(.*)"]);
@@ -186,6 +187,8 @@ const clerk = clerkMiddleware(async (auth, req: NextRequest) => {
     return NextResponse.redirect(redirectUrl);
   }
 
+  let fetchedUser: any = null;
+
   // 3. Absolute Priority: Ban & Deletion Checks
   // We must do this before ANY bypass logic (like waitlist admin bypass)
   if (userId) {
@@ -214,10 +217,11 @@ const clerk = clerkMiddleware(async (auth, req: NextRequest) => {
         const dbStart = performance.now();
         const { data: user, error } = await supabase
           .from("users")
-          .select('banned, ban_expires_at, "isDeleted"')
+          .select('banned, ban_expires_at, "isDeleted", onboarding_completed, profiles(profile_photo, travel_intentions)')
           .eq("clerk_user_id", userId)
           .maybeSingle();
         
+        fetchedUser = user;
         const dbDuration = performance.now() - dbStart;
         logPerformanceMetric("middleware_db_ms", dbDuration, { userId, requestId: mwRequestId });
 
@@ -327,7 +331,7 @@ const clerk = clerkMiddleware(async (auth, req: NextRequest) => {
     return NextResponse.redirect(new URL("/", req.url));
   }
 
-  // 5. Normal Mode: Enforce login requirement on all non-public routes
+  // 5. Normal Mode: Enforce login requirement and activation check on all protected app routes
   if (!isPublicRoute(req)) {
     if (!userId) {
       const pathname = req.nextUrl.pathname;
@@ -335,6 +339,27 @@ const clerk = clerkMiddleware(async (auth, req: NextRequest) => {
         return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
       }
       return authObj.redirectToSignIn({ returnBackUrl: req.url });
+    }
+
+    const isApiRoute = pathname.startsWith("/api/") || pathname.startsWith("/trpc/");
+    const isOnboarding = pathname.startsWith("/onboarding");
+
+    if (!isApiRoute && !isOnboarding) {
+      const activationCookie = req.cookies.get("kovari_activated")?.value;
+      if (activationCookie !== "true" && fetchedUser) {
+        const profileObj = Array.isArray(fetchedUser.profiles) ? fetchedUser.profiles[0] : fetchedUser.profiles;
+        const activation = activationService.verifyActivation({
+          onboarding_completed: fetchedUser.onboarding_completed,
+          profile_photo: profileObj?.profile_photo,
+          travel_intentions: profileObj?.travel_intentions,
+        });
+
+        if (!activation.isActivated || !activation.isOnboardingCompletedFlag) {
+          const url = req.nextUrl.clone();
+          url.pathname = "/onboarding";
+          return NextResponse.redirect(url);
+        }
+      }
     }
   }
 

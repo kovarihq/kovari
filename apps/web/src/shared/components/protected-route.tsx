@@ -6,6 +6,7 @@ import { useEffect, useState, useRef } from "react";
 import { Spinner } from "@heroui/react";
 import { useSyncUserToSupabase } from "@kovari/api/client";
 import { diagLog } from "@/lib/observability/performance";
+import { activationService } from "@/lib/activation/activation.service";
 
 const ONBOARDING_PATH_PREFIX = "/onboarding";
 
@@ -18,8 +19,8 @@ function isOnboardingPath(path: string | null): boolean {
 
 /**
  * Protects app routes: ensures user is signed in, synced to Supabase, and has
- * completed onboarding (profile exists). New users without a profile are
- * redirected to /onboarding and can't access the app until they complete it.
+ * completed activation (profile picture & travel intentions exist). Unactivated users
+ * are redirected to /onboarding and can't access the app until activation criteria are met.
  * Profile check runs at most once per session for existing users.
  */
 export default function ProtectedRoute({
@@ -100,11 +101,10 @@ export default function ProtectedRoute({
           if (res.ok) {
             const json = await res.json();
             // Kovari API v1 wraps the response in a 'data' field.
-            const onboarded = 
-              json?.data?.onboardingCompleted === true || 
-              json?.data?.onboarding_completed === true;
+            const profileData = json?.data;
+            const activation = activationService.verifyActivation(profileData);
             
-            if (onboarded) {
+            if (activation.isActivated && profileData?.onboardingCompleted === true) {
               profileConfirmedRef.current = true;
               setPhase("allow");
             } else {
