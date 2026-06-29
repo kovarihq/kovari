@@ -80,19 +80,12 @@ export function ActivationModal({ profileData, onContinue }: ActivationModalProp
 
         {/* Header Icon Badge & Title */}
         <div className="flex flex-col items-center text-center gap-3">
-          <div className="w-14 h-14 rounded-2xl bg-primary/10 border border-primary/20 flex items-center justify-center text-primary shadow-xs">
-            <Compass className="w-7 h-7 animate-pulse" />
-          </div>
           <div>
-            <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-primary/10 text-primary text-xs font-semibold mb-2">
-              <Sparkles className="w-3 h-3" />
-              <span>Activation Required</span>
-            </div>
-            <h2 className="text-xl font-bold tracking-tight text-foreground font-heading">
+            <h2 className="text-xl font-bold tracking-tight text-foreground">
               Complete Your Kovari Setup
             </h2>
-            <p className="text-sm text-muted-foreground mt-1.5 leading-relaxed font-sans">
-              You&apos;re almost ready to explore and connect with travel buddies! Complete these quick steps to unlock your account.
+            <p className="text-sm text-muted-foreground mt-1.5 leading-relaxed">
+              You&apos;re almost ready to explore and connect with travel buddies! Complete these quick steps to get started.
             </p>
           </div>
         </div>
@@ -122,14 +115,14 @@ export function ActivationModal({ profileData, onContinue }: ActivationModalProp
                 "flex items-center justify-between p-3 rounded-lg border text-xs font-medium transition-colors",
                 hasProfilePicture
                   ? "bg-emerald-500/5 border-emerald-500/30 text-emerald-700 dark:text-emerald-400"
-                  : "bg-background border-border text-foreground"
+                  : "border-border text-foreground"
               )}
             >
               <div className="flex items-center gap-2.5">
                 <div
                   className={cn(
                     "w-7 h-7 rounded-full flex items-center justify-center",
-                    hasProfilePicture ? "bg-emerald-500 text-white" : "bg-muted text-muted-foreground"
+                    hasProfilePicture ? "bg-emerald-500 text-white" : "bg-secondary text-muted-foreground"
                   )}
                 >
                   {hasProfilePicture ? <Check className="w-4 h-4 stroke-[3]" /> : <User className="w-4 h-4" />}
@@ -141,7 +134,7 @@ export function ActivationModal({ profileData, onContinue }: ActivationModalProp
                   </span>
                 </div>
               </div>
-              <span className={cn("text-[11px] font-semibold px-2 py-0.5 rounded-full", hasProfilePicture ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400" : "bg-muted text-muted-foreground")}>
+              <span className={cn("text-[11px] font-semibold px-2 py-0.5 rounded-full", hasProfilePicture ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400" : "bg-secondary text-muted-foreground")}>
                 {hasProfilePicture ? "Done" : "Pending"}
               </span>
             </div>
@@ -152,14 +145,14 @@ export function ActivationModal({ profileData, onContinue }: ActivationModalProp
                 "flex items-center justify-between p-3 rounded-lg border text-xs font-medium transition-colors",
                 hasTravelIntentions
                   ? "bg-emerald-500/5 border-emerald-500/30 text-emerald-700 dark:text-emerald-400"
-                  : "bg-background border-border text-foreground"
+                  : "border-border text-foreground"
               )}
             >
               <div className="flex items-center gap-2.5">
                 <div
                   className={cn(
                     "w-7 h-7 rounded-full flex items-center justify-center",
-                    hasTravelIntentions ? "bg-emerald-500 text-white" : "bg-muted text-muted-foreground"
+                    hasTravelIntentions ? "bg-emerald-500 text-white" : "bg-secondary text-muted-foreground"
                   )}
                 >
                   {hasTravelIntentions ? <Check className="w-4 h-4 stroke-[3]" /> : <MapPin className="w-4 h-4" />}
@@ -171,7 +164,7 @@ export function ActivationModal({ profileData, onContinue }: ActivationModalProp
                   </span>
                 </div>
               </div>
-              <span className={cn("text-[11px] font-semibold px-2 py-0.5 rounded-full", hasTravelIntentions ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400" : "bg-muted text-muted-foreground")}>
+              <span className={cn("text-[11px] font-semibold px-2 py-0.5 rounded-full", hasTravelIntentions ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400" : "bg-secondary text-muted-foreground")}>
                 {hasTravelIntentions ? "Done" : "Pending"}
               </span>
             </div>
@@ -182,7 +175,7 @@ export function ActivationModal({ profileData, onContinue }: ActivationModalProp
         <Button
           ref={ctaRef}
           onClick={handleCTA}
-          className="w-full h-11 bg-primary hover:bg-primary/90 text-primary-foreground font-semibold rounded-xl transition-all shadow-md flex items-center justify-center gap-2 font-sans text-sm"
+          className="w-full h-11 bg-primary hover:bg-primary/90 text-primary-foreground font-semibold rounded-xl transition-all shadow-md flex items-center justify-center gap-2 text-sm"
         >
           <span>Continue Setup</span>
           <ChevronRight className="w-4 h-4" />
