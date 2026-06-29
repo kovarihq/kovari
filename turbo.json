@@ -69,7 +69,12 @@
         "JWT_ACCESS_SECRET",
         "JWT_REFRESH_SECRET",
         "CLERK_WEBHOOK_SECRET",
-        "BETA_MODE"
+        "BETA_MODE",
+        "WEB_APP_URL",
+        "FIREBASE_PROJECT_ID",
+        "FIREBASE_CLIENT_EMAIL",
+        "FIREBASE_PRIVATE_KEY",
+        "INTERNAL_NOTIFY_SECRET"
       ]
     },
     "dev": {
