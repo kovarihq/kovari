@@ -32,8 +32,12 @@ export const activationService = {
       };
     }
 
-    const avatarUrl = data.avatar || data.profile_photo || "";
-    const hasProfilePicture = Boolean(typeof avatarUrl === "string" && avatarUrl.trim().length > 0);
+    const rawAvatar = data.avatar || data.profile_photo || "";
+    const avatarUrl = typeof rawAvatar === "string" ? rawAvatar.trim() : "";
+    const hasProfilePicture = Boolean(
+      avatarUrl.length > 0 &&
+      !["undefined", "null", "[object object]", "none"].includes(avatarUrl.toLowerCase())
+    );
 
     let intents = data.travel_intentions;
     if (typeof intents === "string") {
@@ -43,13 +47,26 @@ export const activationService = {
         intents = [];
       }
     }
-    const hasTravelIntentions = Boolean(Array.isArray(intents) && intents.length > 0);
+
+    const validIntents = Array.isArray(intents)
+      ? intents.filter((intent) => {
+          if (!intent) return false;
+          if (typeof intent === "string") return intent.trim().length > 0;
+          if (typeof intent === "object") {
+            const dest = intent.destination || intent.city || intent.name;
+            return typeof dest === "string" && dest.trim().length > 0;
+          }
+          return false;
+        })
+      : [];
+
+    const hasTravelIntentions = validIntents.length > 0;
 
     const isOnboardingCompletedFlag = Boolean(
       data.onboardingCompleted ?? data.onboarding_completed ?? false
     );
 
-    // Session is activated ONLY if profile picture exists AND at least one travel intention exists
+    // Session is activated ONLY if profile picture exists AND at least one valid travel intention exists
     const isActivated = hasProfilePicture && hasTravelIntentions;
 
     return {
