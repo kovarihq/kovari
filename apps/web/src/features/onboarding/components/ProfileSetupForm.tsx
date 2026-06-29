@@ -31,8 +31,9 @@ import {
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import Image from "next/image";
-import { useUser } from "@clerk/nextjs";
+import { useUser, useAuth } from "@clerk/nextjs";
 import { useSyncUserToSupabase } from "@kovari/api/client";
+import { trackActivationEvent } from "@/lib/analytics/trackActivation";
 
 // Import UI components
 import {
@@ -572,6 +573,12 @@ export default function ProfileSetupForm() {
       step2Form.setValue("profilePic", url, { shouldValidate: true });
       setPhotoError(null);
       toast.success("Profile photo updated successfully!");
+      if (user) {
+        void trackActivationEvent("profile_picture_completed", {
+          userId: user.id,
+          authProvider: user.externalAccounts?.[0]?.provider || (user.passwordEnabled ? "password" : "email"),
+        });
+      }
       setCropModalOpen(false);
     } catch (error) {
       console.error("Cropped image upload error:", error);
@@ -914,6 +921,13 @@ export default function ProfileSetupForm() {
 
 
       toast.success("Profile saved successfully!");
+      if (user) {
+        void trackActivationEvent("activation_completed", {
+          userId: user.id,
+          authProvider: user.externalAccounts?.[0]?.provider || (user.passwordEnabled ? "password" : "email"),
+          userType: "new",
+        });
+      }
 
       // Record policy acceptance
       try {
@@ -2033,6 +2047,12 @@ export default function ProfileSetupForm() {
               setIntentDestination("");
               setIntentDestinationDetails(null);
               setTravelIntentError(null);
+              if (user) {
+                void trackActivationEvent("travel_intention_completed", {
+                  userId: user.id,
+                  authProvider: user.externalAccounts?.[0]?.provider || (user.passwordEnabled ? "password" : "email"),
+                });
+              }
             }}
             className="h-9 px-4 shrink-0"
           >
@@ -2060,6 +2080,12 @@ export default function ProfileSetupForm() {
                       : prev
                   );
                   setTravelIntentError(null);
+                  if (user) {
+                    void trackActivationEvent("travel_intention_completed", {
+                      userId: user.id,
+                      authProvider: user.externalAccounts?.[0]?.provider || (user.passwordEnabled ? "password" : "email"),
+                    });
+                  }
                 }}
                 className="px-3 py-1 rounded-full border border-border text-xs text-muted-foreground hover:border-primary/40 hover:text-primary transition-colors"
               >
