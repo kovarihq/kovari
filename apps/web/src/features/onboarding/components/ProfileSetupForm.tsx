@@ -375,6 +375,56 @@ export default function ProfileSetupForm() {
     }
   }, [user, step1Form]);
 
+  const hasAutoNavigatedRef = useRef(false);
+
+  // Automatic Activation Flow Step Determination & Deep-linking
+  useEffect(() => {
+    if (!user || hasAutoNavigatedRef.current) return;
+    hasAutoNavigatedRef.current = true;
+
+    const fetchCurrentProfile = async () => {
+      try {
+        const res = await fetch("/api/profile/current", { cache: "no-store" });
+        if (res.ok) {
+          const json = await res.json();
+          const profileData = json?.data;
+          if (profileData) {
+            if (profileData.firstName) step1Form.setValue("firstName", profileData.firstName);
+            if (profileData.lastName) step1Form.setValue("lastName", profileData.lastName);
+            if (profileData.username) step1Form.setValue("username", profileData.username);
+            if (profileData.gender) step1Form.setValue("gender", profileData.gender);
+            if (profileData.bio) step2Form.setValue("bio", profileData.bio);
+            if (profileData.avatar) {
+              setProfileImage(profileData.avatar);
+              step2Form.setValue("profilePic", profileData.avatar);
+            }
+            if (profileData.location) step2Form.setValue("location", profileData.location);
+            if (Array.isArray(profileData.travel_intentions) && profileData.travel_intentions.length > 0) {
+              setTravelIntents(profileData.travel_intentions);
+            }
+
+            const { activationService } = await import("@/lib/activation/activation.service");
+            const activation = activationService.verifyActivation(profileData);
+
+            if (!activation.hasProfilePicture) {
+              setStep(2); // Open Edit Profile
+            } else if (!activation.hasTravelIntentions) {
+              setStep(7); // Open Create Travel Intention
+            } else if (activation.isActivated && profileData.onboardingCompleted) {
+              const originUrl = sessionStorage.getItem("kovari_origin_url");
+              sessionStorage.removeItem("kovari_origin_url");
+              router.replace(originUrl && originUrl !== "/onboarding" ? originUrl : "/dashboard");
+            }
+          }
+        }
+      } catch (e) {
+        console.error("Error checking activation profile in setup:", e);
+      }
+    };
+
+    void fetchCurrentProfile();
+  }, [user, step1Form, step2Form, router]);
+
   // Async username uniqueness check
   const checkUsernameUnique = async (username: string) => {
     setUsernameCheckError(null);
@@ -586,7 +636,12 @@ export default function ProfileSetupForm() {
         return;
       }
       setPhotoError(null);
-      setStep(3);
+      // Automatically continue to Travel Intention if required
+      if (!travelIntents || travelIntents.length === 0) {
+        setStep(7);
+      } else {
+        setStep(3);
+      }
       return;
     }
     if (step === 3) {
@@ -2225,7 +2280,11 @@ export default function ProfileSetupForm() {
       </div>
 
       <Button
-        onClick={() => router.replace("/dashboard")}
+        onClick={() => {
+          const originUrl = sessionStorage.getItem("kovari_origin_url");
+          sessionStorage.removeItem("kovari_origin_url");
+          router.replace(originUrl && originUrl !== "/onboarding" ? originUrl : "/dashboard");
+        }}
         className="w-full h-9 text-sm bg-primary hover:bg-primary-hover text-primary-foreground font-medium rounded-lg transition-all duration-200"
       >
         Get Started

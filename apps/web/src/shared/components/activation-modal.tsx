@@ -44,6 +44,9 @@ export function ActivationModal({ profileData, onContinue }: ActivationModalProp
     if (onContinue) {
       onContinue();
     } else {
+      if (typeof window !== "undefined" && window.location.pathname !== "/onboarding") {
+        sessionStorage.setItem("kovari_origin_url", window.location.pathname + window.location.search);
+      }
       router.push("/onboarding");
     }
   };
