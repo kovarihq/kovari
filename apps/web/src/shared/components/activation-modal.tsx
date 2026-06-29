@@ -7,6 +7,8 @@ import { Compass, User, Check, ChevronRight, Sparkles, MapPin } from "lucide-rea
 import { Button } from "@/shared/components/ui/button";
 import { activationService, ActivationCheckInput } from "@/lib/activation/activation.service";
 import { cn } from "@kovari/utils";
+import { useUser, useAuth } from "@clerk/nextjs";
+import { trackActivationEvent } from "@/lib/analytics/trackActivation";
 
 interface ActivationModalProps {
   profileData?: ActivationCheckInput | null;
@@ -16,6 +18,8 @@ interface ActivationModalProps {
 export function ActivationModal({ profileData, onContinue }: ActivationModalProps) {
   const router = useRouter();
   const ctaRef = useRef<HTMLButtonElement>(null);
+  const { user } = useUser();
+  const { sessionId } = useAuth();
 
   const activation = activationService.verifyActivation(profileData);
   const { hasProfilePicture, hasTravelIntentions } = activation;
@@ -29,6 +33,17 @@ export function ActivationModal({ profileData, onContinue }: ActivationModalProp
     // Focus CTA for keyboard accessibility
     ctaRef.current?.focus();
 
+    if (user) {
+      const authProvider = user.externalAccounts?.[0]?.provider || (user.passwordEnabled ? "password" : "email");
+      const userType = profileData?.onboardingCompleted ? "existing" : "new";
+      void trackActivationEvent("activation_modal_shown", {
+        userId: user.id,
+        sessionId,
+        authProvider,
+        userType,
+      });
+    }
+
     // Trap Escape key to prevent dismissal
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
@@ -38,7 +53,7 @@ export function ActivationModal({ profileData, onContinue }: ActivationModalProp
     };
     window.addEventListener("keydown", handleKeyDown, true);
     return () => window.removeEventListener("keydown", handleKeyDown, true);
-  }, []);
+  }, [user, sessionId, profileData]);
 
   const handleCTA = () => {
     if (onContinue) {
