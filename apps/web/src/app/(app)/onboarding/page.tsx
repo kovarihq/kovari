@@ -7,6 +7,7 @@ import ProfileSetupForm from "@/features/onboarding/components/ProfileSetupForm"
 import { useAuth, useUser } from "@clerk/nextjs";
 import { AlertCircle, LogOut, Compass, Mail, Loader2 } from "lucide-react";
 import { Button } from "@/shared/components/ui/button";
+import { activationService } from "@/lib/activation/activation.service";
 
 export default function ProfileSetupPage() {
   const { syncUser } = useSyncUserToSupabase();
@@ -37,7 +38,9 @@ export default function ProfileSetupPage() {
         });
         if (res.ok) {
           const data = await res.json();
-          if (data?.data?.onboardingCompleted === true) {
+          const profileData = data?.data;
+          const activation = activationService.verifyActivation(profileData);
+          if (activation.isActivated && profileData?.onboardingCompleted === true) {
             router.replace("/dashboard");
           } else {
             setChecking(false);

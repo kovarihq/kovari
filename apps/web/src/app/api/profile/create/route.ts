@@ -157,11 +157,19 @@ export async function POST(req: NextRequest) {
 
     const latencyMs = Date.now() - start;
 
-    return formatStandardResponse(
+    const response = formatStandardResponse(
       { profile: transformRes.data },
       { message: "Profile created successfully" },
       { requestId, latencyMs }
     );
+
+    response.cookies.set("kovari_activated", "true", {
+      path: "/",
+      maxAge: 60 * 60 * 24 * 30, // 30 days
+      sameSite: "lax",
+    });
+
+    return response;
 
   } catch (err: any) {
     console.error("Atomic profile creation failure:", err);
