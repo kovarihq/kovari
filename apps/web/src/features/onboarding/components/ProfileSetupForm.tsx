@@ -1536,37 +1536,6 @@ export default function ProfileSetupForm() {
                               ))}
                             </CommandGroup>
                           </CommandList>
-                          {field.value?.length > 0 && (
-                            <div className="border-t p-4">
-                              <div className="flex flex-wrap gap-1">
-                                {field.value.map((language) => (
-                                  <Badge
-                                    key={language}
-                                    variant="secondary"
-                                    className="text-xs font-medium bg-secondary text-foreground px-3 py-1.5"
-                                  >
-                                    {language}
-                                    <button
-                                      type="button"
-                                      className="ml-1 text-foreground rounded-full"
-                                      onClick={(e) => {
-                                        e.preventDefault();
-                                        e.stopPropagation();
-                                        field.onChange(
-                                          field.value.filter(
-                                            (l) => l !== language
-                                          )
-                                        );
-                                      }}
-                                      title={`Remove ${language}`}
-                                    >
-                                      <X className="h-2.5 w-2.5" />
-                                    </button>
-                                  </Badge>
-                                ))}
-                              </div>
-                            </div>
-                          )}
                           <div className="border-t p-2 flex justify-end">
                             <Button
                               size="sm"
@@ -1688,42 +1657,6 @@ export default function ProfileSetupForm() {
                               ))}
                             </CommandGroup>
                           </CommandList>
-                          {field.value?.length > 0 && (
-                            <div className="border-t p-4">
-                              <div className="flex flex-wrap gap-1">
-                                {field.value.map((interestId) => {
-                                  const interest = interestOptions.find(
-                                    (opt) => opt.id === interestId
-                                  );
-                                  return interest ? (
-                                    <Badge
-                                      key={interest.id}
-                                      variant="secondary"
-                                      className="text-xs font-medium bg-secondary text-foreground px-3 py-1.5"
-                                    >
-                                      {interest.label}
-                                      <button
-                                        type="button"
-                                        className="ml-1 text-foreground rounded-full"
-                                        onClick={(e) => {
-                                          e.preventDefault();
-                                          e.stopPropagation();
-                                          field.onChange(
-                                            field.value.filter(
-                                              (i) => i !== interestId
-                                            )
-                                          );
-                                        }}
-                                        title={`Remove ${interest.label}`}
-                                      >
-                                        <X className="h-2.5 w-2.5" />
-                                      </button>
-                                    </Badge>
-                                  ) : null;
-                                })}
-                              </div>
-                            </div>
-                          )}
                           <div className="border-t p-2 flex justify-end">
                             <Button
                               size="sm"
