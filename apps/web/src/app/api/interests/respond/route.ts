@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { createAdminSupabaseClient, AI } from "@kovari/api";
 import { getAuthenticatedUser } from "@/lib/auth/get-user";
 import { createNotification } from "../../../../lib/notifications/createNotification";
-import { NotificationType } from "@kovari/types";
+import { NotificationType, MESSAGE_MIGRATION_VERSION } from "@kovari/types";
+import { buildMessageInsertPayload } from "@/services/messaging/persistence";
 
 const { logMatchEvent, createMatchEventLog } = AI.Logging;
 const { extractFeaturesForSoloMatch } = AI.FeatureExtraction;
@@ -428,14 +429,19 @@ export async function POST(request: NextRequest) {
         // This relies on use-direct-inbox logic: matches (media_url && media_type) -> set lastMessage=""
         // and Inbox UI fallthrough to display empty string.
 
+        const initPayload = buildMessageInsertPayload({
+          isEncrypted: false,
+          mediaUrl: "system",
+          mediaType: "init",
+          migrationVersion: MESSAGE_MIGRATION_VERSION.LEGACY_E2EE,
+        });
+
         const { error: msgError } = await supabaseAdmin
           .from("direct_messages")
           .insert({
+            ...initPayload,
             sender_id: receiverId, // Initiate from the acceptor
             receiver_id: senderId,
-            media_type: "init",
-            media_url: "system", // Required to trigger the media condition in hook
-            is_encrypted: false,
             created_at: new Date().toISOString(),
           });
 

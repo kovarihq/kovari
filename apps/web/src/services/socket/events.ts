@@ -16,6 +16,8 @@ import {
 } from "./resolveSocketUser";
 
 import { sequenceManager } from "./sequences";
+import { buildMessageInsertPayload } from "../messaging/persistence";
+import { MESSAGE_MIGRATION_VERSION } from "@kovari/types";
 
 export const registerSocketEvents = (
   io: Server<
@@ -608,19 +610,29 @@ async function persistMessageToDb(
       conv = newConv;
     }
 
+    const migrationVersion = (message.text !== undefined && message.text !== null)
+      ? MESSAGE_MIGRATION_VERSION.DUAL_PERSISTENCE
+      : MESSAGE_MIGRATION_VERSION.LEGACY_E2EE;
+
+    const insertPayload = buildMessageInsertPayload({
+      encryptedContent: message.encryptedContent,
+      iv: message.iv,
+      salt: message.salt,
+      isEncrypted: message.isEncrypted,
+      text: message.text,
+      mediaUrl: message.mediaUrl,
+      mediaType: message.mediaType,
+      migrationVersion,
+    });
+
     const { data, error } = await supabase
       .from("direct_messages")
       .insert({
+        ...insertPayload,
         conversation_id: conv.id,
         sender_id: userUuid,
         receiver_id: message.receiverId,
-        encrypted_content: message.encryptedContent || null,
-        encryption_iv: message.iv || null,
-        encryption_salt: message.salt || null,
-        media_url: message.mediaUrl || null,
-        media_type: message.mediaType || null,
         client_id: message.tempId || null,
-        is_encrypted: message.isEncrypted || false,
       })
       .select("*")
       .single();
@@ -632,17 +644,27 @@ async function persistMessageToDb(
     return data;
   } else {
     // It's a group chat, the chatId is the groupId
+    const migrationVersion = (message.text !== undefined && message.text !== null)
+      ? MESSAGE_MIGRATION_VERSION.DUAL_PERSISTENCE
+      : MESSAGE_MIGRATION_VERSION.LEGACY_E2EE;
+
+    const insertPayload = buildMessageInsertPayload({
+      encryptedContent: message.encryptedContent,
+      iv: message.iv,
+      salt: message.salt,
+      isEncrypted: message.isEncrypted ?? true,
+      text: message.text,
+      mediaUrl: message.mediaUrl,
+      mediaType: message.mediaType,
+      migrationVersion,
+    });
+
     const { data, error } = await supabase
       .from("group_messages")
       .insert({
+        ...insertPayload,
         group_id: chatId,
         user_id: userUuid,
-        encrypted_content: message.encryptedContent || null,
-        encryption_iv: message.iv || null,
-        encryption_salt: message.salt || null,
-        media_url: message.mediaUrl || null,
-        media_type: message.mediaType || null,
-        is_encrypted: message.isEncrypted ?? true,
       })
       .select("*")
       .single();

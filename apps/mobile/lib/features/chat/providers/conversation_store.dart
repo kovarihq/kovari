@@ -11,6 +11,7 @@ import 'package:mobile/features/chat/models/conversation_entity.dart';
 import 'package:mobile/features/chat/models/message_entity.dart';
 import 'package:mobile/features/chat/providers/chat_runtime_providers.dart';
 import 'package:mobile/features/chat/providers/conversation_runtime_store.dart';
+import 'package:mobile/features/chat/providers/conversation_runtime_manager.dart';
 import 'package:mobile/shared/models/kovari_user.dart';
 
 import 'package:mobile/core/network/sync_engine.dart';
@@ -232,62 +233,9 @@ class ConversationStore extends Notifier<Map<String, ConversationEntity>> {
     MessageEntity entity,
     ConversationEntity conv,
   ) async {
-    // 💎 Instagram-Pro: If we already have the clear text (e.g. optimistic send), return it!
-    if (entity.text?.isNotEmpty ?? false) return entity;
-
-    if (!entity.isEncrypted ||
-        entity.encryptedContent == null ||
-        entity.encryptionIv == null ||
-        entity.encryptionSalt == null)
-      return null;
-
-    final myUser = ref.read(authProvider).user;
-    if (myUser == null) return null;
-
-    try {
-      // Primary Strategy: UUID:UUID for cross-platform parity with Web
-      // Since direct chatIds are already sorted(UUID1_UUID2), we just replace '_' with ':'
-      final sharedSecret = conv.chatId.replaceAll('_', ':');
-
-      final decrypted = await EncryptionService().decryptMessage(
-        encryptedContent: entity.encryptedContent!,
-        iv: entity.encryptionIv!,
-        salt: entity.encryptionSalt!,
-        key: sharedSecret,
-      );
-
-      if (decrypted != '[Failed to decrypt]') {
-        return entity.copyWith(text: decrypted);
-      }
-
-      // Fallback Strategy: Try Clerk IDs if UUID decryption fails (for legacy messages)
-      final myClerkId = myUser.id;
-      final partnerClerkId = conv.partnerClerkId;
-      if (partnerClerkId != null) {
-        final ids = [myClerkId, partnerClerkId]..sort();
-        final legacySecret = '${ids[0]}:${ids[1]}';
-        if (legacySecret != sharedSecret) {
-          AppLogger.d(
-            '🛡️ [ConversationStore] Attempting legacy fallback decryption...',
-          );
-          final fallbackResult = await EncryptionService().decryptMessage(
-            encryptedContent: entity.encryptedContent!,
-            iv: entity.encryptionIv!,
-            salt: entity.encryptionSalt!,
-            key: legacySecret,
-          );
-          if (fallbackResult != '[Failed to decrypt]') {
-            return entity.copyWith(text: fallbackResult);
-          }
-        }
-      }
-    } catch (e) {
-      AppLogger.e(
-        '🔓 [ConversationStore] Decryption pipeline failed',
-        error: e,
-      );
-    }
-    return null;
+    // Delegate to ConversationRuntimeManager to respect the invariant limit
+    final manager = ref.read(conversationRuntimeManagerProvider(conv.chatId).notifier);
+    return manager.decryptMessageDirect(entity, partnerClerkId: conv.partnerClerkId);
   }
 
   /// Update the last message snippet when a new message arrives.

@@ -2,6 +2,7 @@ import { getDirectChatId } from "@kovari/api/client";
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useUser } from "@clerk/nextjs";
 import { encryptMessage, decryptMessage } from "@kovari/utils";
+import { hydrateMessageContent } from "@/services/messaging/messageHydrator";
 import { v4 as uuidv4 } from "uuid";
 import { getSocket } from "@/lib/socket";
 import {} from "@kovari/utils";
@@ -132,29 +133,34 @@ export const useDirectChat = (
           const data = Array.isArray(payload?.messages) ? payload.messages : [];
           // Transform messages to include sender profile information and normalize media fields
           const transformedMessages = data.map((msg: any) => {
-            let plain_content = msg.plain_content;
+            const sId = msg.sender_id;
+            const rId = msg.receiver_id;
+            const localSecret = sId < rId ? `${sId}:${rId}` : `${rId}:${sId}`;
 
-            if (msg.is_encrypted && msg.encrypted_content && msg.encryption_iv && msg.encryption_salt) {
-              const sId = msg.sender_id;
-              const rId = msg.receiver_id;
-              const localSecret = sId < rId ? `${sId}:${rId}` : `${rId}:${sId}`;
-
-              const decrypted = decryptMessage(
-                {
-                  encryptedContent: msg.encrypted_content,
-                  iv: msg.encryption_iv,
-                  salt: msg.encryption_salt,
-                },
-                localSecret || sharedSecret,
-              );
-              if (decrypted) {
-                plain_content = decrypted;
+            const hydration = hydrateMessageContent(
+              {
+                message_content: msg.message_content,
+                migration_version: msg.migration_version,
+                encrypted_content: msg.encrypted_content,
+                encryption_iv: msg.encryption_iv,
+                encryption_salt: msg.encryption_salt,
+                is_encrypted: msg.is_encrypted,
+              },
+              () => {
+                return decryptMessage(
+                  {
+                    encryptedContent: msg.encrypted_content,
+                    iv: msg.encryption_iv,
+                    salt: msg.encryption_salt,
+                  },
+                  localSecret || sharedSecret
+                );
               }
-            }
+            );
 
             return {
               ...msg,
-              plain_content,
+              plain_content: hydration.content,
               sender_profile: msg.sender?.profiles?.[0] || undefined,
               mediaUrl: (msg as any)["media_url"] || msg.mediaUrl,
               mediaType: (msg as any)["media_type"] || msg.mediaType,
@@ -316,32 +322,33 @@ export const useDirectChat = (
         if (user?.id && chatId) {
            const socket = getSocket(user.id);
            if (socket.connected) {
-             socket.emit("send_message", {
-                chatId,
-                message: {
-                   id: tempId, // Use tempId as id for optimistic socket message
-                   tempId,
-                   senderId: currentUserUuid,
-                   receiverId: partnerUuid,
-                   encryptedContent: isEncrypted ? encrypted.encryptedContent : "",
-                   iv: isEncrypted ? encrypted.iv : "",
-                   salt: isEncrypted ? encrypted.salt : "",
-                   mediaUrl: mediaUrl || undefined,
-                   mediaType: mediaType || undefined,
-                   created_at: new Date().toISOString(),
-                   isEncrypted
-                }
-             }, (ack) => {
-                if (ack?.status === "sent") {
-                   // This ack is for the socket server receiving the message, not necessarily persisted
-                   // The message_persisted event will handle the final status update
-                   setMessages((prev) => prev.map((m) => m.tempId === tempId ? { ...m, status: "sent" } : m));
-                }
-             });
-             setSending(false);
-             return; // Socket handled this and will persist. Client updates by polling or broadcast.
-           }
-        }
+              socket.emit("send_message", {
+                 chatId,
+                 message: {
+                    id: tempId, // Use tempId as id for optimistic socket message
+                    tempId,
+                    senderId: currentUserUuid,
+                    receiverId: partnerUuid,
+                    encryptedContent: isEncrypted ? encrypted.encryptedContent : "",
+                    iv: isEncrypted ? encrypted.iv : "",
+                    salt: isEncrypted ? encrypted.salt : "",
+                    mediaUrl: mediaUrl || undefined,
+                    mediaType: mediaType || undefined,
+                    created_at: new Date().toISOString(),
+                    isEncrypted,
+                    text: hasText ? value.trim() : undefined,
+                 }
+              }, (ack) => {
+                 if (ack?.status === "sent") {
+                    // This ack is for the socket server receiving the message, not necessarily persisted
+                    // The message_persisted event will handle the final status update
+                    setMessages((prev) => prev.map((m) => m.tempId === tempId ? { ...m, status: "sent" } : m));
+                 }
+              });
+              setSending(false);
+              return; // Socket handled this and will persist. Client updates by polling or broadcast.
+            }
+         }
 
         const response = await fetch("/api/direct-chat/messages", {
           method: "POST",
@@ -356,6 +363,7 @@ export const useDirectChat = (
             clientId,
             media_url: mediaUrl ?? null,
             media_type: mediaType ?? null,
+            text: hasText ? value.trim() : null,
           }),
         });
         if (!response.ok) {
@@ -491,43 +499,33 @@ export const useDirectChat = (
             : m
           );
         }
-        let finalContent = incomingMsg.encryptedContent;
-        let finalIsEncrypted = incomingMsg.isEncrypted;
+        const sClerkId = incomingMsg.senderClerkId || incomingMsg.senderId;
+        const rClerkId = incomingMsg.receiverClerkId || (incomingMsg.senderId === currentUserUuid ? partnerUuid : currentUserUuid);
+        const localSecret = sClerkId < rClerkId ? `${sClerkId}:${rClerkId}` : `${rClerkId}:${sClerkId}`;
 
-        if (incomingMsg.isEncrypted) {
-          try {
-            if (incomingMsg.encryptedContent && incomingMsg.iv && incomingMsg.salt) {
-              // Calculate a local secret based on the IDs provided in the message itself
-              // to ensure we always have the correct key even if global state is loading.
-              const sClerkId = incomingMsg.senderClerkId || incomingMsg.senderId;
-              const rClerkId = incomingMsg.receiverClerkId || (incomingMsg.senderId === currentUserUuid ? partnerUuid : currentUserUuid);
-              const localSecret = sClerkId < rClerkId ? `${sClerkId}:${rClerkId}` : `${rClerkId}:${sClerkId}`;
-
-              const tempMapped = {
-                encryptedContent: incomingMsg.encryptedContent,
-                iv: incomingMsg.iv,
-                salt: incomingMsg.salt,
-              };
-              
-              // Try localSecret first, then hook's sharedSecret as fallback
-              const decrypted = decryptMessage(tempMapped, localSecret) || decryptMessage(tempMapped, sharedSecret);
-              
-              if (decrypted) {
-                finalContent = decrypted;
-                finalIsEncrypted = false;
-              } else {
-                finalContent = "[Encrypted Message]";
-              }
-            } else {
-              finalContent = "[Encrypted Message]";
-            }
-          } catch (e) {
-            console.error("Local socket decryption failed:", e);
-            finalContent = "[Encrypted Message]";
+        const hydration = hydrateMessageContent(
+          {
+            message_content: incomingMsg.text ?? incomingMsg.message_content ?? incomingMsg.plain_content,
+            migration_version: incomingMsg.migration_version ?? incomingMsg.migrationVersion,
+            encrypted_content: incomingMsg.encryptedContent || incomingMsg.encrypted_content,
+            encryption_iv: incomingMsg.iv || incomingMsg.encryption_iv,
+            encryption_salt: incomingMsg.salt || incomingMsg.encryption_salt,
+            is_encrypted: incomingMsg.isEncrypted ?? incomingMsg.is_encrypted,
+          },
+          () => {
+            return decryptMessage(
+              {
+                encryptedContent: incomingMsg.encryptedContent || incomingMsg.encrypted_content,
+                iv: incomingMsg.iv || incomingMsg.encryption_iv,
+                salt: incomingMsg.salt || incomingMsg.encryption_salt,
+              },
+              localSecret || sharedSecret
+            );
           }
-        } else {
-            finalContent = incomingMsg.content || incomingMsg.plain_content || ""; // Use content or plain_content
-        }
+        );
+
+        let finalContent = hydration.content;
+        let finalIsEncrypted = hydration.source === "legacy";
 
         // --- Workstream 7: Sequence Gap Detection & Idempotent Merge ---
         const incomingSeq: number | undefined = (incomingMsg as any).conversationSequence;

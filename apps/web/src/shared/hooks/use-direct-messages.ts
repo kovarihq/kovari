@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { createClient } from "@kovari/api/client";
 import { decryptMessage } from "@kovari/utils";
+import { hydrateMessageContent } from "@/services/messaging/messageHydrator";
 
 export interface DirectMessage {
   id: string;
@@ -53,30 +54,30 @@ export const useDirectMessages = (
       }
       if (!error && data) {
         const decrypted = data.map((msg: any) => {
-          let decryptedContent = "[Encrypted message]";
-          if (
-            msg.is_encrypted &&
-            msg.encrypted_content &&
-            msg.encryption_iv &&
-            msg.encryption_salt
-          ) {
-            try {
-              decryptedContent =
-                decryptMessage(
-                  {
-                    encryptedContent: msg.encrypted_content,
-                    iv: msg.encryption_iv,
-                    salt: msg.encryption_salt,
-                  },
-                  sharedSecret
-                ) || "[Encrypted message]";
-            } catch {
-              decryptedContent = "[Failed to decrypt message]";
+          const hydration = hydrateMessageContent(
+            {
+              message_content: msg.message_content,
+              migration_version: msg.migration_version,
+              encrypted_content: msg.encrypted_content,
+              encryption_iv: msg.encryption_iv,
+              encryption_salt: msg.encryption_salt,
+              is_encrypted: msg.is_encrypted,
+            },
+            () => {
+              return decryptMessage(
+                {
+                  encryptedContent: msg.encrypted_content,
+                  iv: msg.encryption_iv,
+                  salt: msg.encryption_salt,
+                },
+                sharedSecret
+              ) || "[Encrypted message]";
             }
-          }
+          );
+
           return {
             ...msg,
-            // No content field
+            plain_content: hydration.content,
           };
         });
         setMessages(decrypted);

@@ -10,7 +10,6 @@ import 'package:mobile/core/utils/app_logger.dart';
 enum SyncStatus { idle, syncing, error }
 
 class SyncEngine {
-
   SyncEngine(this._ref)
     : _cache = _ref.read(localCacheProvider),
       _apiClient = _ref.read(apiClientProvider);
@@ -47,7 +46,9 @@ class SyncEngine {
           if (age > const Duration(seconds: 30)) {
             _backgroundFetch(path, parser, queryParameters, ttl, onUpdate);
           } else {
-            AppLogger.d('⚡ [SWR] Skipping background refresh for $path (Cache age: ${age.inSeconds}s, fresh < 30s)');
+            AppLogger.d(
+              '⚡ [SWR] Skipping background refresh for $path (Cache age: ${age.inSeconds}s, fresh < 30s)',
+            );
           }
         }
 
@@ -62,6 +63,7 @@ class SyncEngine {
       queryParameters: queryParameters,
       parser: parser,
       ttl: ttl,
+      ignoreCache: ignoreCache,
     );
 
     if (response.success && response.data != null) {

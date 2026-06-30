@@ -8,6 +8,7 @@ import {
   decryptGroupMessage,
   type EncryptedMessage,
 } from "@kovari/utils";
+import { hydrateMessageContent } from "@/services/messaging/messageHydrator";
 
 export interface ChatMessage {
   id: string;
@@ -146,28 +147,34 @@ export const useGroupChat = (groupId: string) => {
 
       const decryptedMessages = await Promise.all(
         mappedData.map(async (message: any) => {
-          if (message.isEncrypted && message.encryptedContent) {
-            try {
-              const encryptedMessage: EncryptedMessage = {
-                encryptedContent: message.encryptedContent,
-                iv: message.encryptionIv,
-                salt: message.encryptionSalt,
-              };
-              const currentGroupKey = groupKeyRef.current;
-              const decryptedContent = currentGroupKey
-                ? decryptGroupMessage(encryptedMessage, currentGroupKey)
-                : null;
-
-              return {
-                ...message,
-                content: decryptedContent || "[Encrypted message]",
-                isEncrypted: false,
-              };
-            } catch (err) {
-              return { ...message, content: "[Failed to decrypt message]", isEncrypted: false };
+          const currentGroupKey = groupKeyRef.current;
+          const hydration = hydrateMessageContent(
+            {
+              message_content: message.message_content,
+              migration_version: message.migration_version,
+              encrypted_content: message.encryptedContent,
+              encryption_iv: message.encryptionIv,
+              encryption_salt: message.encryptionSalt,
+              is_encrypted: message.isEncrypted,
+            },
+            () => {
+              if (!currentGroupKey) return null;
+              return decryptGroupMessage(
+                {
+                  encryptedContent: message.encryptedContent,
+                  iv: message.encryptionIv,
+                  salt: message.encryptionSalt,
+                },
+                currentGroupKey
+              );
             }
-          }
-          return message;
+          );
+
+          return {
+            ...message,
+            content: hydration.content || (hydration.status === "failed" ? "[Failed to decrypt message]" : "[Encrypted message]"),
+            isEncrypted: hydration.source === "legacy",
+          };
         }),
       );
 
@@ -317,6 +324,7 @@ export const useGroupChat = (groupId: string) => {
               senderName: user.fullName || user.firstName || "Unknown User",
               senderUsername: user.username || undefined,
               avatar: currentUserAvatar || undefined,
+              text: content.trim() || undefined,
             };
 
             // Add optimistic message with "sending" status
@@ -370,6 +378,7 @@ export const useGroupChat = (groupId: string) => {
             isEncrypted: !!encryptedMessage,
             mediaUrl,
             mediaType,
+            text: content.trim() || null,
           }),
         });
 
@@ -508,20 +517,29 @@ export const useGroupChat = (groupId: string) => {
       if (exists) return prev;
 
       const currentGroupKey = groupKeyRef.current;
-      let decryptedContent = "[Encrypted message]";
+      const hydration = hydrateMessageContent(
+        {
+          message_content: incomingMsg.text ?? incomingMsg.message_content ?? incomingMsg.plain_content,
+          migration_version: incomingMsg.migration_version ?? incomingMsg.migrationVersion,
+          encrypted_content: incomingMsg.encryptedContent || incomingMsg.encrypted_content,
+          encryption_iv: incomingMsg.iv || incomingMsg.encryption_iv,
+          encryption_salt: incomingMsg.salt || incomingMsg.encryption_salt,
+          is_encrypted: incomingMsg.isEncrypted ?? incomingMsg.is_encrypted,
+        },
+        () => {
+          if (!currentGroupKey) return null;
+          return decryptGroupMessage(
+            {
+              encryptedContent: incomingMsg.encryptedContent || incomingMsg.encrypted_content,
+              iv: incomingMsg.iv || incomingMsg.encryption_iv,
+              salt: incomingMsg.salt || incomingMsg.encryption_salt,
+            },
+            currentGroupKey
+          );
+        }
+      );
 
-      if (incomingMsg.isEncrypted && incomingMsg.encryptedContent) {
-        try {
-          if (currentGroupKey) {
-            decryptedContent = decryptGroupMessage(
-              { encryptedContent: incomingMsg.encryptedContent, iv: incomingMsg.iv, salt: incomingMsg.salt },
-              currentGroupKey
-            ) || "[Encrypted message]";
-          }
-        } catch (e) {}
-      } else {
-        decryptedContent = incomingMsg.content || "";
-      }
+      const decryptedContent = hydration.content || (hydration.status === "failed" ? "[Failed to decrypt message]" : "[Encrypted message]");
 
       const isFromMe = incomingMsg.senderId === user?.id;
 

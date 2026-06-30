@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
 import { createAdminSupabaseClient } from "@kovari/api";
+import { buildMessageInsertPayload } from "@/services/messaging/persistence";
+import { MESSAGE_MIGRATION_VERSION } from "@kovari/types";
 
 export async function GET(
   req: NextRequest,
@@ -171,6 +173,7 @@ export async function POST(
       isEncrypted,
       mediaUrl,
       mediaType,
+      text,
     } = body;
 
     const supabase = createAdminSupabaseClient();
@@ -231,23 +234,31 @@ export async function POST(
 
     // Allow: (A) encrypted text message, (B) media-only message, (C) both
     if (
-      (isEncrypted && encryptedContent && encryptionIv && encryptionSalt) ||
-      (mediaUrl && mediaType)
+       (isEncrypted && encryptedContent && encryptionIv && encryptionSalt) ||
+       (mediaUrl && mediaType)
     ) {
-      const messageData: any = {
+      const textVal = typeof text === "string" ? text : null;
+      const migrationVersion = (textVal !== null)
+        ? MESSAGE_MIGRATION_VERSION.DUAL_PERSISTENCE
+        : MESSAGE_MIGRATION_VERSION.LEGACY_E2EE;
+
+      const basePayload = buildMessageInsertPayload({
+        encryptedContent,
+        iv: encryptionIv,
+        salt: encryptionSalt,
+        isEncrypted,
+        text: textVal,
+        mediaUrl,
+        mediaType,
+        migrationVersion,
+      });
+
+      const messageData = {
+        ...basePayload,
         group_id: groupId,
         user_id: userRow.id,
-        is_encrypted: !!isEncrypted,
       };
-      if (isEncrypted) {
-        messageData.encrypted_content = encryptedContent;
-        messageData.encryption_iv = encryptionIv;
-        messageData.encryption_salt = encryptionSalt;
-      }
-      if (mediaUrl && mediaType) {
-        messageData.media_url = mediaUrl;
-        messageData.media_type = mediaType;
-      }
+
       const { data: inserted, error: insertError } = await supabase
         .from("group_messages")
         .insert([messageData])

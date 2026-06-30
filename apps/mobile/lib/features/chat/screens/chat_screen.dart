@@ -26,6 +26,8 @@ import 'package:mobile/features/chat/providers/chat_runtime_providers.dart';
 import 'package:mobile/features/chat/providers/conversation_store.dart';
 import 'package:mobile/features/chat/providers/message_store.dart';
 import 'package:mobile/features/chat/providers/conversation_runtime_store.dart';
+import 'package:mobile/features/chat/providers/conversation_runtime_manager.dart';
+import 'package:mobile/features/chat/providers/decryption_cache.dart';
 import 'package:mobile/features/chat/utils/direct_chat_id.dart';
 import 'package:mobile/features/groups/providers/entity_stores.dart';
 import 'package:mobile/features/groups/models/group.dart';
@@ -158,7 +160,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       }
     }
 
-    print('🚀 [ChatScreen] _sendMessage: "$text" | chatId: $_chatId');
+    AppLogger.d('🚀 [ChatScreen] _sendMessage: "$text" | chatId: $_chatId');
     setState(() {
       _isSending = true;
       _isComposing = false;
@@ -204,16 +206,13 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
 
   @override
   Widget build(BuildContext context) {
-    print('📺 [ChatScreen] Building for ID: $_chatId');
+    AppLogger.d('📺 [ChatScreen] Building for ID: $_chatId');
     final conversation = ref.watch(
       conversationStoreProvider.select((map) => map[_chatId]),
     );
     final runtimeState = ref.watch(conversationRuntimeProvider(_chatId));
     final ConversationMessageState msgState = ref.watch(
       messageStoreProvider(_chatId),
-    );
-    print(
-      '📺 [ChatScreen] MsgState: ${msgState.messages.length} msgs | Loading: ${msgState.isHydrating}',
     );
     final authUserObj = ref.watch(authProvider).user;
     final currentUserId = authUserObj?.resolvedUuid ?? authUserObj?.id ?? '';
@@ -262,9 +261,29 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       },
     );
 
-    final visibleMessages = msgState.hotMessages
+    // Keep the runtime manager alive for this chat session
+    ref.watch(conversationRuntimeManagerProvider(_chatId));
+
+    final visibleMessages = ref.watch(decryptedMessagesProvider(_chatId))
         .where((m) => m.mediaType != 'init')
         .toList();
+
+    // Warm cache once when messages first populate (not on every rebuild).
+    // The RuntimeManager's own _initialWarmDone flag prevents duplicate work.
+    ref.listen(
+      decryptedMessagesProvider(_chatId).select((msgs) => msgs.length),
+      (prev, next) {
+        if ((prev ?? 0) == 0 && next > 0 && mounted) {
+          final msgs = ref
+              .read(decryptedMessagesProvider(_chatId))
+              .where((m) => m.mediaType != 'init')
+              .toList();
+          ref
+              .read(conversationRuntimeManagerProvider(_chatId).notifier)
+              .warmCache(msgs);
+        }
+      },
+    );
 
     return Scaffold(
       backgroundColor: widget.hideHeader
@@ -832,7 +851,7 @@ class _UnreadDivider extends StatelessWidget {
 
 // ── Message List ────────────────────────────────────────────────────────────
 
-class _MessageList extends StatelessWidget {
+class _MessageList extends ConsumerWidget {
   const _MessageList({
     required this.messages,
     required this.currentUserId,
@@ -854,7 +873,7 @@ class _MessageList extends StatelessWidget {
   final bool isCompact;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final bottomPad = MediaQuery.of(context).padding.bottom;
     final topPad = MediaQuery.of(context).padding.top;
     final double scale = isCompact ? 0.85 : 1.0;
@@ -891,6 +910,16 @@ class _MessageList extends StatelessWidget {
       itemCount: displayMessages.length,
       itemBuilder: (context, index) {
         final msg = displayMessages[index];
+
+        // Notify ConversationRuntimeManager of the visible viewport indices
+        Future.microtask(() {
+          if (context.mounted) {
+            ref
+                .read(conversationRuntimeManagerProvider(msg.chatId).notifier)
+                .updateViewport(displayMessages, index, index);
+          }
+        });
+
         final isMe = msg.senderId == currentUserId;
         final showTimestamp = _shouldShowTimestamp(index, displayMessages);
 

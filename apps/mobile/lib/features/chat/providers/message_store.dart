@@ -348,46 +348,16 @@ class MessageStore extends Notifier<ConversationMessageState> {
     if (_isDisposed || !_isActive) return;
     final rawMessages = data['messages'] as List<dynamic>? ?? [];
     final List<MessageEntity> entities = [];
-    var anyDecrypted = false;
     for (final json in rawMessages) {
       try {
         final entity = _parseMessageJson(json as Map<String, dynamic>);
-        AppLogger.d(
-          '[MessageStore DEBUG] Raw JSON: $json | Entity: id=${entity.id}, text=${entity.text}, isEncrypted=${entity.isEncrypted}, mediaUrl=${entity.mediaUrl}, mediaType=${entity.mediaType}',
-        );
-        if (entity.isEncrypted) {
-          final decrypted = await _decryptIfNeeded(entity);
-          if (decrypted != null) {
-            entities.add(decrypted);
-            anyDecrypted = true;
-          } else {
-            entities.add(entity);
-          }
-        } else {
-          entities.add(entity);
-        }
+        entities.add(entity);
       } catch (e) {
         AppLogger.e('[MessageStore] Error parsing message', error: e);
       }
     }
 
     if (_isDisposed || !_isActive) return;
-
-    if (anyDecrypted) {
-      try {
-        final decryptedJson = {
-          'messages': entities.map((e) => e.toSocket()).toList(),
-        };
-        await ref
-            .read(localCacheProvider)
-            .set(path, decryptedJson, params: params);
-        AppLogger.d(
-          '🔒 [Cache] Saved decrypted history back to cache for $path',
-        );
-      } catch (e) {
-        AppLogger.e('Failed to save decrypted history back to cache', error: e);
-      }
-    }
 
     final requestedLimit = params['limit'] as int? ?? _kHotWindowSize;
     hydrateFromHistory(
@@ -464,26 +434,13 @@ class MessageStore extends Notifier<ConversationMessageState> {
         );
       }
 
-      if (_isDisposed || !_isActive) return;
-
       if (rawData != null) {
         final rawMessages = rawData['messages'] as List<dynamic>? ?? [];
         final List<MessageEntity> fetchedEntities = [];
-        var anyDecrypted = false;
         for (final json in rawMessages) {
           try {
             final entity = _parseMessageJson(json as Map<String, dynamic>);
-            if (entity.isEncrypted) {
-              final decrypted = await _decryptIfNeeded(entity);
-              if (decrypted != null) {
-                fetchedEntities.add(decrypted);
-                anyDecrypted = true;
-              } else {
-                fetchedEntities.add(entity);
-              }
-            } else {
-              fetchedEntities.add(entity);
-            }
+            fetchedEntities.add(entity);
           } catch (e) {
             AppLogger.e(
               '[MessageStore] Error parsing paginated message',
@@ -501,22 +458,6 @@ class MessageStore extends Notifier<ConversationMessageState> {
           final updated = Map<String, MessageEntity>.from(state.messages);
           for (final msg in fetchedEntities) {
             updated[msg.id] = msg;
-          }
-
-          if (anyDecrypted) {
-            try {
-              final decryptedJson = {
-                'messages': fetchedEntities.map((e) => e.toSocket()).toList(),
-              };
-              await ref
-                  .read(localCacheProvider)
-                  .set(path, decryptedJson, params: params);
-            } catch (e) {
-              AppLogger.e(
-                'Failed to cache decrypted paginated messages',
-                error: e,
-              );
-            }
           }
 
           state = state.copyWith(
@@ -953,13 +894,9 @@ class MessageStore extends Notifier<ConversationMessageState> {
         return;
       }
 
-      // Decrypt if necessary
-      final decrypted = await _decryptIfNeeded(entity);
-      final finalEntity = decrypted ?? entity;
-
-      final csn = finalEntity.conversationSequence;
+      final csn = entity.conversationSequence;
       final updated = Map<String, MessageEntity>.from(state.messages)
-        ..[finalEntity.id] = finalEntity;
+        ..[entity.id] = entity;
 
       if (csn != null) _detectAndHandleGap(csn, updated);
 
@@ -977,18 +914,18 @@ class MessageStore extends Notifier<ConversationMessageState> {
 
       // Update legacy ConversationStore (inbox list)
       ref.read(conversationStoreProvider.notifier)
-        ..updateLastMessage(_chatId, finalEntity)
+        ..updateLastMessage(_chatId, entity)
         ..incrementUnread(_chatId);
 
       // Update new ConversationRuntimeStore (watermarks, snippets, unread)
       ref.read(conversationRuntimeStoreProvider.notifier)
         ..updateLastMessage(
           chatId: _chatId,
-          messageId: finalEntity.id,
-          snippet: finalEntity.text,
-          at: finalEntity.createdAt,
-          senderId: finalEntity.senderId,
-          mediaType: finalEntity.mediaType,
+          messageId: entity.id,
+          snippet: entity.text,
+          at: entity.createdAt,
+          senderId: entity.senderId,
+          mediaType: entity.mediaType,
         )
         ..incrementUnread(_chatId);
 
@@ -1001,7 +938,7 @@ class MessageStore extends Notifier<ConversationMessageState> {
       // Emit delivery receipt for incoming messages (Workstream 5)
       ref.read(socketServiceProvider.notifier).emit(
         'message_delivered',
-        <String, dynamic>{'chatId': _chatId, 'messageId': finalEntity.id},
+        <String, dynamic>{'chatId': _chatId, 'messageId': entity.id},
       );
     } catch (e, stack) {
       AppLogger.e(
@@ -1010,116 +947,6 @@ class MessageStore extends Notifier<ConversationMessageState> {
         stackTrace: stack,
       );
     }
-  }
-
-  Future<MessageEntity?> _decryptIfNeeded(MessageEntity entity) async {
-    final myUserId = ref.read(authProvider).user?.id;
-    if (myUserId == null) return null;
-
-    if (!entity.isEncrypted ||
-        entity.encryptedContent == null ||
-        entity.encryptionIv == null ||
-        entity.encryptionSalt == null) {
-      return null;
-    }
-
-    // --- Group Chat Decryption (Workstream 8) ---
-    // Detect group conversations by checking the runtime store entry.
-    // Structural fallback: a direct chat ID is always "uuid_uuid" (2 parts).
-    // Group IDs are single UUIDs — they will not have exactly 2 underscore-separated parts.
-    final runtimeEntry = ref.read(conversationRuntimeStoreProvider)[_chatId];
-    final isGroup =
-        _conversationType == ConversationType.group ||
-        runtimeEntry?.conversationType == ConversationType.group ||
-        _chatId.split('_').length != 2; // Structural fallback
-
-    if (isGroup) {
-      AppLogger.d(
-        '[MessageStore] 🔑 Group decryption path for $_chatId | '
-        'isEncrypted=${entity.isEncrypted} | '
-        'iv=${entity.encryptionIv} | '
-        'salt=${entity.encryptionSalt} | '
-        'content=${entity.encryptedContent?.substring(0, 8)}...',
-      );
-      try {
-        final groupSvc = ref.read(groupEncryptionServiceProvider);
-        final keyAvailable = groupSvc.isKeyAvailable(_chatId);
-        AppLogger.d('[MessageStore] 🔑 Group key cached: $keyAvailable');
-        final plain = await groupSvc.decryptMessage(
-          groupId: _chatId,
-          encryptedContent: entity.encryptedContent!,
-          iv: entity.encryptionIv!,
-          salt: entity.encryptionSalt!,
-        );
-        AppLogger.d('[MessageStore] 🔑 Decryption result: "$plain"');
-        if (plain != '[Encrypted message]' && plain != '[Failed to decrypt]') {
-          return entity.copyWith(text: plain, isEncrypted: false);
-        }
-        AppLogger.w(
-          '[MessageStore] Group decryption returned fallback for ${entity.id}',
-        );
-      } catch (e) {
-        AppLogger.e('[MessageStore] Group decryption failed', error: e);
-      }
-      return null;
-    }
-
-    // --- Direct Chat Decryption ---
-    final user = ref.read(authProvider).user;
-    final partnerId = directChatPartnerId(
-      _chatId,
-      myUserId,
-      myUserUuid: user?.resolvedUuid,
-    );
-    if (partnerId == null) return null;
-
-    final conversation = ref.read(conversationProvider(_chatId));
-
-    // Identity Strategy: UUID:UUID for cross-platform parity with Web
-    // Since direct chatIds are already sorted(UUID1_UUID2), we just replace '_' with ':'
-    final sharedSecret = _chatId.replaceAll('_', ':');
-
-    try {
-      var decryptedText = await EncryptionService().decryptMessage(
-        encryptedContent: entity.encryptedContent!,
-        iv: entity.encryptionIv!,
-        salt: entity.encryptionSalt!,
-        key: sharedSecret,
-      );
-
-      // Fallback Strategy: Try Clerk IDs if UUID decryption fails (for legacy messages)
-      if (decryptedText == '[Failed to decrypt]') {
-        final conversation = ref.read(conversationProvider(_chatId));
-        final myClerkId = user?.id ?? myUserId;
-        final partnerClerkId = conversation?.partnerClerkId;
-
-        if (partnerClerkId != null) {
-          final ids = [myClerkId, partnerClerkId]..sort();
-          final legacySecret = '${ids[0]}:${ids[1]}';
-          if (legacySecret != sharedSecret) {
-            AppLogger.d(
-              '🛡️ [MessageStore] Attempting legacy fallback decryption...',
-            );
-            final fallbackResult = await EncryptionService().decryptMessage(
-              encryptedContent: entity.encryptedContent!,
-              iv: entity.encryptionIv!,
-              salt: entity.encryptionSalt!,
-              key: legacySecret,
-            );
-            if (fallbackResult != '[Failed to decrypt]') {
-              decryptedText = fallbackResult;
-            }
-          }
-        }
-      }
-
-      if (decryptedText != '[Failed to decrypt]') {
-        return entity.copyWith(text: decryptedText, isEncrypted: false);
-      }
-    } catch (e) {
-      AppLogger.e('[MessageStore] Decryption pipeline failed', error: e);
-    }
-    return null;
   }
 
   void _onMessagePersisted(Map<String, dynamic> data) {
