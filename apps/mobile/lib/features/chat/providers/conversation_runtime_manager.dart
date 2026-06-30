@@ -56,15 +56,6 @@ class ConversationRuntimeManager
       _viewportDebounce?.cancel();
     });
 
-    // Listen to changes in the message store for this chat to trigger automatic
-    // decryption of ONLY new incoming messages.
-    ref.listen<ConversationMessageState>(messageStoreProvider(_chatId), (
-      previous,
-      next,
-    ) {
-      _handleMessageStoreUpdate(previous, next);
-    });
-
     return ConversationRuntimeManagerState(chatId: _chatId);
   }
 
@@ -94,8 +85,14 @@ class ConversationRuntimeManager
         salt: m.encryptionSalt,
       );
       if (decision.action != HydrationAction.decrypt) {
-        if (decision.action == HydrationAction.usePlaintext && decision.messageContent != null) {
-          cache.insert(_chatId, m.id, decision.messageContent!, m.conversationSequence ?? 0);
+        if (decision.action == HydrationAction.usePlaintext &&
+            decision.messageContent != null) {
+          cache.insert(
+            _chatId,
+            m.id,
+            decision.messageContent!,
+            m.conversationSequence ?? 0,
+          );
         }
         return false;
       }
@@ -166,8 +163,14 @@ class ConversationRuntimeManager
       );
 
       if (decision.action != HydrationAction.decrypt) {
-        if (decision.action == HydrationAction.usePlaintext && decision.messageContent != null) {
-          cache.insert(_chatId, entity.id, decision.messageContent!, entity.conversationSequence ?? 0);
+        if (decision.action == HydrationAction.usePlaintext &&
+            decision.messageContent != null) {
+          cache.insert(
+            _chatId,
+            entity.id,
+            decision.messageContent!,
+            entity.conversationSequence ?? 0,
+          );
         }
         continue;
       }
@@ -257,8 +260,12 @@ Conversation: $_chatId
     );
 
     if (decision.action != HydrationAction.decrypt) {
-      if (decision.action == HydrationAction.usePlaintext && decision.messageContent != null) {
-        return entity.copyWith(text: decision.messageContent, isEncrypted: false);
+      if (decision.action == HydrationAction.usePlaintext &&
+          decision.messageContent != null) {
+        return entity.copyWith(
+          text: decision.messageContent,
+          isEncrypted: false,
+        );
       }
       return entity;
     }
@@ -281,7 +288,7 @@ Conversation: $_chatId
     try {
       final startTime = DateTime.now();
       String decrypted;
-      
+
       final isGroup = _chatId.split('_').length != 2;
       if (isGroup) {
         final groupSvc = ref.read(groupEncryptionServiceProvider);
@@ -303,7 +310,8 @@ Conversation: $_chatId
       final duration = DateTime.now().difference(startTime);
       cache.recordDecryption(duration);
 
-      if (decrypted != '[Failed to decrypt]' && decrypted != '[Encrypted message]') {
+      if (decrypted != '[Failed to decrypt]' &&
+          decrypted != '[Encrypted message]') {
         cache.insert(
           _chatId,
           entity.id,

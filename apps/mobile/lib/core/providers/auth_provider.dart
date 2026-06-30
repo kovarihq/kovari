@@ -9,6 +9,7 @@ import 'package:mobile/core/network/api_endpoints.dart';
 import 'package:mobile/core/providers/connectivity_provider.dart';
 import 'package:mobile/core/utils/app_logger.dart';
 import 'package:mobile/shared/models/kovari_user.dart';
+import 'package:mobile/features/chat/providers/cache_providers.dart';
 
 class AuthState {
   AuthState({
@@ -133,6 +134,18 @@ class AuthNotifier extends Notifier<AuthState> {
   }
 
   Future<void> logout() async {
+    final currentUser = state.user;
+    if (currentUser != null) {
+      try {
+        final cacheRepo = ref.read(conversationCacheRepositoryProvider(currentUser.id));
+        await cacheRepo.deleteCache();
+        await cacheRepo.close();
+        AppLogger.i('Cleaned and closed cache boxes for logging out user: ${currentUser.id}');
+      } catch (e) {
+        AppLogger.e('Failed to clean cache boxes during logout: $e');
+      }
+    }
+
     final repo = ref.read(authRepositoryProvider);
     await repo.logout(reason: 'USER_INITIATED');
     state = AuthState(isBootstrapping: false);

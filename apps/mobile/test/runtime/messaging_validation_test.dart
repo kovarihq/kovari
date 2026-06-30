@@ -24,16 +24,33 @@ import 'package:mobile/features/chat/providers/conversation_store.dart';
 import 'package:mobile/features/chat/providers/message_store.dart';
 import 'package:mobile/features/chat/providers/conversation_runtime_manager.dart';
 import 'package:mobile/shared/models/kovari_user.dart';
+import 'package:mobile/features/chat/cache/conversation_cache_models.dart';
+import 'package:mobile/features/chat/cache/conversation_cache_repository.dart';
+import 'package:mobile/features/chat/cache/conversation_repository.dart';
+import 'package:mobile/features/chat/cache/conversation_sync_engine.dart';
+import 'package:mobile/features/chat/providers/cache_providers.dart';
 import 'package:mocktail/mocktail.dart';
 
 // ─────────────────────────────────────────────
 // Mocks
 // ─────────────────────────────────────────────
 class MockApiClient extends Mock implements ApiClient {}
+
 class MockSocketService extends Mock implements SocketService {}
-class MockMessagingTelemetryService extends Mock implements MessagingTelemetryService {}
-class MockGroupEncryptionService extends Mock implements GroupEncryptionService {}
+
+class MockMessagingTelemetryService extends Mock
+    implements MessagingTelemetryService {}
+
+class MockGroupEncryptionService extends Mock
+    implements GroupEncryptionService {}
+
 class MockCloudinaryService extends Mock implements CloudinaryService {}
+
+class MockConversationCacheRepository extends Mock
+    implements ConversationCacheRepository {}
+
+class MockConversationRepository extends Mock
+    implements ConversationRepository {}
 
 // ─────────────────────────────────────────────
 // In-memory MutationJournal (no Hive)
@@ -99,7 +116,11 @@ class FakeConversationStore extends Notifier<Map<String, ConversationEntity>>
   void markSeenUpTo(String chatId, int sequence) {}
 
   @override
-  void setPartnerOnline(String chatId, {required bool isOnline, DateTime? lastSeen}) {}
+  void setPartnerOnline(
+    String chatId, {
+    required bool isOnline,
+    DateTime? lastSeen,
+  }) {}
 }
 
 // ─────────────────────────────────────────────
@@ -138,15 +159,15 @@ class SocketServiceMock extends SocketService {
 class AuthNotifierFake extends AuthNotifier {
   @override
   AuthState build() => AuthState(
-        isAuthenticated: true,
-        isBootstrapping: false,
-        user: KovariUser(
-          id: 'user1',
-          uuid: 'uuid-user-1',
-          email: 'test@kovari.in',
-          name: 'Test User',
-        ),
-      );
+    isAuthenticated: true,
+    isBootstrapping: false,
+    user: KovariUser(
+      id: 'user1',
+      uuid: 'uuid-user-1',
+      email: 'test@kovari.in',
+      name: 'Test User',
+    ),
+  );
 }
 
 // ─────────────────────────────────────────────
@@ -159,6 +180,41 @@ void main() {
     registerFallbackValue(File(''));
     registerFallbackValue(CancelToken());
     registerFallbackValue(const Duration(hours: 1));
+    registerFallbackValue(
+      ConversationMetadata(
+        conversationId: '',
+        lastSequence: 0,
+        lastReadSequence: 0,
+        lastSyncedAt: DateTime.now(),
+        cacheSchemaVersion: 1,
+        cachedMessageCount: 0,
+      ),
+    );
+    registerFallbackValue(
+      CachedMessage(
+        id: '',
+        conversationId: '',
+        sequence: 0,
+        text: '',
+        senderId: '',
+        createdAt: DateTime.now(),
+        status: '',
+        messageMigrationVersion: 1,
+      ),
+    );
+    registerFallbackValue(
+      ConversationIndex(
+        conversationId: '',
+        lastMessageSnippet: '',
+        lastMessageId: '',
+        lastSequence: 0,
+        updatedAt: DateTime.now(),
+        lastSyncAt: DateTime.now(),
+        unreadCount: 0,
+        participantIds: [],
+        cacheSchemaVersion: 2,
+      ),
+    );
   });
 
   late ProviderContainer container;
@@ -181,24 +237,30 @@ void main() {
     fakeMutationJournal = FakeMutationJournal();
 
     // Stub socket events stream
-    when(() => mockSocketService.events)
-        .thenAnswer((_) => socketEventsController.stream);
+    when(
+      () => mockSocketService.events,
+    ).thenAnswer((_) => socketEventsController.stream);
 
     // Mock path_provider method channel
-    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(
-      const MethodChannel('plugins.flutter.io/path_provider'),
-      (MethodCall methodCall) async {
-        return '.'; // Return current working directory
-      },
-    );
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(
+          const MethodChannel('plugins.flutter.io/path_provider'),
+          (MethodCall methodCall) async {
+            return '.'; // Return current working directory
+          },
+        );
 
     // Stub Cloudinary uploadRaw to return a fake secure url
-    when(() => mockCloudinaryService.uploadRaw(
-          any(),
-          onProgress: any(named: 'onProgress'),
-        )).thenAnswer((_) async => <String, dynamic>{
-          'secure_url': 'https://cloudinary.com/test.jpg',
-        });
+    when(
+      () => mockCloudinaryService.uploadRaw(
+        any(),
+        onProgress: any(named: 'onProgress'),
+      ),
+    ).thenAnswer(
+      (_) async => <String, dynamic>{
+        'secure_url': 'https://cloudinary.com/test.jpg',
+      },
+    );
 
     // Stub ApiClient.get() to return an empty-but-safe fallback response
     // This prevents MessageStore._hydrate() from throwing on unstubbed mock.
@@ -212,21 +274,22 @@ void main() {
         cancelToken: any(named: 'cancelToken'),
       ),
     ).thenAnswer(
-      (_) async => ApiResponse<Map<String, dynamic>>.fallback(reason: 'test_stub'),
+      (_) async =>
+          ApiResponse<Map<String, dynamic>>.fallback(reason: 'test_stub'),
     );
 
     // Stub group encryption to avoid real network calls
     when(
       () => mockGroupEnc.encryptMessage(any(), any()),
     ).thenAnswer((_) async => null);
-    when(
-      () => mockGroupEnc.isKeyAvailable(any()),
-    ).thenReturn(true);
+    when(() => mockGroupEnc.isKeyAvailable(any())).thenReturn(true);
 
     container = ProviderContainer(
       overrides: [
         apiClientProvider.overrideWithValue(mockApiClient),
-        socketServiceProvider.overrideWith(() => SocketServiceMock(mockSocketService)),
+        socketServiceProvider.overrideWith(
+          () => SocketServiceMock(mockSocketService),
+        ),
         messagingTelemetryProvider.overrideWithValue(mockTelemetry),
         groupEncryptionServiceProvider.overrideWithValue(mockGroupEnc),
         cloudinaryServiceProvider.overrideWithValue(mockCloudinaryService),
@@ -234,8 +297,37 @@ void main() {
         mutationJournalProvider.overrideWith((_) => fakeMutationJournal),
         // Fake ConversationStore — avoids ref-after-dispose on inbox update
         conversationStoreProvider.overrideWith(() => FakeConversationStore()),
-        // Fake Auth
         authProvider.overrideWith(() => AuthNotifierFake()),
+        conversationCacheRepositoryProvider.overrideWith((ref, userId) {
+          final mock = MockConversationCacheRepository();
+          when(() => mock.init()).thenAnswer((_) async {});
+          when(() => mock.getMessages(any())).thenReturn([]);
+          when(() => mock.getMetadata(any())).thenReturn(null);
+          when(() => mock.saveMessages(any())).thenAnswer((_) async {});
+          when(() => mock.saveMetadata(any())).thenAnswer((_) async {});
+          when(() => mock.saveIndex(any())).thenAnswer((_) async {});
+          return mock;
+        }),
+        conversationSyncEngineProvider.overrideWith((ref, userId) {
+          final mockCache = MockConversationCacheRepository();
+          when(() => mockCache.init()).thenAnswer((_) async {});
+          when(() => mockCache.getMessages(any())).thenReturn([]);
+          when(() => mockCache.getMetadata(any())).thenReturn(null);
+          when(() => mockCache.saveMessages(any())).thenAnswer((_) async {});
+          when(() => mockCache.saveMetadata(any())).thenAnswer((_) async {});
+          when(() => mockCache.saveIndex(any())).thenAnswer((_) async {});
+          final mockRemote = MockConversationRepository();
+          when(
+            () => mockRemote.fetchMessages(
+              path: any(named: 'path'),
+              queryParameters: any(named: 'queryParameters'),
+            ),
+          ).thenAnswer((_) async => null);
+          return ConversationSyncEngine(
+            cacheRepository: mockCache,
+            remoteRepository: mockRemote,
+          );
+        }),
       ],
     );
   });
@@ -256,12 +348,14 @@ void main() {
       const chatId = 'user1_user2';
 
       // Seed runtime store so IntegrityGuard recognises this conversation
-      container.read(conversationRuntimeStoreProvider.notifier).upsert(
-        const ConversationRuntimeState(
-          chatId: chatId,
-          conversationType: ConversationType.direct,
-        ),
-      );
+      container
+          .read(conversationRuntimeStoreProvider.notifier)
+          .upsert(
+            const ConversationRuntimeState(
+              chatId: chatId,
+              conversationType: ConversationType.direct,
+            ),
+          );
 
       final mutationService = container.read(chatMutationServiceProvider);
 
@@ -293,18 +387,20 @@ void main() {
       // Server ACK simulation
       // _checkStructure requires 'id' and 'senderId' at the payload root
       print('[OBSERVED LOGS] Simulating server message_persisted ACK...');
-      socketEventsController.add(SocketEvent(
-        type: 'message_persisted',
-        data: {
-          'chatId': chatId,
-          'id': 'server_msg_101',       // required by IntegrityGuard
-          'senderId': 'uuid-user-1',    // required by IntegrityGuard
-          'tempId': clientMsgId,
-          'messageId': 'server_msg_101',
-          'conversationSequence': 42,
-          'serverSequence': 999,
-        },
-      ));
+      socketEventsController.add(
+        SocketEvent(
+          type: 'message_persisted',
+          data: {
+            'chatId': chatId,
+            'id': 'server_msg_101', // required by IntegrityGuard
+            'senderId': 'uuid-user-1', // required by IntegrityGuard
+            'tempId': clientMsgId,
+            'messageId': 'server_msg_101',
+            'conversationSequence': 42,
+            'serverSequence': 999,
+          },
+        ),
+      );
 
       // Allow event dispatch to propagate
       await Future<void>.delayed(const Duration(milliseconds: 50));
@@ -320,7 +416,9 @@ void main() {
         MessageDeliveryStatus.sent,
       );
       print('[OBSERVED LOGS] Message reconciled to sent: server_msg_101.');
-      print('[OBSERVED RESULT] PASS: Direct message sent and reconciled successfully.');
+      print(
+        '[OBSERVED RESULT] PASS: Direct message sent and reconciled successfully.',
+      );
     });
 
     // ─────────────────────────────────────────────
@@ -334,12 +432,14 @@ void main() {
       const chatId = 'group_chat_abc';
 
       // Seed runtime store so IntegrityGuard recognises this group conversation
-      container.read(conversationRuntimeStoreProvider.notifier).upsert(
-        const ConversationRuntimeState(
-          chatId: chatId,
-          conversationType: ConversationType.group,
-        ),
-      );
+      container
+          .read(conversationRuntimeStoreProvider.notifier)
+          .upsert(
+            const ConversationRuntimeState(
+              chatId: chatId,
+              conversationType: ConversationType.group,
+            ),
+          );
 
       // Trigger build() and wait for the async _hydrate() call to complete
       container.read(messageStoreProvider(chatId));
@@ -362,29 +462,37 @@ void main() {
       ]);
 
       // Stub telemetry calls that are triggered by gap detection
-      when(() => mockTelemetry.recordGapFillRequested(
-            chatId: any(named: 'chatId'),
-            fromSequence: any(named: 'fromSequence'),
-            toSequence: any(named: 'toSequence'),
-          )).thenAnswer((_) async {});
-      when(() => mockTelemetry.recordSequenceDrift(
-            conversationId: any(named: 'conversationId'),
-            expectedSequence: any(named: 'expectedSequence'),
-            receivedSequence: any(named: 'receivedSequence'),
-          )).thenAnswer((_) async {});
+      when(
+        () => mockTelemetry.recordGapFillRequested(
+          chatId: any(named: 'chatId'),
+          fromSequence: any(named: 'fromSequence'),
+          toSequence: any(named: 'toSequence'),
+        ),
+      ).thenAnswer((_) async {});
+      when(
+        () => mockTelemetry.recordSequenceDrift(
+          conversationId: any(named: 'conversationId'),
+          expectedSequence: any(named: 'expectedSequence'),
+          receivedSequence: any(named: 'receivedSequence'),
+        ),
+      ).thenAnswer((_) async {});
 
-      print('[OBSERVED LOGS] Simulating gap with remote message sequence 15 (Expected: 11)...');
-      socketEventsController.add(SocketEvent(
-        type: 'receive_message',
-        data: {
-          'groupId': chatId,
-          'id': 'msg_5',
-          'senderId': 'userB',
-          'text': 'Late message',
-          'conversationSequence': 15,
-          'serverSequence': 205,
-        },
-      ));
+      print(
+        '[OBSERVED LOGS] Simulating gap with remote message sequence 15 (Expected: 11)...',
+      );
+      socketEventsController.add(
+        SocketEvent(
+          type: 'receive_message',
+          data: {
+            'groupId': chatId,
+            'id': 'msg_5',
+            'senderId': 'userB',
+            'text': 'Late message',
+            'conversationSequence': 15,
+            'serverSequence': 205,
+          },
+        ),
+      );
 
       await Future<void>.delayed(const Duration(milliseconds: 50));
 
@@ -394,13 +502,17 @@ void main() {
         (11, 14),
         reason: 'Gap detector should flag sequences 11–14 as missing',
       );
-      print('[OBSERVED LOGS] Gap detected successfully: pendingGap is ${state.pendingGap}.');
+      print(
+        '[OBSERVED LOGS] Gap detected successfully: pendingGap is ${state.pendingGap}.',
+      );
 
-      verify(() => mockTelemetry.recordGapFillRequested(
-            chatId: chatId,
-            fromSequence: 11,
-            toSequence: 14,
-          )).called(1);
+      verify(
+        () => mockTelemetry.recordGapFillRequested(
+          chatId: chatId,
+          fromSequence: 11,
+          toSequence: 14,
+        ),
+      ).called(1);
       print('[OBSERVED LOGS] Telemetry triggered for gap recovery.');
       print('[OBSERVED RESULT] PASS: Group messaging gap detection verified.');
     });
@@ -446,7 +558,9 @@ void main() {
       socketService.setMockState(SocketState.connected);
       mutationService.replayPendingMessages(chatId);
 
-      print('[OBSERVED RESULT] PASS: Replay engine correctly queued offline mutations.');
+      print(
+        '[OBSERVED RESULT] PASS: Replay engine correctly queued offline mutations.',
+      );
     });
 
     // ─────────────────────────────────────────────
@@ -458,31 +572,40 @@ void main() {
       print('==================================================');
 
       const chatId = 'user1_user2';
-      
+
       // Trigger build() and wait for the async _hydrate() call to complete
       container.read(messageStoreProvider(chatId));
       await Future<void>.delayed(const Duration(milliseconds: 50));
 
-      print('[OBSERVED LOGS] Simulating message sent from Web client (current user)...');
-      socketEventsController.add(SocketEvent(
-        type: 'receive_message',
-        data: {
-          'chatId': chatId,
-          'id': 'web_msg_999',
-          'senderId': 'uuid-user-1', // current user
-          'text': 'Sent from Web UI',
-          'conversationSequence': 100,
-          'serverSequence': 1000,
-        },
-      ));
+      print(
+        '[OBSERVED LOGS] Simulating message sent from Web client (current user)...',
+      );
+      socketEventsController.add(
+        SocketEvent(
+          type: 'receive_message',
+          data: {
+            'chatId': chatId,
+            'id': 'web_msg_999',
+            'senderId': 'uuid-user-1', // current user
+            'text': 'Sent from Web UI',
+            'conversationSequence': 100,
+            'serverSequence': 1000,
+          },
+        ),
+      );
 
       await Future<void>.delayed(const Duration(milliseconds: 50));
 
       final state = container.read(messageStoreProvider(chatId));
       expect(state.messages.containsKey('web_msg_999'), true);
       expect(state.messages['web_msg_999']!.senderId, 'uuid-user-1');
-      expect(state.messages['web_msg_999']!.deliveryStatus, MessageDeliveryStatus.delivered);
-      print('[OBSERVED RESULT] PASS: Web client message successfully synced to Mobile.');
+      expect(
+        state.messages['web_msg_999']!.deliveryStatus,
+        MessageDeliveryStatus.delivered,
+      );
+      print(
+        '[OBSERVED RESULT] PASS: Web client message successfully synced to Mobile.',
+      );
     });
 
     // ─────────────────────────────────────────────
@@ -497,12 +620,14 @@ void main() {
       final mutationService = container.read(chatMutationServiceProvider);
 
       // Seed runtime store
-      container.read(conversationRuntimeStoreProvider.notifier).upsert(
-        const ConversationRuntimeState(
-          chatId: chatId,
-          conversationType: ConversationType.direct,
-        ),
-      );
+      container
+          .read(conversationRuntimeStoreProvider.notifier)
+          .upsert(
+            const ConversationRuntimeState(
+              chatId: chatId,
+              conversationType: ConversationType.direct,
+            ),
+          );
 
       print('[OBSERVED LOGS] Mobile A sends a message...');
       final clientMsgId = mutationService.sendMessage(
@@ -517,56 +642,72 @@ void main() {
       await Future<void>.delayed(const Duration(milliseconds: 100));
 
       // Simulate L2 ACK (server persisted message)
-      socketEventsController.add(SocketEvent(
-        type: 'message_persisted',
-        data: {
-          'chatId': chatId,
-          'id': 'msg_e2e_123',
-          'senderId': 'uuid-user-1',
-          'tempId': clientMsgId,
-          'messageId': 'msg_e2e_123',
-          'conversationSequence': 10,
-          'serverSequence': 500,
-        },
-      ));
+      socketEventsController.add(
+        SocketEvent(
+          type: 'message_persisted',
+          data: {
+            'chatId': chatId,
+            'id': 'msg_e2e_123',
+            'senderId': 'uuid-user-1',
+            'tempId': clientMsgId,
+            'messageId': 'msg_e2e_123',
+            'conversationSequence': 10,
+            'serverSequence': 500,
+          },
+        ),
+      );
       await Future<void>.delayed(const Duration(milliseconds: 50));
 
       // 1. Verify message reconciled to Sent status
       var state = container.read(messageStoreProvider(chatId));
-      expect(state.messages['msg_e2e_123']!.deliveryStatus, MessageDeliveryStatus.sent);
+      expect(
+        state.messages['msg_e2e_123']!.deliveryStatus,
+        MessageDeliveryStatus.sent,
+      );
       print('[OBSERVED LOGS] Message status: SENT.');
 
       // 2. Simulate Mobile B delivering receipt
-      print('[OBSERVED LOGS] Mobile B receives message and emits delivered receipt...');
-      socketEventsController.add(SocketEvent(
-        type: 'message_delivered_ack',
-        data: {
-          'chatId': chatId,
-          'messageId': 'msg_e2e_123',
-          'conversationSequence': 10,
-        },
-      ));
+      print(
+        '[OBSERVED LOGS] Mobile B receives message and emits delivered receipt...',
+      );
+      socketEventsController.add(
+        SocketEvent(
+          type: 'message_delivered_ack',
+          data: {
+            'chatId': chatId,
+            'messageId': 'msg_e2e_123',
+            'conversationSequence': 10,
+          },
+        ),
+      );
       await Future<void>.delayed(const Duration(milliseconds: 50));
 
       state = container.read(messageStoreProvider(chatId));
-      expect(state.messages['msg_e2e_123']!.deliveryStatus, MessageDeliveryStatus.delivered);
+      expect(
+        state.messages['msg_e2e_123']!.deliveryStatus,
+        MessageDeliveryStatus.delivered,
+      );
       print('[OBSERVED LOGS] Message status: DELIVERED.');
 
       // 3. Simulate Mobile B reading the message (messages_seen)
       print('[OBSERVED LOGS] Mobile B reads message and emits seen receipt...');
-      socketEventsController.add(SocketEvent(
-        type: 'messages_seen',
-        data: {
-          'chatId': chatId,
-          'lastSeenSequence': 10,
-        },
-      ));
+      socketEventsController.add(
+        SocketEvent(
+          type: 'messages_seen',
+          data: {'chatId': chatId, 'lastSeenSequence': 10},
+        ),
+      );
       await Future<void>.delayed(const Duration(milliseconds: 50));
 
       state = container.read(messageStoreProvider(chatId));
-      expect(state.messages['msg_e2e_123']!.deliveryStatus, MessageDeliveryStatus.seen);
+      expect(
+        state.messages['msg_e2e_123']!.deliveryStatus,
+        MessageDeliveryStatus.seen,
+      );
       print('[OBSERVED LOGS] Message status: SEEN.');
-      print('[OBSERVED RESULT] PASS: Mobile A <-> Mobile B message status lifecycle verified.');
+      print(
+        '[OBSERVED RESULT] PASS: Mobile A <-> Mobile B message status lifecycle verified.',
+      );
     });
 
     // ─────────────────────────────────────────────
@@ -580,12 +721,14 @@ void main() {
       const chatId = 'group_chat_abc';
 
       // Seed runtime store
-      container.read(conversationRuntimeStoreProvider.notifier).upsert(
-        const ConversationRuntimeState(
-          chatId: chatId,
-          conversationType: ConversationType.group,
-        ),
-      );
+      container
+          .read(conversationRuntimeStoreProvider.notifier)
+          .upsert(
+            const ConversationRuntimeState(
+              chatId: chatId,
+              conversationType: ConversationType.group,
+            ),
+          );
 
       // Trigger build() and wait for the async _hydrate() call to complete
       container.read(messageStoreProvider(chatId));
@@ -593,46 +736,54 @@ void main() {
       await Future<void>.delayed(const Duration(milliseconds: 50));
 
       // Stub group decryption for userB and userC
-      when(() => mockGroupEnc.decryptMessage(
-            groupId: chatId,
-            encryptedContent: any(named: 'encryptedContent'),
-            iv: any(named: 'iv'),
-            salt: any(named: 'salt'),
-          )).thenAnswer((invocation) async {
+      when(
+        () => mockGroupEnc.decryptMessage(
+          groupId: chatId,
+          encryptedContent: any(named: 'encryptedContent'),
+          iv: any(named: 'iv'),
+          salt: any(named: 'salt'),
+        ),
+      ).thenAnswer((invocation) async {
         final content = invocation.namedArguments[#encryptedContent] as String;
         return 'Decrypted: $content';
       });
 
-      print('[OBSERVED LOGS] Simulating encrypted messages from userB and userC...');
-      socketEventsController.add(SocketEvent(
-        type: 'receive_message',
-        data: {
-          'groupId': chatId,
-          'id': 'grp_msg_1',
-          'senderId': 'userB',
-          'text': 'Encrypted text 1',
-          'encryptedContent': 'cipher_text_1',
-          'iv': 'iv_1',
-          'salt': 'salt_1',
-          'isEncrypted': true,
-          'conversationSequence': 1,
-        },
-      ));
+      print(
+        '[OBSERVED LOGS] Simulating encrypted messages from userB and userC...',
+      );
+      socketEventsController.add(
+        SocketEvent(
+          type: 'receive_message',
+          data: {
+            'groupId': chatId,
+            'id': 'grp_msg_1',
+            'senderId': 'userB',
+            'text': 'Encrypted text 1',
+            'encryptedContent': 'cipher_text_1',
+            'iv': 'iv_1',
+            'salt': 'salt_1',
+            'isEncrypted': true,
+            'conversationSequence': 1,
+          },
+        ),
+      );
 
-      socketEventsController.add(SocketEvent(
-        type: 'receive_message',
-        data: {
-          'groupId': chatId,
-          'id': 'grp_msg_2',
-          'senderId': 'userC',
-          'text': 'Encrypted text 2',
-          'encryptedContent': 'cipher_text_2',
-          'iv': 'iv_2',
-          'salt': 'salt_2',
-          'isEncrypted': true,
-          'conversationSequence': 2,
-        },
-      ));
+      socketEventsController.add(
+        SocketEvent(
+          type: 'receive_message',
+          data: {
+            'groupId': chatId,
+            'id': 'grp_msg_2',
+            'senderId': 'userC',
+            'text': 'Encrypted text 2',
+            'encryptedContent': 'cipher_text_2',
+            'iv': 'iv_2',
+            'salt': 'salt_2',
+            'isEncrypted': true,
+            'conversationSequence': 2,
+          },
+        ),
+      );
 
       await Future<void>.delayed(const Duration(milliseconds: 100));
 
@@ -647,7 +798,9 @@ void main() {
       expect(grpMsg1.text, 'Decrypted: cipher_text_1');
       expect(grpMsg2.text, 'Decrypted: cipher_text_2');
 
-      print('[OBSERVED RESULT] PASS: Multi-user group E2EE decrypts and renders correctly.');
+      print(
+        '[OBSERVED RESULT] PASS: Multi-user group E2EE decrypts and renders correctly.',
+      );
     });
 
     // ─────────────────────────────────────────────
@@ -664,12 +817,14 @@ void main() {
           container.read(socketServiceProvider.notifier) as SocketServiceMock;
 
       // Seed runtime store so we have the conversation
-      container.read(conversationRuntimeStoreProvider.notifier).upsert(
-        const ConversationRuntimeState(
-          chatId: chatId,
-          conversationType: ConversationType.direct,
-        ),
-      );
+      container
+          .read(conversationRuntimeStoreProvider.notifier)
+          .upsert(
+            const ConversationRuntimeState(
+              chatId: chatId,
+              conversationType: ConversationType.direct,
+            ),
+          );
 
       // Create a dummy local file to upload
       final file = File('temp_test_image.jpg');
@@ -681,7 +836,9 @@ void main() {
 
       final store = container.read(messageStoreProvider(chatId).notifier);
 
-      print('[OBSERVED LOGS] Simulating a pending/failed media upload in message store...');
+      print(
+        '[OBSERVED LOGS] Simulating a pending/failed media upload in message store...',
+      );
       store.addOptimistic(
         MessageEntity.optimistic(
           clientMessageId: 'media_msg_123',
@@ -691,12 +848,12 @@ void main() {
           mediaType: 'image',
           senderClerkId: 'user1',
           receiverClerkId: 'clerk2',
-        ).copyWith(
-          mediaUploadState: MediaUploadState.uploading,
-        ),
+        ).copyWith(mediaUploadState: MediaUploadState.uploading),
       );
 
-      print('[OBSERVED LOGS] Simulating app entering foreground (triggering background recovery)...');
+      print(
+        '[OBSERVED LOGS] Simulating app entering foreground (triggering background recovery)...',
+      );
       await mediaService.recoverBackgroundUploads();
 
       // Allow background upload and encryption to run
@@ -708,22 +865,33 @@ void main() {
       }
 
       // Check if Cloudinary service was invoked
-      verify(() => mockCloudinaryService.uploadRaw(
-            any(),
-            onProgress: any(named: 'onProgress'),
-          )).called(1);
+      verify(
+        () => mockCloudinaryService.uploadRaw(
+          any(),
+          onProgress: any(named: 'onProgress'),
+        ),
+      ).called(1);
 
       // Verify that send_message was emitted over socket for the completed media message
       final emitted = socketService.emittedEvents;
       final mediaSend = emitted.firstWhere(
-        (e) => e.type == 'send_message' && e.data['message']['tempId'] == 'media_msg_123',
+        (e) =>
+            e.type == 'send_message' &&
+            e.data['message']['tempId'] == 'media_msg_123',
         orElse: () => SocketEvent(type: 'none', data: {}),
       );
 
       expect(mediaSend.type, 'send_message');
-      expect(mediaSend.data['message']['mediaUrl'], 'https://cloudinary.com/test.jpg');
-      print('[OBSERVED LOGS] Cloudinary upload finished. Encrypted URL sent over socket.');
-      print('[OBSERVED RESULT] PASS: Media upload background recovery and resumption verified.');
+      expect(
+        mediaSend.data['message']['mediaUrl'],
+        'https://cloudinary.com/test.jpg',
+      );
+      print(
+        '[OBSERVED LOGS] Cloudinary upload finished. Encrypted URL sent over socket.',
+      );
+      print(
+        '[OBSERVED RESULT] PASS: Media upload background recovery and resumption verified.',
+      );
     });
   });
 }
