@@ -29,7 +29,7 @@ export function ListRow({
     <div
       onClick={onClick}
       className={cn(
-        "flex w-full min-h-[52px] items-center px-4 py-3 gap-3",
+        "flex w-full min-h-[52px] items-center px-4 py-3 gap-3 min-w-0",
         "transition-colors duration-150 ease-in-out",
         onClick && "cursor-pointer hover:bg-secondary active:bg-secondary",
         className
@@ -52,8 +52,12 @@ export function ListRow({
           {label}
         </span>
         {secondary && (
-          <div className="text-sm text-muted-foreground leading-tight truncate">
-            {secondary}
+          <div className="text-sm text-muted-foreground leading-tight min-w-0 w-full overflow-hidden">
+            {typeof secondary === "string" ? (
+              <div className="truncate">{secondary}</div>
+            ) : (
+              secondary
+            )}
           </div>
         )}
       </div>

@@ -216,7 +216,7 @@ export default function FeedbackPage() {
           <button type="submit" className="hidden" />
         </form>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div className="flex flex-col gap-2">
             <label className="text-xs font-semibold uppercase tracking-widest text-muted-foreground ml-1">Status</label>
             <Select value={status || "all"} onValueChange={handleStatusFilterChange}>
@@ -279,11 +279,11 @@ export default function FeedbackPage() {
                   }
                   label={item.users?.name || item.users?.email || "Anonymous User"}
                   secondary={
-                    <div className="flex flex-col gap-1 mt-1">
-                      <p className="text-sm font-normal text-foreground/90 line-clamp-1 pr-6">{item.message}</p>
-                      <span className="text-xs text-muted-foreground">
+                    <div className="mt-1 space-y-1 block w-full overflow-hidden whitespace-normal">
+                      <p className="text-sm font-normal text-foreground/90 line-clamp-2 pr-6">{item.message}</p>
+                      <div className="text-xs text-muted-foreground">
                         Category: <span className="font-semibold text-foreground/75 uppercase">{item.type}</span> • {new Date(item.created_at).toLocaleDateString()}
-                      </span>
+                      </div>
                     </div>
                   }
                   trailing={
