@@ -41,6 +41,8 @@ import {
   getFullImageUrl,
   decryptFileBytes
 } from "@kovari/utils";
+import { hydrateMessageContent } from "@/services/messaging/messageHydrator";
+import { MESSAGE_MIGRATION_VERSION } from "@kovari/types";
 import Link from "next/link";
 import { useToast } from "@/shared/hooks/use-toast";
 import Picker from "@emoji-mart/react";
@@ -574,30 +576,27 @@ const MessageList = ({
             showSpinner = msg.status === "sending";
             showError = msg.status === "failed";
           } else {
-            let decryptedContent = "[Encrypted message]";
-            if (msg.plain_content) {
-              decryptedContent = msg.plain_content;
-            } else if (
-              msg.is_encrypted &&
-              msg.encrypted_content &&
-              msg.encryption_iv &&
-              msg.encryption_salt
-            ) {
-              try {
-                decryptedContent =
-                  decryptMessage(
-                    {
-                      encryptedContent: msg.encrypted_content,
-                      iv: msg.encryption_iv,
-                      salt: msg.encryption_salt,
-                    },
-                    sharedSecret,
-                  ) || "[Encrypted message]";
-              } catch {
-                decryptedContent = "[Failed to decrypt message]";
+            const hydration = hydrateMessageContent(
+              {
+                message_content: msg.message_content,
+                migration_version: msg.migration_version,
+                encrypted_content: msg.encrypted_content,
+                encryption_iv: msg.encryption_iv,
+                encryption_salt: msg.encryption_salt,
+                is_encrypted: msg.is_encrypted,
+              },
+              () => {
+                return decryptMessage(
+                  {
+                    encryptedContent: msg.encrypted_content,
+                    iv: msg.encryption_iv,
+                    salt: msg.encryption_salt,
+                  },
+                  sharedSecret
+                );
               }
-            }
-            content = decryptedContent;
+            );
+            content = hydration.content || (hydration.status === "failed" ? "[Failed to decrypt message]" : "[Encrypted message]");
           }
           return (
             <div role="listitem" key={msg.tempId || msg.id}>
@@ -1156,30 +1155,27 @@ const DirectChatPage = () => {
     if (msg.status === "sending" || msg.status === "failed") {
       return msg.plain_content || "";
     } else {
-      let decryptedContent = "[Encrypted message]";
-      if (msg.plain_content) {
-        decryptedContent = msg.plain_content;
-      } else if (
-        msg.is_encrypted &&
-        msg.encrypted_content &&
-        msg.encryption_iv &&
-        msg.encryption_salt
-      ) {
-        try {
-          decryptedContent =
-            decryptMessage(
-              {
-                encryptedContent: msg.encrypted_content,
-                iv: msg.encryption_iv,
-                salt: msg.encryption_salt,
-              },
-              sharedSecret,
-            ) || "[Encrypted message]";
-        } catch {
-          decryptedContent = "[Failed to decrypt message]";
+      const hydration = hydrateMessageContent(
+        {
+          message_content: msg.message_content,
+          migration_version: msg.migration_version,
+          encrypted_content: msg.encrypted_content,
+          encryption_iv: msg.encryption_iv,
+          encryption_salt: msg.encryption_salt,
+          is_encrypted: msg.is_encrypted,
+        },
+        () => {
+          return decryptMessage(
+            {
+              encryptedContent: msg.encrypted_content,
+              iv: msg.encryption_iv,
+              salt: msg.encryption_salt,
+            },
+            sharedSecret
+          );
         }
-      }
-      return decryptedContent;
+      );
+      return hydration.content || (hydration.status === "failed" ? "[Failed to decrypt message]" : "[Encrypted message]");
     }
   };
 
@@ -1444,30 +1440,27 @@ const DirectChatPage = () => {
             showSpinner = msg.status === "sending";
             showError = msg.status === "failed";
           } else {
-            let decryptedContent = "[Encrypted message]";
-            if (msg.plain_content) {
-              decryptedContent = msg.plain_content;
-            } else if (
-              msg.is_encrypted &&
-              msg.encrypted_content &&
-              msg.encryption_iv &&
-              msg.encryption_salt
-            ) {
-              try {
-                decryptedContent =
-                  decryptMessage(
-                    {
-                      encryptedContent: msg.encrypted_content,
-                      iv: msg.encryption_iv,
-                      salt: msg.encryption_salt,
-                    },
-                    sharedSecret,
-                  ) || "[Encrypted message]";
-              } catch {
-                decryptedContent = "[Failed to decrypt message]";
+            const hydration = hydrateMessageContent(
+              {
+                message_content: msg.message_content,
+                migration_version: msg.migration_version,
+                encrypted_content: msg.encrypted_content,
+                encryption_iv: msg.encryption_iv,
+                encryption_salt: msg.encryption_salt,
+                is_encrypted: msg.is_encrypted,
+              },
+              () => {
+                return decryptMessage(
+                  {
+                    encryptedContent: msg.encrypted_content,
+                    iv: msg.encryption_iv,
+                    salt: msg.encryption_salt,
+                  },
+                  sharedSecret
+                );
               }
-            }
-            content = decryptedContent;
+            );
+            content = hydration.content || (hydration.status === "failed" ? "[Failed to decrypt message]" : "[Encrypted message]");
           }
 
           result.push({

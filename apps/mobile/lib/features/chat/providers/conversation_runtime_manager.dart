@@ -3,10 +3,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mobile/core/security/decryption_worker.dart';
 import 'package:mobile/core/utils/app_logger.dart';
 import 'package:mobile/features/chat/models/message_entity.dart';
+import 'package:mobile/features/chat/services/message_hydrator.dart';
 import 'package:mobile/features/chat/providers/decryption_cache.dart';
 import 'package:mobile/features/chat/providers/message_store.dart';
 import 'package:mobile/core/providers/auth_provider.dart';
 import 'package:mobile/core/security/encryption_service.dart';
+import 'package:mobile/core/security/group_encryption_service.dart';
 
 class ConversationRuntimeManagerState {
   ConversationRuntimeManagerState({
@@ -83,7 +85,20 @@ class ConversationRuntimeManager
     // Filter out messages already in the decryption cache — no need to re-queue
     final cache = ref.read(messageRuntimeCacheProvider.notifier);
     final trulyNew = newMessages.where((m) {
-      if (!m.isEncrypted || m.encryptedContent == null) return false;
+      final decision = MessageHydrator.resolve(
+        messageContent: m.messageContent,
+        migrationVersion: m.migrationVersion,
+        encryptedContent: m.encryptedContent,
+        isEncrypted: m.isEncrypted,
+        iv: m.encryptionIv,
+        salt: m.encryptionSalt,
+      );
+      if (decision.action != HydrationAction.decrypt) {
+        if (decision.action == HydrationAction.usePlaintext && decision.messageContent != null) {
+          cache.insert(_chatId, m.id, decision.messageContent!, m.conversationSequence ?? 0);
+        }
+        return false;
+      }
       return cache.lookup(_chatId, m.id) == null;
     }).toList();
 
@@ -141,10 +156,19 @@ class ConversationRuntimeManager
     final List<DecryptionTask> tasksToQueue = [];
 
     for (final entity in entities) {
-      if (!entity.isEncrypted ||
-          entity.encryptedContent == null ||
-          entity.encryptionIv == null ||
-          entity.encryptionSalt == null) {
+      final decision = MessageHydrator.resolve(
+        messageContent: entity.messageContent,
+        migrationVersion: entity.migrationVersion,
+        encryptedContent: entity.encryptedContent,
+        isEncrypted: entity.isEncrypted,
+        iv: entity.encryptionIv,
+        salt: entity.encryptionSalt,
+      );
+
+      if (decision.action != HydrationAction.decrypt) {
+        if (decision.action == HydrationAction.usePlaintext && decision.messageContent != null) {
+          cache.insert(_chatId, entity.id, decision.messageContent!, entity.conversationSequence ?? 0);
+        }
         continue;
       }
 
@@ -223,12 +247,20 @@ Conversation: $_chatId
     MessageEntity entity, {
     String? partnerClerkId,
   }) async {
-    if (entity.text?.isNotEmpty ?? false) return entity;
-    if (!entity.isEncrypted ||
-        entity.encryptedContent == null ||
-        entity.encryptionIv == null ||
-        entity.encryptionSalt == null) {
-      return null;
+    final decision = MessageHydrator.resolve(
+      messageContent: entity.messageContent,
+      migrationVersion: entity.migrationVersion,
+      encryptedContent: entity.encryptedContent,
+      isEncrypted: entity.isEncrypted,
+      iv: entity.encryptionIv,
+      salt: entity.encryptionSalt,
+    );
+
+    if (decision.action != HydrationAction.decrypt) {
+      if (decision.action == HydrationAction.usePlaintext && decision.messageContent != null) {
+        return entity.copyWith(text: decision.messageContent, isEncrypted: false);
+      }
+      return entity;
     }
 
     final cache = ref.read(messageRuntimeCacheProvider.notifier);
@@ -248,17 +280,30 @@ Conversation: $_chatId
 
     try {
       final startTime = DateTime.now();
-      final decrypted = await EncryptionService().decryptMessage(
-        encryptedContent: entity.encryptedContent!,
-        iv: entity.encryptionIv!,
-        salt: entity.encryptionSalt!,
-        key: sharedSecret,
-      );
+      String decrypted;
+      
+      final isGroup = _chatId.split('_').length != 2;
+      if (isGroup) {
+        final groupSvc = ref.read(groupEncryptionServiceProvider);
+        decrypted = await groupSvc.decryptMessage(
+          groupId: _chatId,
+          encryptedContent: entity.encryptedContent!,
+          iv: entity.encryptionIv!,
+          salt: entity.encryptionSalt!,
+        );
+      } else {
+        decrypted = await EncryptionService().decryptMessage(
+          encryptedContent: entity.encryptedContent!,
+          iv: entity.encryptionIv!,
+          salt: entity.encryptionSalt!,
+          key: sharedSecret,
+        );
+      }
 
       final duration = DateTime.now().difference(startTime);
       cache.recordDecryption(duration);
 
-      if (decrypted != '[Failed to decrypt]') {
+      if (decrypted != '[Failed to decrypt]' && decrypted != '[Encrypted message]') {
         cache.insert(
           _chatId,
           entity.id,

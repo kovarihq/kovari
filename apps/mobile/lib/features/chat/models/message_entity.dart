@@ -38,6 +38,8 @@ class MessageEntity {
     this.uploadProgress = 0.0,
     this.senderClerkId,
     this.receiverClerkId,
+    this.messageContent,
+    this.migrationVersion,
   });
 
   /// Authoritative server-assigned ID. Null when optimistic.
@@ -55,6 +57,10 @@ class MessageEntity {
 
   /// Local (ephemeral) ID used for optimistic reconciliation.
   final String? clientMessageId;
+
+  /// Plaintext and migration version columns for Dual Read
+  final String? messageContent;
+  final int? migrationVersion;
 
   final DateTime createdAt;
 
@@ -109,6 +115,8 @@ class MessageEntity {
     MediaUploadState? mediaUploadState,
     double? uploadProgress,
     MessageDeliveryStatus? deliveryStatus,
+    String? messageContent,
+    int? migrationVersion,
   }) {
     return MessageEntity(
       id: id ?? this.id,
@@ -133,6 +141,8 @@ class MessageEntity {
       deliveryStatus: deliveryStatus ?? this.deliveryStatus,
       senderClerkId: senderClerkId ?? this.senderClerkId,
       receiverClerkId: receiverClerkId ?? this.receiverClerkId,
+      messageContent: messageContent ?? this.messageContent,
+      migrationVersion: migrationVersion ?? this.migrationVersion,
     );
   }
 
@@ -222,6 +232,8 @@ class MessageEntity {
       thumbnailUrl:
           data['thumbnailUrl'] as String? ?? data['thumbnail_url'] as String?,
       deliveryStatus: _deliveryStatusFromPayload(data, senderId, currentUserId),
+      messageContent: data['messageContent'] as String? ?? data['message_content'] as String?,
+      migrationVersion: data['migrationVersion'] as int? ?? data['migration_version'] as int?,
     );
   }
 
@@ -265,6 +277,8 @@ class MessageEntity {
       'blurHash': blurHash,
       'thumbnailUrl': thumbnailUrl,
       'deliveryStatus': deliveryStatus.name,
+      'messageContent': messageContent,
+      'migrationVersion': migrationVersion,
     };
   }
 }

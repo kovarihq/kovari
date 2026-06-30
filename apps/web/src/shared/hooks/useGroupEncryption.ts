@@ -5,6 +5,7 @@ import {
   decryptGroupMessage,
   type EncryptedMessage,
 } from "@kovari/utils";
+import { hydrateMessageContent } from "@/services/messaging/messageHydrator";
 
 export interface GroupEncryptionData {
   groupId: string;
@@ -93,13 +94,22 @@ export const useGroupEncryption = (groupId: string) => {
         return null;
       }
 
-      try {
-        return decryptGroupMessage(encryptedMessage, groupKey);
-      } catch (err) {
-        console.error("Error decrypting message:", err);
+      const hydration = hydrateMessageContent(
+        {
+          encrypted_content: encryptedMessage.encryptedContent,
+          encryption_iv: encryptedMessage.iv,
+          encryption_salt: encryptedMessage.salt,
+          is_encrypted: true,
+        },
+        () => decryptGroupMessage(encryptedMessage, groupKey)
+      );
+
+      if (hydration.status === "failed") {
         setError("Failed to decrypt message");
         return null;
       }
+
+      return hydration.content;
     },
     [groupKey],
   );

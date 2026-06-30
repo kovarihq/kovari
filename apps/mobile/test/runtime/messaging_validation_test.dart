@@ -22,6 +22,7 @@ import 'package:mobile/features/chat/providers/chat_mutation_service.dart';
 import 'package:mobile/features/chat/providers/conversation_runtime_store.dart';
 import 'package:mobile/features/chat/providers/conversation_store.dart';
 import 'package:mobile/features/chat/providers/message_store.dart';
+import 'package:mobile/features/chat/providers/conversation_runtime_manager.dart';
 import 'package:mobile/shared/models/kovari_user.dart';
 import 'package:mocktail/mocktail.dart';
 
@@ -588,6 +589,7 @@ void main() {
 
       // Trigger build() and wait for the async _hydrate() call to complete
       container.read(messageStoreProvider(chatId));
+      container.read(conversationRuntimeManagerProvider(chatId));
       await Future<void>.delayed(const Duration(milliseconds: 50));
 
       // Stub group decryption for userB and userC
@@ -637,8 +639,13 @@ void main() {
       final state = container.read(messageStoreProvider(chatId));
       expect(state.messages.containsKey('grp_msg_1'), true);
       expect(state.messages.containsKey('grp_msg_2'), true);
-      expect(state.messages['grp_msg_1']!.text, 'Decrypted: cipher_text_1');
-      expect(state.messages['grp_msg_2']!.text, 'Decrypted: cipher_text_2');
+
+      final decryptedList = container.read(decryptedMessagesProvider(chatId));
+      final grpMsg1 = decryptedList.firstWhere((m) => m.id == 'grp_msg_1');
+      final grpMsg2 = decryptedList.firstWhere((m) => m.id == 'grp_msg_2');
+
+      expect(grpMsg1.text, 'Decrypted: cipher_text_1');
+      expect(grpMsg2.text, 'Decrypted: cipher_text_2');
 
       print('[OBSERVED RESULT] PASS: Multi-user group E2EE decrypts and renders correctly.');
     });

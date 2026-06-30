@@ -466,15 +466,28 @@ export const useGroupChat = (groupId: string) => {
               const currentGroupKey = groupKeyRef.current;
               const decryptedGap = await Promise.all(
                 response.messages.map(async (m: any) => {
-                  let decryptedContent = m.text || m.content || "";
-                  if (m.isEncrypted && m.encryptedContent && currentGroupKey) {
-                    try {
-                      decryptedContent = decryptGroupMessage(
-                        { encryptedContent: m.encryptedContent, iv: m.iv, salt: m.salt },
+                  const hydration = hydrateMessageContent(
+                    {
+                      message_content: m.text ?? m.message_content ?? m.plain_content,
+                      migration_version: m.migration_version ?? m.migrationVersion,
+                      encrypted_content: m.encryptedContent || m.encrypted_content,
+                      encryption_iv: m.iv || m.encryption_iv,
+                      encryption_salt: m.salt || m.encryption_salt,
+                      is_encrypted: m.isEncrypted ?? m.is_encrypted,
+                    },
+                    () => {
+                      if (!currentGroupKey) return null;
+                      return decryptGroupMessage(
+                        {
+                          encryptedContent: m.encryptedContent || m.encrypted_content,
+                          iv: m.iv || m.encryption_iv,
+                          salt: m.salt || m.encryption_salt,
+                        },
                         currentGroupKey
-                      ) || "[Encrypted message]";
-                    } catch (e) {}
-                  }
+                      );
+                    }
+                  );
+                  let decryptedContent = hydration.content || (hydration.status === "failed" ? "[Failed to decrypt message]" : "[Encrypted message]");
                   return {
                     id: m.id,
                     content: decryptedContent,
