@@ -3,7 +3,7 @@ import { GroupContainer } from "@/components/ui/ios/GroupContainer";
 import { ListRow } from "@/components/ui/ios/ListRow";
 import { Skeleton } from "@/components/ui/skeleton";
 
-export default function BetaAnalyticsLoading() {
+export default function AnalyticsLoading() {
   return (
     <div className="max-w-full space-y-6 pb-8">
       {/* Header Loading State */}

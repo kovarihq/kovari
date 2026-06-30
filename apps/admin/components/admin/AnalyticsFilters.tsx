@@ -11,13 +11,13 @@ import {
 } from "@/components/ui/select";
 import { DateRange } from "@/src/types/analytics";
 
-interface BetaAnalyticsFiltersProps {
+interface AnalyticsFiltersProps {
   initialDateRange: DateRange;
 }
 
-export function BetaAnalyticsFilters({
+export function AnalyticsFilters({
   initialDateRange,
-}: BetaAnalyticsFiltersProps) {
+}: AnalyticsFiltersProps) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();

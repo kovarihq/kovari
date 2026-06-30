@@ -88,8 +88,8 @@ const menuItems = [
     icon: BarChart3,
   },
   {
-    title: "Beta Analytics",
-    url: "/beta-analytics",
+    title: "Analytics",
+    url: "/analytics",
     icon: TrendingUp,
   },
   {

@@ -25,6 +25,8 @@ export interface KpiStat {
   value: number;       // The aggregate metric count or calculated percentage
   change: number;      // Percentage point change compared to previous interval
   trend: TrendDirection;
+  today?: number;      // Daily growth/delta metric
+  thisWeek?: number;   // Weekly growth/delta metric
 }
 
 /**
@@ -43,9 +45,9 @@ export interface AnalyticsOverview {
 }
 
 /**
- * Contract mapping for the GET /api/admin/beta-analytics/overview endpoint.
+ * Contract mapping for the GET /api/admin/analytics/overview endpoint.
  */
-export interface BetaAnalyticsOverviewResponse {
+export interface AnalyticsOverviewResponse {
   totalUsers: KpiStat;
   activatedUsers: KpiStat;
   returnedUsers: KpiStat;
@@ -53,6 +55,38 @@ export interface BetaAnalyticsOverviewResponse {
   interestsSent: KpiStat;
   conversationsCreated: KpiStat;
   interestAcceptanceRate: KpiStat;
+  
+  // Public Launch KPI
+  signupsToday?: number;
+  signupsYesterday?: number;
+  signups7d?: number;
+  signups30d?: number;
+  
+  // First Stranger Conversations
+  firstStrangerConversationsToday?: number;
+  firstStrangerConversations7d?: number;
+  firstStrangerConversationsTotal?: number;
+
+  // Additional stats
+  messagesSent?: KpiStat;
+  
+  // Activation health check
+  profileCompletionRate?: number;
+  travelIntentionCompletionRate?: number;
+  missingProfilePictureCount?: number;
+  missingProfilePicturePct?: number;
+  missingTravelIntentionsCount?: number;
+  missingTravelIntentionsPct?: number;
+  fullyActivatedCount?: number;
+  fullyActivatedPct?: number;
+
+  // Placeholders
+  travelCirclesPlaceholder?: number;
+  emailSentPlaceholder?: number;
+  emailDeliveredPlaceholder?: number;
+  emailOpenedPlaceholder?: number;
+  emailClickedPlaceholder?: number;
+  emailBouncePlaceholder?: number;
 }
 
 /**
@@ -92,6 +126,11 @@ export interface TravelIntentionMetrics {
     date: string;                // Date format: "YYYY-MM-DD"
     count: number;
   }[];
+  upcomingTripsCount?: number;
+  soloTravelersCount?: number;
+  groupTravelersCount?: number;
+  soloPercentage?: number;
+  groupPercentage?: number;
 }
 
 /**
@@ -140,7 +179,8 @@ export interface InterestMetrics {
   acceptedInterests: number;
   pendingInterests: number;
   acceptanceRate: number;        // Total acceptance rate as float percentage
-  funnelSteps: FunnelStepItem[]; // 9-Stage funnel steps metrics
+  funnelSteps: FunnelStepItem[]; // Public Growth Funnel steps metrics
+  activationFunnelSteps?: FunnelStepItem[]; // User Activation Funnel steps metrics
 }
 
 /**
