@@ -6,6 +6,7 @@ import 'package:mobile/core/realtime/socket_state.dart';
 import 'package:mobile/core/runtime/mutation_journal.dart';
 import 'package:mobile/core/security/encryption_service.dart';
 import 'package:mobile/core/security/group_encryption_service.dart';
+import 'package:mobile/core/config/message_write_mode.dart';
 import 'package:mobile/core/utils/app_logger.dart';
 import 'package:mobile/features/chat/models/message_entity.dart';
 import 'package:mobile/features/chat/providers/conversation_runtime_store.dart';
@@ -236,42 +237,48 @@ class ChatMutationService {
     String? myClerkId = senderClerkId ?? senderId;
     String? partnerClerkId = receiverClerkId ?? receiverId;
 
-    // Apply encryption for direct chats (Phase 2 security parity)
-    if (text != null && text.isNotEmpty && receiverId != null) {
-      try {
-        // Identity Strategy: UUID:UUID for cross-platform parity with Web
-        // Since direct chatIds are already sorted(UUID1_UUID2), we just replace '_' with ':'
-        final sharedSecret = chatId.replaceAll('_', ':');
+    // Apply encryption only if not in plaintext mode
+    if (MessageWriteMode.current == WriteMode.plaintext) {
+      isEncrypted = false;
+      AppLogger.d('[ChatMutationService] Plaintext write mode active. Skipping E2EE.');
+    } else {
+      // Apply encryption for direct chats (Phase 2 security parity)
+      if (text != null && text.isNotEmpty && receiverId != null) {
+        try {
+          // Identity Strategy: UUID:UUID for cross-platform parity with Web
+          // Since direct chatIds are already sorted(UUID1_UUID2), we just replace '_' with ':'
+          final sharedSecret = chatId.replaceAll('_', ':');
 
-        final result = await EncryptionService().encryptMessage(
-          text,
-          sharedSecret,
-        );
-        encryptedContent = result['encryptedContent'];
-        iv = result['encryption_iv'];
-        salt = result['encryption_salt'];
-        isEncrypted = true;
-      } catch (e) {
-        AppLogger.e('[ChatMutationService] Encryption failed.', error: e);
-      }
-    }
-
-    // Apply encryption for group chats (Workstream 8 — Group E2EE parity)
-    if (text != null && text.isNotEmpty && receiverId == null) {
-      // No receiverId means this is a group chat send.
-      // Use the GroupEncryptionService to fetch/cache the shared group key.
-      try {
-        final groupSvc = _ref.read(groupEncryptionServiceProvider);
-        final encrypted = await groupSvc.encryptMessage(chatId, text);
-        if (encrypted != null) {
-          encryptedContent = encrypted['encryptedContent'];
-          iv = encrypted['encryption_iv'];
-          salt = encrypted['encryption_salt'];
+          final result = await EncryptionService().encryptMessage(
+            text,
+            sharedSecret,
+          );
+          encryptedContent = result['encryptedContent'];
+          iv = result['encryption_iv'];
+          salt = result['encryption_salt'];
           isEncrypted = true;
-          AppLogger.d('[ChatMutationService] Group message encrypted for $chatId');
+        } catch (e) {
+          AppLogger.e('[ChatMutationService] Encryption failed.', error: e);
         }
-      } catch (e) {
-        AppLogger.e('[ChatMutationService] Group encryption failed.', error: e);
+      }
+
+      // Apply encryption for group chats (Workstream 8 — Group E2EE parity)
+      if (text != null && text.isNotEmpty && receiverId == null) {
+        // No receiverId means this is a group chat send.
+        // Use the GroupEncryptionService to fetch/cache the shared group key.
+        try {
+          final groupSvc = _ref.read(groupEncryptionServiceProvider);
+          final encrypted = await groupSvc.encryptMessage(chatId, text);
+          if (encrypted != null) {
+            encryptedContent = encrypted['encryptedContent'];
+            iv = encrypted['encryption_iv'];
+            salt = encrypted['encryption_salt'];
+            isEncrypted = true;
+            AppLogger.d('[ChatMutationService] Group message encrypted for $chatId');
+          }
+        } catch (e) {
+          AppLogger.e('[ChatMutationService] Group encryption failed.', error: e);
+        }
       }
     }
 

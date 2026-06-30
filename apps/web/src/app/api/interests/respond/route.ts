@@ -434,7 +434,7 @@ export async function POST(request: NextRequest) {
           mediaUrl: "system",
           mediaType: "init",
           migrationVersion: MESSAGE_MIGRATION_VERSION.LEGACY_E2EE,
-        });
+        }, 'legacy');
 
         const { error: msgError } = await supabaseAdmin
           .from("direct_messages")

@@ -1,3 +1,5 @@
+import { OutgoingMessageContract } from './outgoing';
+
 export interface ServerToClientEvents {
   receive_message: (message: any) => void;
   user_online: (payload: { chatId: string; userId: string; supabaseId?: string | null }) => void;
@@ -39,13 +41,33 @@ export interface ServerToClientEvents {
   error: (payload: { message: string; code?: string }) => void;
 }
 
+/**
+ * Frozen outgoing socket message contract — Version 2.
+ * All fields explicitly present. No optional polymorphism.
+ * Media-only: messageContent = null, mediaUrl != null.
+ * Text-only: messageContent != null, mediaUrl = null.
+ * Caption: both non-null.
+ */
+export interface SocketMessageV2 extends OutgoingMessageContract {
+  id?: string;
+  tempId: string;
+  senderId: string;
+  receiverId?: string | null;      // null = group chat
+  senderClerkId?: string | null;
+  receiverClerkId?: string | null;
+  avatar?: string | null;
+  senderName?: string | null;
+  senderUsername?: string | null;
+  text?: string | null;
+}
+
 export interface ClientToServerEvents {
   join_chat: (payload: { chatId: string; lastKnownSequence?: number }) => void;
   leave_chat: (payload: { chatId: string }) => void;
   send_message: (
-    payload: { chatId: string; message: any },
-    callback?: (response: { 
-      status: string; 
+    payload: { chatId: string; message: SocketMessageV2 },
+    callback?: (response: {
+      status: string;
       error?: string;
       messageId?: string;
       conversationSequence?: number;

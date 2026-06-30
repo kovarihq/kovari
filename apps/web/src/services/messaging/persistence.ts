@@ -11,7 +11,10 @@ export interface MessageInsertInput {
   migrationVersion: typeof MESSAGE_MIGRATION_VERSION[keyof typeof MESSAGE_MIGRATION_VERSION];
 }
 
-export function buildMessageInsertPayload(input: MessageInsertInput) {
+export function buildMessageInsertPayload(
+  input: MessageInsertInput,
+  resolvedMode: 'legacy' | 'dual' | 'plaintext'
+) {
   if (process.env.NODE_ENV !== "production") {
     if (input.mediaUrl && input.text && input.text === input.mediaUrl) {
       throw new Error(
@@ -20,11 +23,13 @@ export function buildMessageInsertPayload(input: MessageInsertInput) {
     }
   }
 
+  const keepEncrypted = resolvedMode === 'legacy' || resolvedMode === 'dual';
+
   return {
-    encrypted_content: input.encryptedContent ?? null,
-    encryption_iv: input.iv ?? null,
-    encryption_salt: input.salt ?? null,
-    is_encrypted: !!input.isEncrypted,
+    encrypted_content: keepEncrypted ? (input.encryptedContent ?? null) : null,
+    encryption_iv: keepEncrypted ? (input.iv ?? null) : null,
+    encryption_salt: keepEncrypted ? (input.salt ?? null) : null,
+    is_encrypted: keepEncrypted && !!input.isEncrypted,
     message_content: input.text ?? null,
     migration_version: input.migrationVersion,
     media_url: input.mediaUrl ?? null,

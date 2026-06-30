@@ -2,6 +2,8 @@ import { getDirectChatId } from "@kovari/api/client";
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useUser } from "@clerk/nextjs";
 import { encryptMessage, decryptMessage } from "@kovari/utils";
+import { buildOutgoingMessage } from "@kovari/types";
+import { CLIENT_WRITE_MODE } from "@/config/messageWriteMode";
 import { hydrateMessageContent } from "@/services/messaging/messageHydrator";
 import { v4 as uuidv4 } from "uuid";
 import { getSocket } from "@/lib/socket";
@@ -285,23 +287,30 @@ export const useDirectChat = (
       setError(null);
       const tempId = uuidv4();
       const clientId = uuidv4();
-      const hasText = !!value.trim();
+
+      // build the outgoing message using buildOutgoingMessage
+      const outgoing = await buildOutgoingMessage(
+        { text: value.trim(), mediaUrl, mediaType, sharedSecret },
+        CLIENT_WRITE_MODE
+      );
+
       const optimisticMsg: DirectChatMessage = {
         id: tempId,
         tempId,
         sender_id: currentUserUuid,
         receiver_id: partnerUuid,
-        encrypted_content: "",
-        encryption_iv: "",
-        encryption_salt: "",
-        is_encrypted: hasText,
+        encrypted_content: outgoing.encryptedContent || "",
+        encryption_iv: outgoing.iv || "",
+        encryption_salt: outgoing.salt || "",
+        is_encrypted: outgoing.isEncrypted,
         created_at: new Date().toISOString(),
         status: "sending",
-        plain_content: value.trim(),
+        plain_content: value.trim() || undefined,
         client_id: clientId,
         mediaUrl,
         mediaType,
       };
+
       setSending(true);
       seenIdsRef.current.add(tempId); // Add tempId to seenIdsRef
       setMessages((prev) => [...prev, optimisticMsg]);
@@ -310,13 +319,6 @@ export const useDirectChat = (
       if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
       stopTyping();
       try {
-        let encrypted = { encryptedContent: "", iv: "", salt: "" };
-        let isEncrypted = false;
-        if (hasText) {
-          encrypted = await encryptMessage(value.trim(), sharedSecret);
-          isEncrypted = true;
-        }
-
         // [SOCKET INTEGRATION - Optimistic send via Socket]
         const chatId = getDirectChatId(currentUserUuid, partnerUuid);
         if (user?.id && chatId) {
@@ -329,24 +331,25 @@ export const useDirectChat = (
                     tempId,
                     senderId: currentUserUuid,
                     receiverId: partnerUuid,
-                    encryptedContent: isEncrypted ? encrypted.encryptedContent : "",
-                    iv: isEncrypted ? encrypted.iv : "",
-                    salt: isEncrypted ? encrypted.salt : "",
-                    mediaUrl: mediaUrl || undefined,
-                    mediaType: mediaType || undefined,
+                    messageContent: outgoing.messageContent,
+                    encryptedContent: outgoing.encryptedContent,
+                    iv: outgoing.iv,
+                    salt: outgoing.salt,
+                    mediaUrl: mediaUrl || null,
+                    mediaType: mediaType || null,
                     created_at: new Date().toISOString(),
-                    isEncrypted,
-                    text: hasText ? value.trim() : undefined,
+                    isEncrypted: outgoing.isEncrypted,
+                    migrationVersion: outgoing.migrationVersion,
                  }
               }, (ack) => {
                  if (ack?.status === "sent") {
-                    // This ack is for the socket server receiving the message, not necessarily persisted
+                    // This ack is for the socket server receiving the message, not persisted
                     // The message_persisted event will handle the final status update
                     setMessages((prev) => prev.map((m) => m.tempId === tempId ? { ...m, status: "sent" } : m));
                  }
               });
               setSending(false);
-              return; // Socket handled this and will persist. Client updates by polling or broadcast.
+              return; // Socket handled this and will persist.
             }
          }
 
@@ -356,14 +359,15 @@ export const useDirectChat = (
           credentials: "include",
           body: JSON.stringify({
             partnerId: partnerUuid,
-            encrypted_content: isEncrypted ? encrypted.encryptedContent : null,
-            encryption_iv: isEncrypted ? encrypted.iv : null,
-            encryption_salt: isEncrypted ? encrypted.salt : null,
-            is_encrypted: isEncrypted,
+            encrypted_content: outgoing.encryptedContent,
+            encryption_iv: outgoing.iv,
+            encryption_salt: outgoing.salt,
+            is_encrypted: outgoing.isEncrypted,
             clientId,
             media_url: mediaUrl ?? null,
             media_type: mediaType ?? null,
-            text: hasText ? value.trim() : null,
+            text: value.trim() || null,
+            migrationVersion: outgoing.migrationVersion,
           }),
         });
         if (!response.ok) {

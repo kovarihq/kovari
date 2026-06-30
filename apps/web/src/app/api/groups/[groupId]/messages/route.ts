@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
 import { createAdminSupabaseClient } from "@kovari/api";
 import { buildMessageInsertPayload } from "@/services/messaging/persistence";
+import { assertMessagePayload } from "@/services/messaging/assertMessagePayload";
 import { MESSAGE_MIGRATION_VERSION } from "@kovari/types";
 
 export async function GET(
@@ -238,20 +239,32 @@ export async function POST(
        (mediaUrl && mediaType)
     ) {
       const textVal = typeof text === "string" ? text : null;
-      const migrationVersion = (textVal !== null)
+      const outgoingContract = {
+        messageContent: textVal,
+        encryptedContent: typeof encryptedContent === "string" ? encryptedContent : null,
+        iv: typeof encryptionIv === "string" ? encryptionIv : null,
+        salt: typeof encryptionSalt === "string" ? encryptionSalt : null,
+        isEncrypted: Boolean(isEncrypted),
+        mediaUrl: typeof mediaUrl === "string" ? mediaUrl : null,
+        mediaType: mediaType === "image" || mediaType === "video" ? mediaType : null,
+      };
+
+      const resolvedMode = assertMessagePayload(outgoingContract);
+
+      const migrationVersion = body?.migrationVersion || (textVal !== null
         ? MESSAGE_MIGRATION_VERSION.DUAL_PERSISTENCE
-        : MESSAGE_MIGRATION_VERSION.LEGACY_E2EE;
+        : MESSAGE_MIGRATION_VERSION.LEGACY_E2EE);
 
       const basePayload = buildMessageInsertPayload({
-        encryptedContent,
-        iv: encryptionIv,
-        salt: encryptionSalt,
-        isEncrypted,
-        text: textVal,
-        mediaUrl,
-        mediaType,
+        encryptedContent: outgoingContract.encryptedContent,
+        iv: outgoingContract.iv,
+        salt: outgoingContract.salt,
+        isEncrypted: outgoingContract.isEncrypted,
+        text: outgoingContract.messageContent,
+        mediaUrl: outgoingContract.mediaUrl,
+        mediaType: outgoingContract.mediaType,
         migrationVersion,
-      });
+      }, resolvedMode);
 
       const messageData = {
         ...basePayload,

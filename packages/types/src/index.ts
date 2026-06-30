@@ -86,3 +86,4 @@ export interface SoloSession {
 export * from './notifications';
 export * from './socket';
 export * from './migration';
+export * from './outgoing';

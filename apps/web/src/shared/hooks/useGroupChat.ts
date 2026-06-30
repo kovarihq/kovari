@@ -2,6 +2,8 @@ import { getUserUuidByClerkId , getGroupChatId } from "@kovari/api/client";
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useUser } from "@clerk/nextjs";
 import { getSocket } from "@/lib/socket";
+import { buildOutgoingMessage } from "@kovari/types";
+import { CLIENT_WRITE_MODE } from "@/config/messageWriteMode";
 import {} from "@kovari/utils";
 import { useGroupEncryption } from "./useGroupEncryption";
 import {
@@ -295,14 +297,13 @@ export const useGroupChat = (groupId: string) => {
         if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
         stopTyping();
 
-        let encryptedMessage = null;
-        if (isEncryptionAvailable && content.trim()) {
-          encryptedMessage = await encryptMessage(content.trim());
-          if (!encryptedMessage) {
-            setError("Encryption failed: No encryption key or error in encryption.");
-            return;
-          }
-        }
+        // build the outgoing message using buildOutgoingMessage
+        // In plaintext mode sharedSecret is ignored; groupKey is passed through
+        // for legacy/dual fallback if the mode is ever reverted.
+        const outgoing = await buildOutgoingMessage(
+          { text: content.trim(), mediaUrl, mediaType, sharedSecret: groupKey || undefined },
+          CLIENT_WRITE_MODE
+        );
 
         // Socket.IO optimistic send
         if (user?.id && chatId) {
@@ -314,17 +315,18 @@ export const useGroupChat = (groupId: string) => {
               id: tempId,
               tempId,
               senderId: user.id,
-              encryptedContent: encryptedMessage?.encryptedContent || "",
-              iv: encryptedMessage?.iv || "",
-              salt: encryptedMessage?.salt || "",
-              mediaUrl: mediaUrl || undefined,
-              mediaType: mediaType || undefined,
+              messageContent: outgoing.messageContent,
+              encryptedContent: outgoing.encryptedContent,
+              iv: outgoing.iv,
+              salt: outgoing.salt,
+              mediaUrl: mediaUrl || null,
+              mediaType: mediaType || null,
               createdAt: new Date().toISOString(),
-              isEncrypted: !!encryptedMessage,
+              isEncrypted: outgoing.isEncrypted,
               senderName: user.fullName || user.firstName || "Unknown User",
               senderUsername: user.username || undefined,
               avatar: currentUserAvatar || undefined,
-              text: content.trim() || undefined,
+              migrationVersion: outgoing.migrationVersion,
             };
 
             // Add optimistic message with "sending" status
@@ -372,13 +374,14 @@ export const useGroupChat = (groupId: string) => {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             content: content.trim(),
-            encryptedContent: encryptedMessage?.encryptedContent || null,
-            encryptionIv: encryptedMessage?.iv || null,
-            encryptionSalt: encryptedMessage?.salt || null,
-            isEncrypted: !!encryptedMessage,
+            encryptedContent: outgoing.encryptedContent,
+            encryptionIv: outgoing.iv,
+            encryptionSalt: outgoing.salt,
+            isEncrypted: outgoing.isEncrypted,
             mediaUrl,
             mediaType,
             text: content.trim() || null,
+            migrationVersion: outgoing.migrationVersion,
           }),
         });
 

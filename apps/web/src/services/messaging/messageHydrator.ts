@@ -123,3 +123,13 @@ export function hydrateMessageContent(
     migrationVersion: version,
   };
 }
+/**
+ * Returns a point-in-time snapshot of hydrator read-mode distribution.
+ * Use alongside writeModeTelemetry.snapshot() to monitor migration progress.
+ *
+ * When legacyDecrypts approaches 0 and plaintextResolved dominates,
+ * the system is ready for Phase 8 crypto removal.
+ */
+export function hydratorSnapshot() {
+  return { ...stats };
+}

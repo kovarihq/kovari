@@ -17,6 +17,7 @@ import {
 
 import { sequenceManager } from "./sequences";
 import { buildMessageInsertPayload } from "../messaging/persistence";
+import { assertMessagePayload } from "../messaging/assertMessagePayload";
 import { MESSAGE_MIGRATION_VERSION } from "@kovari/types";
 
 export const registerSocketEvents = (
@@ -610,20 +611,32 @@ async function persistMessageToDb(
       conv = newConv;
     }
 
-    const migrationVersion = (message.text !== undefined && message.text !== null)
+    const outgoingContract = {
+      messageContent: message.messageContent ?? null,
+      encryptedContent: message.encryptedContent ?? null,
+      iv: message.iv ?? null,
+      salt: message.salt ?? null,
+      isEncrypted: !!message.isEncrypted,
+      mediaUrl: message.mediaUrl ?? null,
+      mediaType: message.mediaType ?? null,
+    };
+
+    const resolvedMode = assertMessagePayload(outgoingContract);
+
+    const migrationVersion = message.migrationVersion || (outgoingContract.messageContent !== null
       ? MESSAGE_MIGRATION_VERSION.DUAL_PERSISTENCE
-      : MESSAGE_MIGRATION_VERSION.LEGACY_E2EE;
+      : MESSAGE_MIGRATION_VERSION.LEGACY_E2EE);
 
     const insertPayload = buildMessageInsertPayload({
-      encryptedContent: message.encryptedContent,
-      iv: message.iv,
-      salt: message.salt,
-      isEncrypted: message.isEncrypted,
-      text: message.text,
-      mediaUrl: message.mediaUrl,
-      mediaType: message.mediaType,
+      encryptedContent: outgoingContract.encryptedContent,
+      iv: outgoingContract.iv,
+      salt: outgoingContract.salt,
+      isEncrypted: outgoingContract.isEncrypted,
+      text: outgoingContract.messageContent,
+      mediaUrl: outgoingContract.mediaUrl,
+      mediaType: outgoingContract.mediaType,
       migrationVersion,
-    });
+    }, resolvedMode);
 
     const { data, error } = await supabase
       .from("direct_messages")
@@ -644,20 +657,32 @@ async function persistMessageToDb(
     return data;
   } else {
     // It's a group chat, the chatId is the groupId
-    const migrationVersion = (message.text !== undefined && message.text !== null)
+    const outgoingContract = {
+      messageContent: message.messageContent ?? null,
+      encryptedContent: message.encryptedContent ?? null,
+      iv: message.iv ?? null,
+      salt: message.salt ?? null,
+      isEncrypted: !!message.isEncrypted,
+      mediaUrl: message.mediaUrl ?? null,
+      mediaType: message.mediaType ?? null,
+    };
+
+    const resolvedMode = assertMessagePayload(outgoingContract);
+
+    const migrationVersion = message.migrationVersion || (outgoingContract.messageContent !== null
       ? MESSAGE_MIGRATION_VERSION.DUAL_PERSISTENCE
-      : MESSAGE_MIGRATION_VERSION.LEGACY_E2EE;
+      : MESSAGE_MIGRATION_VERSION.LEGACY_E2EE);
 
     const insertPayload = buildMessageInsertPayload({
-      encryptedContent: message.encryptedContent,
-      iv: message.iv,
-      salt: message.salt,
-      isEncrypted: message.isEncrypted ?? true,
-      text: message.text,
-      mediaUrl: message.mediaUrl,
-      mediaType: message.mediaType,
+      encryptedContent: outgoingContract.encryptedContent,
+      iv: outgoingContract.iv,
+      salt: outgoingContract.salt,
+      isEncrypted: outgoingContract.isEncrypted,
+      text: outgoingContract.messageContent,
+      mediaUrl: outgoingContract.mediaUrl,
+      mediaType: outgoingContract.mediaType,
       migrationVersion,
-    });
+    }, resolvedMode);
 
     const { data, error } = await supabase
       .from("group_messages")

@@ -3,6 +3,7 @@ import { createAdminSupabaseClient } from "@kovari/api";
 import { getAuthenticatedUser } from "@/lib/auth/get-user";
 import { assertUUID } from "@/lib/validation/uuid";
 import { buildMessageInsertPayload } from "@/services/messaging/persistence";
+import { assertMessagePayload } from "@/services/messaging/assertMessagePayload";
 import { MESSAGE_MIGRATION_VERSION } from "@kovari/types";
 
 const DEFAULT_LIMIT = 30;
@@ -163,20 +164,32 @@ export async function POST(req: NextRequest) {
     }
 
     const textVal = typeof body?.text === "string" ? body.text : null;
-    const migrationVersion = (textVal !== null)
-      ? MESSAGE_MIGRATION_VERSION.DUAL_PERSISTENCE
-      : MESSAGE_MIGRATION_VERSION.LEGACY_E2EE;
-
-    const basePayload = buildMessageInsertPayload({
+    const outgoingContract = {
+      messageContent: textVal,
       encryptedContent: typeof body?.encrypted_content === "string" ? body.encrypted_content : null,
       iv: typeof body?.encryption_iv === "string" ? body.encryption_iv : null,
       salt: typeof body?.encryption_salt === "string" ? body.encryption_salt : null,
       isEncrypted: Boolean(body?.is_encrypted),
-      text: textVal,
       mediaUrl: typeof body?.media_url === "string" ? body.media_url : null,
       mediaType: body?.media_type === "image" || body?.media_type === "video" ? body.media_type : null,
+    };
+
+    const resolvedMode = assertMessagePayload(outgoingContract);
+
+    const migrationVersion = body?.migrationVersion || (textVal !== null
+      ? MESSAGE_MIGRATION_VERSION.DUAL_PERSISTENCE
+      : MESSAGE_MIGRATION_VERSION.LEGACY_E2EE);
+
+    const basePayload = buildMessageInsertPayload({
+      encryptedContent: outgoingContract.encryptedContent,
+      iv: outgoingContract.iv,
+      salt: outgoingContract.salt,
+      isEncrypted: outgoingContract.isEncrypted,
+      text: outgoingContract.messageContent,
+      mediaUrl: outgoingContract.mediaUrl,
+      mediaType: outgoingContract.mediaType,
       migrationVersion,
-    });
+    }, resolvedMode);
 
     const insertPayload = {
       ...basePayload,
