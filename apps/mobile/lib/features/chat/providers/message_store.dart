@@ -6,8 +6,7 @@ import 'package:mobile/core/network/api_client.dart';
 import 'package:mobile/core/providers/auth_provider.dart';
 import 'package:mobile/core/realtime/socket_service.dart';
 import 'package:mobile/core/runtime/mutation_journal.dart';
-import 'package:mobile/core/security/encryption_service.dart';
-import 'package:mobile/core/security/group_encryption_service.dart';
+
 import 'package:mobile/core/telemetry/messaging_telemetry_service.dart';
 import 'package:mobile/core/utils/app_logger.dart';
 import 'package:mobile/features/chat/models/message_entity.dart';
@@ -304,13 +303,7 @@ class MessageStore extends Notifier<ConversationMessageState> {
           baseParams: {'limit': _kHotWindowSize},
           partnerClerkId: null,
           myUserId: userId,
-          decryptCallback: (entity) async {
-            final manager = ref.read(
-              conversationRuntimeManagerProvider(_chatId).notifier,
-            );
-            final res = await manager.decryptMessageDirect(entity);
-            return res?.text ?? '';
-          },
+          decryptCallback: null,
         );
       } else {
         final partnerId = directChatPartnerId(
@@ -326,16 +319,7 @@ class MessageStore extends Notifier<ConversationMessageState> {
             baseParams: {'partnerId': partnerId, 'limit': _kHotWindowSize},
             partnerClerkId: partnerClerkId,
             myUserId: userId,
-            decryptCallback: (entity) async {
-              final manager = ref.read(
-                conversationRuntimeManagerProvider(_chatId).notifier,
-              );
-              final res = await manager.decryptMessageDirect(
-                entity,
-                partnerClerkId: partnerClerkId,
-              );
-              return res?.text ?? '';
-            },
+            decryptCallback: null,
           );
         }
       }

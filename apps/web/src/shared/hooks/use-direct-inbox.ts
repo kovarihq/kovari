@@ -1,5 +1,4 @@
 import { useEffect, useState, useRef, useCallback } from "react";
-import { decryptMessage } from "@kovari/utils";
 import { hydrateMessageContent } from "@/services/messaging/messageHydrator";
 import { MESSAGE_MIGRATION_VERSION } from "@kovari/types";
 import { useUser } from "@clerk/nextjs";
@@ -72,39 +71,14 @@ export const useDirectInbox = (
       const isMe = senderId === currentUserUuid;
       const partnerId = isMe ? receiverId : senderId;
 
-      const myClerkId = user?.id;
-      const partnerClerkId = isMe ? incomingMsg.receiverClerkId : incomingMsg.senderClerkId;
-
-      const uuidSecret = (currentUserUuid && partnerId)
-        ? (currentUserUuid < partnerId ? `${currentUserUuid}:${partnerId}` : `${partnerId}:${currentUserUuid}`)
-        : "";
-
-      const clerkSecret = (myClerkId && partnerClerkId)
-        ? (myClerkId < partnerClerkId ? `${myClerkId}:${partnerClerkId}` : `${partnerClerkId}:${myClerkId}`)
-        : "";
-
       const hydration = hydrateMessageContent(
         {
           message_content: incomingMsg.text ?? incomingMsg.message_content ?? incomingMsg.plain_content,
           migration_version: incomingMsg.migration_version ?? incomingMsg.migrationVersion,
-          encrypted_content: incomingMsg.encryptedContent || incomingMsg.encrypted_content,
-          encryption_iv: incomingMsg.iv || incomingMsg.encryption_iv,
-          encryption_salt: incomingMsg.salt || incomingMsg.encryption_salt,
-          is_encrypted: incomingMsg.isEncrypted ?? incomingMsg.is_encrypted,
-        },
-        () => {
-          const encryptedPayload = {
-            encryptedContent: incomingMsg.encryptedContent,
-            iv: incomingMsg.iv,
-            salt: incomingMsg.salt,
-          };
-          return (uuidSecret ? decryptMessage(encryptedPayload, uuidSecret) : "") ||
-                 (clerkSecret ? decryptMessage(encryptedPayload, clerkSecret) : "") ||
-                 null;
         }
       );
 
-      let messageText = hydration.content || (hydration.status === "failed" ? "[Failed to decrypt message]" : "[Encrypted message]");
+      let messageText = hydration.content || "[Empty message]";
 
       // Emit delivery ack for messages from others
       if (!isMe && msgId) {
@@ -200,18 +174,7 @@ export const useDirectInbox = (
         // Track latest message per partner for inbox preview
         if (!latestMsgAt[partnerId] || msg.created_at > latestMsgAt[partnerId]) {
           latestMsgAt[partnerId] = msg.created_at;
-          const myClerkId = user?.id;
-          const partnerClerkId = msg.sender_id === currentUserUuid ? msg.receiver_clerk_id : msg.sender_clerk_id;
-
-          const uuidSecret = (currentUserUuid && partnerId)
-            ? (currentUserUuid < partnerId ? `${currentUserUuid}:${partnerId}` : `${partnerId}:${currentUserUuid}`)
-            : "";
-
-          const clerkSecret = (myClerkId && partnerClerkId)
-            ? (myClerkId < partnerClerkId ? `${myClerkId}:${partnerClerkId}` : `${partnerClerkId}:${myClerkId}`)
-            : "";
-
-          let lastMessage = "[Encrypted message]";
+          let lastMessage = "";
           let lastMediaType: "image" | "video" | "init" | undefined = undefined;
 
           if (msg.media_url && msg.media_type) {
@@ -222,23 +185,9 @@ export const useDirectInbox = (
               {
                 message_content: msg.message_content,
                 migration_version: msg.migration_version,
-                encrypted_content: msg.encrypted_content,
-                encryption_iv: msg.encryption_iv,
-                encryption_salt: msg.encryption_salt,
-                is_encrypted: msg.is_encrypted,
-              },
-              () => {
-                const encryptedPayload = {
-                  encryptedContent: msg.encrypted_content,
-                  iv: msg.encryption_iv,
-                  salt: msg.encryption_salt,
-                };
-                return (uuidSecret ? decryptMessage(encryptedPayload, uuidSecret) : "") ||
-                       (clerkSecret ? decryptMessage(encryptedPayload, clerkSecret) : "") ||
-                       null;
               }
             );
-            lastMessage = hydration.content || (hydration.status === "failed" ? "[Failed to decrypt message]" : "[Encrypted message]");
+            lastMessage = hydration.content || "[Empty message]";
           }
 
           map.set(partnerId, {

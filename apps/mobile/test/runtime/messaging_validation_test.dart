@@ -23,6 +23,8 @@ import 'package:mobile/features/chat/providers/conversation_runtime_store.dart';
 import 'package:mobile/features/chat/providers/conversation_store.dart';
 import 'package:mobile/features/chat/providers/message_store.dart';
 import 'package:mobile/features/chat/providers/conversation_runtime_manager.dart';
+import 'package:mobile/features/chat/models/pending_upload.dart';
+import 'package:mobile/features/chat/providers/pending_upload_store.dart';
 import 'package:mobile/shared/models/kovari_user.dart';
 import 'package:mobile/features/chat/cache/conversation_cache_models.dart';
 import 'package:mobile/features/chat/cache/conversation_cache_repository.dart';
@@ -45,6 +47,8 @@ class MockGroupEncryptionService extends Mock
     implements GroupEncryptionService {}
 
 class MockCloudinaryService extends Mock implements CloudinaryService {}
+
+class MockPendingUploadStore extends Mock implements PendingUploadStore {}
 
 class MockConversationCacheRepository extends Mock
     implements ConversationCacheRepository {}
@@ -121,6 +125,34 @@ class FakeConversationStore extends Notifier<Map<String, ConversationEntity>>
     required bool isOnline,
     DateTime? lastSeen,
   }) {}
+}
+
+// ─────────────────────────────────────────────
+// Fake PendingUploadStore (no Hive)
+// ─────────────────────────────────────────────
+class FakePendingUploadStore extends ChangeNotifier implements PendingUploadStore {
+  final Map<String, PendingUpload> _uploads = {};
+
+  @override
+  bool get isInitialized => true;
+
+  @override
+  List<PendingUpload> get allPending => _uploads.values.toList();
+
+  @override
+  Future<void> save(PendingUpload upload) async {
+    _uploads[upload.id] = upload;
+    notifyListeners();
+  }
+
+  @override
+  Future<void> delete(String id) async {
+    _uploads.remove(id);
+    notifyListeners();
+  }
+
+  @override
+  PendingUpload? get(String id) => _uploads[id];
 }
 
 // ─────────────────────────────────────────────
@@ -250,7 +282,38 @@ void main() {
           },
         );
 
-    // Stub Cloudinary uploadRaw to return a fake secure url
+    // Stub Cloudinary uploadImage (used in plaintext mode for images)
+    when(
+      () => mockCloudinaryService.uploadImage(
+        any(),
+        folder: any(named: 'folder'),
+        cancelToken: any(named: 'cancelToken'),
+      ),
+    ).thenAnswer(
+      (_) async => <String, dynamic>{
+        'secure_url': 'https://cloudinary.com/test.jpg',
+        'public_id': 'test_public_id',
+        'resource_type': 'image',
+        'bytes': 1024,
+      },
+    );
+
+    // Stub Cloudinary uploadVideo (used in plaintext mode for videos)
+    when(
+      () => mockCloudinaryService.uploadVideo(
+        any(),
+        onProgress: any(named: 'onProgress'),
+      ),
+    ).thenAnswer(
+      (_) async => <String, dynamic>{
+        'secure_url': 'https://cloudinary.com/test.mp4',
+        'public_id': 'test_video_id',
+        'resource_type': 'video',
+        'bytes': 2048,
+      },
+    );
+
+    // Stub Cloudinary uploadRaw (used in legacy/dual E2EE mode)
     when(
       () => mockCloudinaryService.uploadRaw(
         any(),
@@ -258,7 +321,10 @@ void main() {
       ),
     ).thenAnswer(
       (_) async => <String, dynamic>{
-        'secure_url': 'https://cloudinary.com/test.jpg',
+        'secure_url': 'https://cloudinary.com/test.enc',
+        'public_id': 'test_raw_id',
+        'resource_type': 'raw',
+        'bytes': 512,
       },
     );
 
@@ -297,6 +363,8 @@ void main() {
         mutationJournalProvider.overrideWith((_) => fakeMutationJournal),
         // Fake ConversationStore — avoids ref-after-dispose on inbox update
         conversationStoreProvider.overrideWith(() => FakeConversationStore()),
+        // Fake PendingUploadStore — no Hive initialization needed
+        pendingUploadStoreProvider.overrideWith((_) => FakePendingUploadStore()),
         authProvider.overrideWith(() => AuthNotifierFake()),
         conversationCacheRepositoryProvider.overrideWith((ref, userId) {
           final mock = MockConversationCacheRepository();
@@ -758,11 +826,9 @@ void main() {
             'groupId': chatId,
             'id': 'grp_msg_1',
             'senderId': 'userB',
-            'text': 'Encrypted text 1',
-            'encryptedContent': 'cipher_text_1',
-            'iv': 'iv_1',
-            'salt': 'salt_1',
-            'isEncrypted': true,
+            'text': 'Plain text 1',
+            'isEncrypted': false,
+            'migrationVersion': 2,
             'conversationSequence': 1,
           },
         ),
@@ -775,11 +841,9 @@ void main() {
             'groupId': chatId,
             'id': 'grp_msg_2',
             'senderId': 'userC',
-            'text': 'Encrypted text 2',
-            'encryptedContent': 'cipher_text_2',
-            'iv': 'iv_2',
-            'salt': 'salt_2',
-            'isEncrypted': true,
+            'text': 'Plain text 2',
+            'isEncrypted': false,
+            'migrationVersion': 2,
             'conversationSequence': 2,
           },
         ),
@@ -795,8 +859,8 @@ void main() {
       final grpMsg1 = decryptedList.firstWhere((m) => m.id == 'grp_msg_1');
       final grpMsg2 = decryptedList.firstWhere((m) => m.id == 'grp_msg_2');
 
-      expect(grpMsg1.text, 'Decrypted: cipher_text_1');
-      expect(grpMsg2.text, 'Decrypted: cipher_text_2');
+      expect(grpMsg1.text, 'Plain text 1');
+      expect(grpMsg2.text, 'Plain text 2');
 
       print(
         '[OBSERVED RESULT] PASS: Multi-user group E2EE decrypts and renders correctly.',
@@ -804,17 +868,18 @@ void main() {
     });
 
     // ─────────────────────────────────────────────
-    // Test 7: Media Upload Background Resumption
+    // Test 7: Media Upload Background Resumption (Plaintext Mode)
     // ─────────────────────────────────────────────
     test('7. Media Upload Background Resumption Validation', () async {
       print('\n==================================================');
-      print('TEST SETUP: Media Upload & Background Recovery');
+      print('TEST SETUP: Media Upload & Background Recovery (Plaintext)');
       print('==================================================');
 
       const chatId = 'user1_user2';
       final mediaService = container.read(chatMediaServiceProvider);
       final socketService =
           container.read(socketServiceProvider.notifier) as SocketServiceMock;
+      final pendingUploadStore = container.read(pendingUploadStoreProvider) as FakePendingUploadStore;
 
       // Seed runtime store so we have the conversation
       container
@@ -836,12 +901,25 @@ void main() {
 
       final store = container.read(messageStoreProvider(chatId).notifier);
 
+      // Seed a PendingUpload into the store so recoverBackgroundUploads has something to process
+      const clientMessageId = 'media_msg_123';
+      await pendingUploadStore.save(
+        PendingUpload(
+          id: clientMessageId,
+          conversationId: chatId,
+          localFilePath: file.path,
+          mimeType: 'image/jpeg',
+          mediaType: 'image',
+          createdAt: DateTime.now(),
+        ),
+      );
+
       print(
         '[OBSERVED LOGS] Simulating a pending/failed media upload in message store...',
       );
       store.addOptimistic(
         MessageEntity.optimistic(
-          clientMessageId: 'media_msg_123',
+          clientMessageId: clientMessageId,
           chatId: chatId,
           senderId: 'uuid-user-1',
           localFilePath: file.path,
@@ -856,19 +934,20 @@ void main() {
       );
       await mediaService.recoverBackgroundUploads();
 
-      // Allow background upload and encryption to run
-      await Future<void>.delayed(const Duration(milliseconds: 150));
+      // Allow background upload to run (plaintext — no crypto delay)
+      await Future<void>.delayed(const Duration(milliseconds: 200));
 
       // Clean up the dummy local file
       if (await file.exists()) {
         await file.delete();
       }
 
-      // Check if Cloudinary service was invoked
+      // In plaintext mode, uploadImage (not uploadRaw) is called for images
       verify(
-        () => mockCloudinaryService.uploadRaw(
+        () => mockCloudinaryService.uploadImage(
           any(),
-          onProgress: any(named: 'onProgress'),
+          folder: any(named: 'folder'),
+          cancelToken: any(named: 'cancelToken'),
         ),
       ).called(1);
 
@@ -877,20 +956,22 @@ void main() {
       final mediaSend = emitted.firstWhere(
         (e) =>
             e.type == 'send_message' &&
-            e.data['message']['tempId'] == 'media_msg_123',
+            e.data['message']['tempId'] == clientMessageId,
         orElse: () => SocketEvent(type: 'none', data: {}),
       );
 
-      expect(mediaSend.type, 'send_message');
+      expect(mediaSend.type, 'send_message',
+          reason: 'send_message socket event should be emitted after upload');
       expect(
         mediaSend.data['message']['mediaUrl'],
         'https://cloudinary.com/test.jpg',
+        reason: 'Media URL from Cloudinary should be in socket payload',
       );
       print(
-        '[OBSERVED LOGS] Cloudinary upload finished. Encrypted URL sent over socket.',
+        '[OBSERVED LOGS] Cloudinary upload finished. Plaintext URL sent over socket.',
       );
       print(
-        '[OBSERVED RESULT] PASS: Media upload background recovery and resumption verified.',
+        '[OBSERVED RESULT] PASS: Media upload background recovery verified (plaintext mode).',
       );
     });
   });

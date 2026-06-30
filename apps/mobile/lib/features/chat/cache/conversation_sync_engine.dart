@@ -15,8 +15,8 @@ class ConversationSyncEngine {
   ConversationSyncEngine({
     required ConversationCacheRepository cacheRepository,
     required ConversationRepository remoteRepository,
-  })  : _cacheRepository = cacheRepository,
-        _remoteRepository = remoteRepository;
+  }) : _cacheRepository = cacheRepository,
+       _remoteRepository = remoteRepository;
 
   Future<List<CachedMessage>> loadCachedMessages(String chatId) async {
     final msgs = _cacheRepository.getMessages(chatId);
@@ -34,7 +34,7 @@ class ConversationSyncEngine {
     required Map<String, dynamic> baseParams,
     required String? partnerClerkId,
     required String? myUserId,
-    required Future<String> Function(MessageEntity) decryptCallback,
+    required Future<String> Function(MessageEntity)? decryptCallback,
   }) async {
     final stopwatch = Stopwatch()..start();
     MetricsService.record(DeltaSyncStartedEvent(chatId));
@@ -45,7 +45,9 @@ class ConversationSyncEngine {
     final params = Map<String, dynamic>.from(baseParams)
       ..['afterSequence'] = lastSeq;
 
-    AppLogger.d('[ConversationSyncEngine] Syncing delta for $chatId from sequence $lastSeq');
+    AppLogger.d(
+      '[ConversationSyncEngine] Syncing delta for $chatId from sequence $lastSeq',
+    );
 
     final response = await _remoteRepository.fetchMessages(
       path: path,
@@ -53,13 +55,17 @@ class ConversationSyncEngine {
     );
 
     if (response == null) {
-      MetricsService.record(DeltaSyncFinishedEvent(chatId, 0, stopwatch.elapsed));
+      MetricsService.record(
+        DeltaSyncFinishedEvent(chatId, 0, stopwatch.elapsed),
+      );
       return;
     }
 
     final rawMessages = response['messages'] as List<dynamic>? ?? [];
     if (rawMessages.isEmpty) {
-      MetricsService.record(DeltaSyncFinishedEvent(chatId, 0, stopwatch.elapsed));
+      MetricsService.record(
+        DeltaSyncFinishedEvent(chatId, 0, stopwatch.elapsed),
+      );
       return;
     }
 
@@ -69,8 +75,12 @@ class ConversationSyncEngine {
     for (final raw in rawMessages) {
       if (raw is! Map) continue;
       final data = Map<String, dynamic>.from(raw);
-      final entity = MessageEntity.fromSocket(data, chatId, currentUserId: myUserId);
-      
+      final entity = MessageEntity.fromSocket(
+        data,
+        chatId,
+        currentUserId: myUserId,
+      );
+
       final seq = entity.conversationSequence ?? 0;
       if (seq > highestSeq) {
         highestSeq = seq;
@@ -78,7 +88,9 @@ class ConversationSyncEngine {
 
       // Check sequence drift assertions
       if (meta != null && seq <= meta.lastSequence) {
-        AppLogger.w('[SyncEngine] Out-of-order sequence detected: $seq <= ${meta.lastSequence}. Reconciling.');
+        AppLogger.w(
+          '[SyncEngine] Out-of-order sequence detected: $seq <= ${meta.lastSequence}. Reconciling.',
+        );
       }
 
       final decision = MessageHydrator.resolve(
@@ -91,26 +103,34 @@ class ConversationSyncEngine {
       );
 
       String finalContent = '';
-      if (decision.action == HydrationAction.usePlaintext && decision.messageContent != null) {
+      if (decision.action == HydrationAction.usePlaintext &&
+          decision.messageContent != null) {
         finalContent = decision.messageContent!;
       } else if (decision.action == HydrationAction.decrypt) {
-        finalContent = await decryptCallback(entity);
+        if (decryptCallback != null) {
+          finalContent = await decryptCallback(entity);
+        } else {
+          finalContent = entity.text ?? '';
+        }
       } else {
         finalContent = entity.text ?? '';
       }
 
-      newCachedMsgs.add(CachedMessage(
-        id: entity.id,
-        conversationId: chatId,
-        sequence: seq,
-        text: finalContent,
-        senderId: entity.senderId,
-        createdAt: entity.createdAt,
-        mediaUrl: entity.mediaUrl,
-        mediaType: entity.mediaType,
-        status: entity.deliveryStatus.name,
-        messageMigrationVersion: entity.migrationVersion ?? MessageHydrator.legacy,
-      ));
+      newCachedMsgs.add(
+        CachedMessage(
+          id: entity.id,
+          conversationId: chatId,
+          sequence: seq,
+          text: finalContent,
+          senderId: entity.senderId,
+          createdAt: entity.createdAt,
+          mediaUrl: entity.mediaUrl,
+          mediaType: entity.mediaType,
+          status: entity.deliveryStatus.name,
+          messageMigrationVersion:
+              entity.migrationVersion ?? MessageHydrator.legacy,
+        ),
+      );
     }
 
     if (newCachedMsgs.isNotEmpty) {
@@ -146,11 +166,9 @@ class ConversationSyncEngine {
       await _cacheRepository.saveIndex(index);
     }
 
-    MetricsService.record(DeltaSyncFinishedEvent(
-      chatId,
-      newCachedMsgs.length,
-      stopwatch.elapsed,
-    ));
+    MetricsService.record(
+      DeltaSyncFinishedEvent(chatId, newCachedMsgs.length, stopwatch.elapsed),
+    );
   }
 
   Future<CachedMessage> processRealtimeMessage({
@@ -159,7 +177,11 @@ class ConversationSyncEngine {
     required String? myUserId,
     required Future<String> Function(MessageEntity) decryptCallback,
   }) async {
-    final entity = MessageEntity.fromSocket(data, chatId, currentUserId: myUserId);
+    final entity = MessageEntity.fromSocket(
+      data,
+      chatId,
+      currentUserId: myUserId,
+    );
     final seq = entity.conversationSequence ?? 0;
 
     final decision = MessageHydrator.resolve(
@@ -172,7 +194,8 @@ class ConversationSyncEngine {
     );
 
     String finalContent = '';
-    if (decision.action == HydrationAction.usePlaintext && decision.messageContent != null) {
+    if (decision.action == HydrationAction.usePlaintext &&
+        decision.messageContent != null) {
       finalContent = decision.messageContent!;
     } else if (decision.action == HydrationAction.decrypt) {
       finalContent = await decryptCallback(entity);
@@ -190,7 +213,8 @@ class ConversationSyncEngine {
       mediaUrl: entity.mediaUrl,
       mediaType: entity.mediaType,
       status: entity.deliveryStatus.name,
-      messageMigrationVersion: entity.migrationVersion ?? MessageHydrator.legacy,
+      messageMigrationVersion:
+          entity.migrationVersion ?? MessageHydrator.legacy,
     );
 
     final existing = _cacheRepository.getMessages(chatId);
@@ -201,7 +225,9 @@ class ConversationSyncEngine {
     await _cacheRepository.saveMessages(mergeResult.messages);
 
     final meta = _cacheRepository.getMetadata(chatId);
-    final highestSeq = seq > (meta?.lastSequence ?? 0) ? seq : (meta?.lastSequence ?? 0);
+    final highestSeq = seq > (meta?.lastSequence ?? 0)
+        ? seq
+        : (meta?.lastSequence ?? 0);
 
     final nextMeta = ConversationMetadata(
       conversationId: chatId,

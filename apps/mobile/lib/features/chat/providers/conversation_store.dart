@@ -6,7 +6,6 @@ import 'package:mobile/core/providers/auth_provider.dart';
 import 'package:mobile/core/realtime/socket_service.dart';
 import 'package:mobile/core/services/fcm_service.dart';
 import 'package:mobile/core/utils/app_logger.dart';
-import 'package:mobile/core/security/encryption_service.dart';
 import 'package:mobile/features/chat/models/conversation_entity.dart';
 import 'package:mobile/features/chat/models/message_entity.dart';
 import 'package:mobile/features/chat/providers/chat_runtime_providers.dart';

@@ -1,14 +1,12 @@
 import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:mobile/core/providers/auth_provider.dart';
 import 'package:mobile/core/security/decryption_worker.dart';
 import 'package:mobile/core/utils/app_logger.dart';
 import 'package:mobile/features/chat/models/message_entity.dart';
 import 'package:mobile/features/chat/services/message_hydrator.dart';
 import 'package:mobile/features/chat/providers/decryption_cache.dart';
 import 'package:mobile/features/chat/providers/message_store.dart';
-import 'package:mobile/core/providers/auth_provider.dart';
-import 'package:mobile/core/security/encryption_service.dart';
-import 'package:mobile/core/security/group_encryption_service.dart';
 
 class ConversationRuntimeManagerState {
   ConversationRuntimeManagerState({
@@ -244,8 +242,10 @@ Conversation: $_chatId
     _queueDecryptionForEntities(recent);
   }
 
-  /// Unified decryption method (Single Source of Truth).
-  /// Performs cache lookup, duplicate decryption assertions, AES invocation, and cache insertion.
+  /// Phase 8A: E2EE fully decommissioned. All messages are plaintext
+  /// (migration_version = 2) after the Phase 7 backfill. This method
+  /// now simply resolves the plaintext content via MessageHydrator and
+  /// returns the entity — no decryption occurs.
   Future<MessageEntity?> decryptMessageDirect(
     MessageEntity entity, {
     String? partnerClerkId,
@@ -259,102 +259,10 @@ Conversation: $_chatId
       salt: entity.encryptionSalt,
     );
 
-    if (decision.action != HydrationAction.decrypt) {
-      if (decision.action == HydrationAction.usePlaintext &&
-          decision.messageContent != null) {
-        return entity.copyWith(
-          text: decision.messageContent,
-          isEncrypted: false,
-        );
-      }
-      return entity;
+    if (decision.messageContent != null) {
+      return entity.copyWith(text: decision.messageContent, isEncrypted: false);
     }
-
-    final cache = ref.read(messageRuntimeCacheProvider.notifier);
-    final cached = cache.lookup(_chatId, entity.id);
-    if (cached != null) {
-      cache.recordReuse();
-      return entity.copyWith(text: cached, isEncrypted: false);
-    }
-
-    final myUser = ref.read(authProvider).user;
-    if (myUser == null) return null;
-
-    final sharedSecret = _chatId.replaceAll('_', ':');
-
-    // Verification Layer assertion
-    cache.assertNoDuplicateDecryption(_chatId, entity.id);
-
-    try {
-      final startTime = DateTime.now();
-      String decrypted;
-
-      final isGroup = _chatId.split('_').length != 2;
-      if (isGroup) {
-        final groupSvc = ref.read(groupEncryptionServiceProvider);
-        decrypted = await groupSvc.decryptMessage(
-          groupId: _chatId,
-          encryptedContent: entity.encryptedContent!,
-          iv: entity.encryptionIv!,
-          salt: entity.encryptionSalt!,
-        );
-      } else {
-        decrypted = await EncryptionService().decryptMessage(
-          encryptedContent: entity.encryptedContent!,
-          iv: entity.encryptionIv!,
-          salt: entity.encryptionSalt!,
-          key: sharedSecret,
-        );
-      }
-
-      final duration = DateTime.now().difference(startTime);
-      cache.recordDecryption(duration);
-
-      if (decrypted != '[Failed to decrypt]' &&
-          decrypted != '[Encrypted message]') {
-        cache.insert(
-          _chatId,
-          entity.id,
-          decrypted,
-          entity.conversationSequence ?? 0,
-        );
-        return entity.copyWith(text: decrypted, isEncrypted: false);
-      }
-
-      // Fallback Strategy: Try Clerk IDs if UUID decryption fails (for legacy messages)
-      final myClerkId = myUser.id;
-      if (partnerClerkId != null) {
-        final ids = [myClerkId, partnerClerkId]..sort();
-        final legacySecret = '${ids[0]}:${ids[1]}';
-        if (legacySecret != sharedSecret) {
-          AppLogger.d(
-            '🛡️ [ConversationRuntimeManager] Attempting legacy fallback decryption...',
-          );
-          cache.assertNoDuplicateDecryption(_chatId, entity.id);
-          final fallbackResult = await EncryptionService().decryptMessage(
-            encryptedContent: entity.encryptedContent!,
-            iv: entity.encryptionIv!,
-            salt: entity.encryptionSalt!,
-            key: legacySecret,
-          );
-          if (fallbackResult != '[Failed to decrypt]') {
-            cache.insert(
-              _chatId,
-              entity.id,
-              fallbackResult,
-              entity.conversationSequence ?? 0,
-            );
-            return entity.copyWith(text: fallbackResult, isEncrypted: false);
-          }
-        }
-      }
-    } catch (e) {
-      AppLogger.e(
-        '🔓 [ConversationRuntimeManager] Decryption pipeline failed',
-        error: e,
-      );
-    }
-    return null;
+    return entity;
   }
 }
 

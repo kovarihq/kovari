@@ -75,10 +75,8 @@ export async function GET(
       .select(
         `
         id,
-        encrypted_content,
-        encryption_iv,
-        encryption_salt,
-        is_encrypted,
+        message_content,
+        migration_version,
         created_at,
         user_id,
         media_url,
@@ -123,10 +121,8 @@ export async function GET(
 
         return {
           id: message.id,
-          encrypted_content: message.encrypted_content,
-          encryption_iv: message.encryption_iv,
-          encryption_salt: message.encryption_salt,
-          is_encrypted: message.is_encrypted,
+          message_content: message.message_content,
+          migration_version: message.migration_version,
           timestamp: new Date(message.created_at).toLocaleTimeString([], {
             hour: "2-digit",
             minute: "2-digit",
@@ -168,10 +164,6 @@ export async function POST(
     // Read the request body once
     const body = await req.json();
     const {
-      encryptedContent,
-      encryptionIv,
-      encryptionSalt,
-      isEncrypted,
       mediaUrl,
       mediaType,
       text,
@@ -233,33 +225,27 @@ export async function POST(
       }
     }
 
-    // Allow: (A) encrypted text message, (B) media-only message, (C) both
-    if (
-       (isEncrypted && encryptedContent && encryptionIv && encryptionSalt) ||
-       (mediaUrl && mediaType)
-    ) {
+    if (text || (mediaUrl && mediaType)) {
       const textVal = typeof text === "string" ? text : null;
       const outgoingContract = {
         messageContent: textVal,
-        encryptedContent: typeof encryptedContent === "string" ? encryptedContent : null,
-        iv: typeof encryptionIv === "string" ? encryptionIv : null,
-        salt: typeof encryptionSalt === "string" ? encryptionSalt : null,
-        isEncrypted: Boolean(isEncrypted),
+        encryptedContent: null,
+        iv: null,
+        salt: null,
+        isEncrypted: false,
         mediaUrl: typeof mediaUrl === "string" ? mediaUrl : null,
         mediaType: mediaType === "image" || mediaType === "video" ? mediaType : null,
       };
 
       const resolvedMode = assertMessagePayload(outgoingContract);
 
-      const migrationVersion = body?.migrationVersion || (textVal !== null
-        ? MESSAGE_MIGRATION_VERSION.DUAL_PERSISTENCE
-        : MESSAGE_MIGRATION_VERSION.LEGACY_E2EE);
+      const migrationVersion = body?.migrationVersion || MESSAGE_MIGRATION_VERSION.DUAL_PERSISTENCE;
 
       const basePayload = buildMessageInsertPayload({
-        encryptedContent: outgoingContract.encryptedContent,
-        iv: outgoingContract.iv,
-        salt: outgoingContract.salt,
-        isEncrypted: outgoingContract.isEncrypted,
+        encryptedContent: null,
+        iv: null,
+        salt: null,
+        isEncrypted: false,
         text: outgoingContract.messageContent,
         mediaUrl: outgoingContract.mediaUrl,
         mediaType: outgoingContract.mediaType,
@@ -278,10 +264,8 @@ export async function POST(
         .select(
           `
           id,
-          encrypted_content,
-          encryption_iv,
-          encryption_salt,
-          is_encrypted,
+          message_content,
+          migration_version,
           created_at,
           user_id,
           media_url,
@@ -306,13 +290,9 @@ export async function POST(
       }
       const profile = (inserted as any).users?.profiles;
       const isDeleted = profile?.deleted === true;
-      // Return the inserted message (with encrypted and media fields)
+      // Return the inserted message
       return NextResponse.json({
         id: inserted.id,
-        encryptedContent: inserted.encrypted_content,
-        encryptionIv: inserted.encryption_iv,
-        encryptionSalt: inserted.encryption_salt,
-        isEncrypted: inserted.is_encrypted,
         createdAt: inserted.created_at,
         sender: isDeleted ? "Deleted User" : profile?.name || "Unknown User",
         senderUsername: isDeleted ? undefined : profile?.username,

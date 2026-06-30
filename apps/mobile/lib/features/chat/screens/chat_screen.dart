@@ -34,7 +34,6 @@ import 'package:mobile/features/groups/models/group.dart';
 import 'package:mobile/shared/widgets/kovari_avatar.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:dio/dio.dart';
-import 'package:mobile/core/security/encryption_service.dart';
 import 'package:path_provider/path_provider.dart';
 
 /// Individual chat screen. Receives [chatId] and loads everything from
@@ -1695,7 +1694,7 @@ class _InputBar extends ConsumerWidget {
                           color: AppColors.text(context, isMuted: true),
                         ),
                         title: Text(
-                          'Gallery',
+                          'Gallery (Photo)',
                           style: AppTextStyles.bodyMedium.copyWith(
                             fontWeight: FontWeight.w600,
                             color: AppColors.text(context, isMuted: true),
@@ -1706,6 +1705,50 @@ class _InputBar extends ConsumerWidget {
                           ref
                               .read(chatMediaServiceProvider)
                               .pickAndSendImage(chatId, ImageSource.gallery);
+                        },
+                      ),
+                      ListTile(
+                        visualDensity: VisualDensity.compact,
+                        dense: true,
+                        leading: Icon(
+                          LucideIcons.video,
+                          size: 22,
+                          color: AppColors.text(context, isMuted: true),
+                        ),
+                        title: Text(
+                          'Gallery (Video)',
+                          style: AppTextStyles.bodyMedium.copyWith(
+                            fontWeight: FontWeight.w600,
+                            color: AppColors.text(context, isMuted: true),
+                          ),
+                        ),
+                        onTap: () {
+                          Navigator.pop(context);
+                          ref
+                              .read(chatMediaServiceProvider)
+                              .pickAndSendVideo(chatId, ImageSource.gallery);
+                        },
+                      ),
+                      ListTile(
+                        visualDensity: VisualDensity.compact,
+                        dense: true,
+                        leading: Icon(
+                          LucideIcons.video,
+                          size: 22,
+                          color: AppColors.text(context, isMuted: true),
+                        ),
+                        title: Text(
+                          'Record Video',
+                          style: AppTextStyles.bodyMedium.copyWith(
+                            fontWeight: FontWeight.w600,
+                            color: AppColors.text(context, isMuted: true),
+                          ),
+                        ),
+                        onTap: () {
+                          Navigator.pop(context);
+                          ref
+                              .read(chatMediaServiceProvider)
+                              .pickAndSendVideo(chatId, ImageSource.camera);
                         },
                       ),
                       const SizedBox(height: 16),
@@ -2054,30 +2097,7 @@ class _EncryptedImageState extends State<_EncryptedImage> {
         }
       }
 
-      Uint8List decrypted;
-      if (isUnencrypted) {
-        AppLogger.i(
-          '🛡️ [_EncryptedImage] Bypassing decryption: payload is already raw/unencrypted media.',
-        );
-        decrypted = rawBytes;
-      } else {
-        final encryption = EncryptionService();
-        final sharedSecret = widget.chatId.replaceAll('_', ':');
-        try {
-          decrypted = await encryption.decryptBytes(
-            cipherText: rawBytes,
-            iv: encryption.hexDecode(widget.iv),
-            salt: encryption.hexDecode(widget.salt),
-            key: sharedSecret,
-          );
-        } catch (e) {
-          AppLogger.w(
-            '🛡️ [_EncryptedImage] Decryption failed, falling back to raw bytes',
-            error: e,
-          );
-          decrypted = rawBytes;
-        }
-      }
+      Uint8List decrypted = rawBytes;
 
       // 4. Save decrypted bytes to local cache directory for future hits
       try {

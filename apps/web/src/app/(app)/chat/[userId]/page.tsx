@@ -34,12 +34,10 @@ import { BiCheckDouble, BiCheck, BiTime } from "react-icons/bi";
 import { HiPlay } from "react-icons/hi";
 import { getUserUuidByClerkId, isUserBlocked, blockUser, unblockUser, checkBlockStatus } from "@kovari/api/client";
 import { 
-  decryptMessage, 
   formatMessageDate, 
   isSameDay, 
   linkifyMessage,
   getFullImageUrl,
-  decryptFileBytes
 } from "@kovari/utils";
 import { hydrateMessageContent } from "@/services/messaging/messageHydrator";
 import { MESSAGE_MIGRATION_VERSION } from "@kovari/types";
@@ -134,12 +132,7 @@ const MediaWithSkeleton = ({
           }
         }
 
-        let decryptedBytes: Uint8Array;
-        if (isUnencrypted) {
-          decryptedBytes = encryptedBytes;
-        } else {
-          decryptedBytes = decryptFileBytes(encryptedBytes, iv, salt, decryptionKey);
-        }
+        const decryptedBytes: Uint8Array = encryptedBytes;
 
         const blob = new Blob([decryptedBytes as any], { type: "image/jpeg" });
         const blobUrl = URL.createObjectURL(blob);
@@ -239,12 +232,7 @@ const VideoWithSkeleton = ({
           }
         }
 
-        let decryptedBytes: Uint8Array;
-        if (isUnencrypted) {
-          decryptedBytes = encryptedBytes;
-        } else {
-          decryptedBytes = decryptFileBytes(encryptedBytes, iv, salt, decryptionKey);
-        }
+        const decryptedBytes: Uint8Array = encryptedBytes;
 
         const blob = new Blob([decryptedBytes as any], { type: "video/mp4" });
         const blobUrl = URL.createObjectURL(blob);
@@ -580,23 +568,9 @@ const MessageList = ({
               {
                 message_content: msg.message_content,
                 migration_version: msg.migration_version,
-                encrypted_content: msg.encrypted_content,
-                encryption_iv: msg.encryption_iv,
-                encryption_salt: msg.encryption_salt,
-                is_encrypted: msg.is_encrypted,
-              },
-              () => {
-                return decryptMessage(
-                  {
-                    encryptedContent: msg.encrypted_content,
-                    iv: msg.encryption_iv,
-                    salt: msg.encryption_salt,
-                  },
-                  sharedSecret
-                );
               }
             );
-            content = hydration.content || (hydration.status === "failed" ? "[Failed to decrypt message]" : "[Encrypted message]");
+            content = hydration.content || "";
           }
           return (
             <div role="listitem" key={msg.tempId || msg.id}>
@@ -1159,23 +1133,9 @@ const DirectChatPage = () => {
         {
           message_content: msg.message_content,
           migration_version: msg.migration_version,
-          encrypted_content: msg.encrypted_content,
-          encryption_iv: msg.encryption_iv,
-          encryption_salt: msg.encryption_salt,
-          is_encrypted: msg.is_encrypted,
-        },
-        () => {
-          return decryptMessage(
-            {
-              encryptedContent: msg.encrypted_content,
-              iv: msg.encryption_iv,
-              salt: msg.encryption_salt,
-            },
-            sharedSecret
-          );
         }
       );
-      return hydration.content || (hydration.status === "failed" ? "[Failed to decrypt message]" : "[Encrypted message]");
+      return hydration.content || "";
     }
   };
 
@@ -1444,23 +1404,9 @@ const DirectChatPage = () => {
               {
                 message_content: msg.message_content,
                 migration_version: msg.migration_version,
-                encrypted_content: msg.encrypted_content,
-                encryption_iv: msg.encryption_iv,
-                encryption_salt: msg.encryption_salt,
-                is_encrypted: msg.is_encrypted,
-              },
-              () => {
-                return decryptMessage(
-                  {
-                    encryptedContent: msg.encrypted_content,
-                    iv: msg.encryption_iv,
-                    salt: msg.encryption_salt,
-                  },
-                  sharedSecret
-                );
               }
             );
-            content = hydration.content || (hydration.status === "failed" ? "[Failed to decrypt message]" : "[Encrypted message]");
+            content = hydration.content || "";
           }
 
           result.push({

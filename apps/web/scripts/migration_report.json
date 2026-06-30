@@ -1,0 +1,10 @@
+{
+  "totalProcessed": 217,
+  "totalMigrated": 209,
+  "totalFailed": 8,
+  "totalSkipped": 0,
+  "elapsedSeconds": 26.728,
+  "averageSpeedMsgsSec": 8.118826698593235,
+  "finalCursor": 255,
+  "timestamp": "2026-06-30T19:29:43.356Z"
+}

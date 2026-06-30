@@ -1,6 +1,5 @@
 import { useEffect, useState, useCallback } from "react";
 import { createClient } from "@kovari/api/client";
-import { decryptMessage } from "@kovari/utils";
 import { hydrateMessageContent } from "@/services/messaging/messageHydrator";
 
 export interface DirectMessage {
@@ -58,20 +57,6 @@ export const useDirectMessages = (
             {
               message_content: msg.message_content,
               migration_version: msg.migration_version,
-              encrypted_content: msg.encrypted_content,
-              encryption_iv: msg.encryption_iv,
-              encryption_salt: msg.encryption_salt,
-              is_encrypted: msg.is_encrypted,
-            },
-            () => {
-              return decryptMessage(
-                {
-                  encryptedContent: msg.encrypted_content,
-                  iv: msg.encryption_iv,
-                  salt: msg.encryption_salt,
-                },
-                sharedSecret
-              ) || "[Encrypted message]";
             }
           );
 

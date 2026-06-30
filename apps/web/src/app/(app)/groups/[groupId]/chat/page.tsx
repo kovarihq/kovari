@@ -39,7 +39,6 @@ import {
   isSameDay,
   formatMessageDate,
   linkifyMessage,
-  decryptFileBytes,
 } from "@kovari/utils";
 import GroupMediaSection from "@/features/groups/components/group-media-section";
 import { useUser } from "@clerk/nextjs";
@@ -1481,12 +1480,7 @@ const MediaWithSkeleton = ({
           }
         }
 
-        let decryptedBytes: Uint8Array;
-        if (isUnencrypted) {
-          decryptedBytes = encryptedBytes;
-        } else {
-          decryptedBytes = decryptFileBytes(encryptedBytes, iv, salt, decryptionKey);
-        }
+        const decryptedBytes: Uint8Array = encryptedBytes;
 
         const blob = new Blob([decryptedBytes as any], { type: "image/jpeg" });
         const blobUrl = URL.createObjectURL(blob);
@@ -1586,12 +1580,7 @@ const VideoWithSkeleton = ({
           }
         }
 
-        let decryptedBytes: Uint8Array;
-        if (isUnencrypted) {
-          decryptedBytes = encryptedBytes;
-        } else {
-          decryptedBytes = decryptFileBytes(encryptedBytes, iv, salt, decryptionKey);
-        }
+        const decryptedBytes: Uint8Array = encryptedBytes;
 
         const blob = new Blob([decryptedBytes as any], { type: "video/mp4" });
         const blobUrl = URL.createObjectURL(blob);

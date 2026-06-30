@@ -158,6 +158,7 @@ class MessageEntity {
     String? blurHash,
     String? senderClerkId,
     String? receiverClerkId,
+    String? thumbnailUrl,
   }) {
     return MessageEntity(
       id: 'pending_$clientMessageId',
@@ -172,6 +173,7 @@ class MessageEntity {
       mediaType: mediaType,
       localFilePath: localFilePath,
       blurHash: blurHash,
+      thumbnailUrl: thumbnailUrl,
       deliveryStatus: MessageDeliveryStatus.pending,
       mediaUploadState: mediaUrl == null && localFilePath != null
           ? MediaUploadState.uploading

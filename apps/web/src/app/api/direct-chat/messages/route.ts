@@ -107,10 +107,6 @@ export async function GET(req: NextRequest) {
       senderId: msg.sender_id,
       receiverId: msg.receiver_id,
       createdAt: msg.created_at,
-      encryptedContent: msg.encrypted_content,
-      encryptionIv: msg.encryption_iv,
-      encryptionSalt: msg.encryption_salt,
-      isEncrypted: msg.is_encrypted,
       senderClerkId: msg.sender?.clerk_user_id,
       receiverClerkId: msg.receiver?.clerk_user_id,
     }));
@@ -166,25 +162,19 @@ export async function POST(req: NextRequest) {
     const textVal = typeof body?.text === "string" ? body.text : null;
     const outgoingContract = {
       messageContent: textVal,
-      encryptedContent: typeof body?.encrypted_content === "string" ? body.encrypted_content : null,
-      iv: typeof body?.encryption_iv === "string" ? body.encryption_iv : null,
-      salt: typeof body?.encryption_salt === "string" ? body.encryption_salt : null,
-      isEncrypted: Boolean(body?.is_encrypted),
       mediaUrl: typeof body?.media_url === "string" ? body.media_url : null,
       mediaType: body?.media_type === "image" || body?.media_type === "video" ? body.media_type : null,
     };
 
-    const resolvedMode = assertMessagePayload(outgoingContract);
+    const resolvedMode = assertMessagePayload({ ...outgoingContract, encryptedContent: null, iv: null, salt: null, isEncrypted: false });
 
-    const migrationVersion = body?.migrationVersion || (textVal !== null
-      ? MESSAGE_MIGRATION_VERSION.DUAL_PERSISTENCE
-      : MESSAGE_MIGRATION_VERSION.LEGACY_E2EE);
+    const migrationVersion = body?.migrationVersion || MESSAGE_MIGRATION_VERSION.DUAL_PERSISTENCE;
 
     const basePayload = buildMessageInsertPayload({
-      encryptedContent: outgoingContract.encryptedContent,
-      iv: outgoingContract.iv,
-      salt: outgoingContract.salt,
-      isEncrypted: outgoingContract.isEncrypted,
+      encryptedContent: null,
+      iv: null,
+      salt: null,
+      isEncrypted: false,
       text: outgoingContract.messageContent,
       mediaUrl: outgoingContract.mediaUrl,
       mediaType: outgoingContract.mediaType,

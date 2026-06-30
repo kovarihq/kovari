@@ -10,5 +10,4 @@ export * from './fetchGoogleImage';
 export * from './fetchPexelsImage';
 export * from './settings';
 export * from './utils';
-export * from './encryption';
 export * from './countries';

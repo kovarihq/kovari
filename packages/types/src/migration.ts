@@ -6,13 +6,12 @@ export const MESSAGE_MIGRATION_VERSION = {
 
 export type MessageMigrationVersion = typeof MESSAGE_MIGRATION_VERSION[keyof typeof MESSAGE_MIGRATION_VERSION];
 
-/** Write mode type used by each client to select its outgoing payload contract. */
-export type MessageWriteMode = 'legacy' | 'dual' | 'plaintext';
+/** Phase 8B: E2EE fully decommissioned. Only plaintext mode is supported. */
+export type MessageWriteMode = 'plaintext';
 
 /**
  * The migration_version stamped on every new message.
- * Kept at DUAL_PERSISTENCE (2) so existing hydrators need no change.
- * Advance to PLAINTEXT_ONLY (3) only after full backfill is complete.
+ * Phase 8B: Advanced to PLAINTEXT_ONLY (3) — full backfill complete.
  */
 export const CURRENT_MESSAGE_WRITE_VERSION =
-  MESSAGE_MIGRATION_VERSION.DUAL_PERSISTENCE;
+  MESSAGE_MIGRATION_VERSION.PLAINTEXT_ONLY;

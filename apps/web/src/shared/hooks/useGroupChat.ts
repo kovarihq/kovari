@@ -3,13 +3,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { useUser } from "@clerk/nextjs";
 import { getSocket } from "@/lib/socket";
 import { buildOutgoingMessage } from "@kovari/types";
-import { CLIENT_WRITE_MODE } from "@/config/messageWriteMode";
-import {} from "@kovari/utils";
 import { useGroupEncryption } from "./useGroupEncryption";
-import {
-  decryptGroupMessage,
-  type EncryptedMessage,
-} from "@kovari/utils";
 import { hydrateMessageContent } from "@/services/messaging/messageHydrator";
 
 export interface ChatMessage {
@@ -88,24 +82,17 @@ export const useGroupChat = (groupId: string) => {
     }
   }, [user?.id, groupId]);
 
-  // Initialize encryption
   const {
     encryptMessage,
-    decryptMessage: decryptLocalMessage,
     isEncryptionAvailable,
-    groupKey,
   } = useGroupEncryption(groupId);
 
-  const groupKeyRef = useRef(groupKey);
   const seenIdsRef = useRef(new Set<string>());
   // Gap detection: track the highest conversation sequence seen
   const lastKnownSequenceRef = useRef<number>(0);
   // Typing throttle: only emit typing_start once per 3s window
   const lastTypingEmitRef = useRef<number>(0);
 
-  useEffect(() => {
-    groupKeyRef.current = groupKey;
-  }, [groupKey]);
 
   // Fetch initial messages
   const fetchMessages = useCallback(async (loadMore = false) => {
@@ -149,33 +136,17 @@ export const useGroupChat = (groupId: string) => {
 
       const decryptedMessages = await Promise.all(
         mappedData.map(async (message: any) => {
-          const currentGroupKey = groupKeyRef.current;
           const hydration = hydrateMessageContent(
             {
               message_content: message.message_content,
               migration_version: message.migration_version,
-              encrypted_content: message.encryptedContent,
-              encryption_iv: message.encryptionIv,
-              encryption_salt: message.encryptionSalt,
-              is_encrypted: message.isEncrypted,
-            },
-            () => {
-              if (!currentGroupKey) return null;
-              return decryptGroupMessage(
-                {
-                  encryptedContent: message.encryptedContent,
-                  iv: message.encryptionIv,
-                  salt: message.encryptionSalt,
-                },
-                currentGroupKey
-              );
             }
           );
 
           return {
             ...message,
-            content: hydration.content || (hydration.status === "failed" ? "[Failed to decrypt message]" : "[Encrypted message]"),
-            isEncrypted: hydration.source === "legacy",
+            content: hydration.content || "[Empty message]",
+            isEncrypted: false,
           };
         }),
       );
@@ -301,8 +272,7 @@ export const useGroupChat = (groupId: string) => {
         // In plaintext mode sharedSecret is ignored; groupKey is passed through
         // for legacy/dual fallback if the mode is ever reverted.
         const outgoing = await buildOutgoingMessage(
-          { text: content.trim(), mediaUrl, mediaType, sharedSecret: groupKey || undefined },
-          CLIENT_WRITE_MODE
+          { text: content.trim(), mediaUrl, mediaType }
         );
 
         // Socket.IO optimistic send
@@ -420,7 +390,7 @@ export const useGroupChat = (groupId: string) => {
         setSending(false);
       }
     },
-    [groupId, user, encryptMessage, isEncryptionAvailable, chatId, stopTyping, currentUserAvatar],
+    [groupId, user, encryptMessage, chatId, stopTyping, currentUserAvatar],
   );
 
   const notifyMessagesSeen = useCallback(
@@ -466,47 +436,27 @@ export const useGroupChat = (groupId: string) => {
             toSequence: toSeq,
           }, async (response: any) => {
             if (response?.status === "success" && Array.isArray(response.messages)) {
-              const currentGroupKey = groupKeyRef.current;
-              const decryptedGap = await Promise.all(
-                response.messages.map(async (m: any) => {
-                  const hydration = hydrateMessageContent(
-                    {
-                      message_content: m.text ?? m.message_content ?? m.plain_content,
-                      migration_version: m.migration_version ?? m.migrationVersion,
-                      encrypted_content: m.encryptedContent || m.encrypted_content,
-                      encryption_iv: m.iv || m.encryption_iv,
-                      encryption_salt: m.salt || m.encryption_salt,
-                      is_encrypted: m.isEncrypted ?? m.is_encrypted,
-                    },
-                    () => {
-                      if (!currentGroupKey) return null;
-                      return decryptGroupMessage(
-                        {
-                          encryptedContent: m.encryptedContent || m.encrypted_content,
-                          iv: m.iv || m.encryption_iv,
-                          salt: m.salt || m.encryption_salt,
-                        },
-                        currentGroupKey
-                      );
-                    }
-                  );
-                  let decryptedContent = hydration.content || (hydration.status === "failed" ? "[Failed to decrypt message]" : "[Encrypted message]");
-                  return {
-                    id: m.id,
-                    content: decryptedContent,
-                    sender: m.senderName || "Unknown",
-                    senderUsername: m.senderUsername,
-                    avatar: m.avatar,
-                    isCurrentUser: m.senderId === user?.id,
-                    createdAt: m.createdAt || m.created_at || new Date().toISOString(),
-                    timestamp: new Date(m.createdAt || m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', timeZone: "Asia/Kolkata" }),
-                    status: "delivered" as const,
-                  };
-                })
-              );
+              const decryptedGap = response.messages.map((m: any) => {
+                const hydration = hydrateMessageContent({
+                  message_content: m.text ?? m.message_content ?? m.plain_content,
+                  migration_version: m.migration_version ?? m.migrationVersion,
+                });
+                const decryptedContent = hydration.content || "[Empty message]";
+                return {
+                  id: m.id,
+                  content: decryptedContent,
+                  sender: m.senderName || "Unknown",
+                  senderUsername: m.senderUsername,
+                  avatar: m.avatar,
+                  isCurrentUser: m.senderId === user?.id,
+                  createdAt: m.createdAt || m.created_at || new Date().toISOString(),
+                  timestamp: new Date(m.createdAt || m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', timeZone: "Asia/Kolkata" }),
+                  status: "delivered" as const,
+                };
+              });
               setMessages((prev) => {
-                const existingIds = new Set(prev.map((m) => m.id));
-                const newGap = decryptedGap.filter((m) => !existingIds.has(m.id));
+                const existingIds = new Set(prev.map((m: ChatMessage) => m.id));
+                const newGap = decryptedGap.filter((m: ChatMessage) => !existingIds.has(m.id));
                 return [...prev, ...newGap].sort(
                   (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
                 );
@@ -532,30 +482,14 @@ export const useGroupChat = (groupId: string) => {
       );
       if (exists) return prev;
 
-      const currentGroupKey = groupKeyRef.current;
-      const hydration = hydrateMessageContent(
+       const hydration = hydrateMessageContent(
         {
           message_content: incomingMsg.text ?? incomingMsg.message_content ?? incomingMsg.plain_content,
           migration_version: incomingMsg.migration_version ?? incomingMsg.migrationVersion,
-          encrypted_content: incomingMsg.encryptedContent || incomingMsg.encrypted_content,
-          encryption_iv: incomingMsg.iv || incomingMsg.encryption_iv,
-          encryption_salt: incomingMsg.salt || incomingMsg.encryption_salt,
-          is_encrypted: incomingMsg.isEncrypted ?? incomingMsg.is_encrypted,
-        },
-        () => {
-          if (!currentGroupKey) return null;
-          return decryptGroupMessage(
-            {
-              encryptedContent: incomingMsg.encryptedContent || incomingMsg.encrypted_content,
-              iv: incomingMsg.iv || incomingMsg.encryption_iv,
-              salt: incomingMsg.salt || incomingMsg.encryption_salt,
-            },
-            currentGroupKey
-          );
         }
       );
 
-      const decryptedContent = hydration.content || (hydration.status === "failed" ? "[Failed to decrypt message]" : "[Encrypted message]");
+      const decryptedContent = hydration.content || "[Empty message]";
 
       const isFromMe = incomingMsg.senderId === user?.id;
 
@@ -587,11 +521,11 @@ export const useGroupChat = (groupId: string) => {
       const merged = [...prev, newMessage];
       return merged.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
     });
-  }, [user?.id, chatId, decryptGroupMessage, groupKeyRef, seenIdsRef, fetchMessages]); // Added decryptGroupMessage, groupKeyRef, seenIdsRef to deps
+  }, [user?.id, chatId, seenIdsRef, fetchMessages]);
 
   // Socket.IO Integration Setup
   useEffect(() => {
-    if (!user?.id || !chatId || !isEncryptionAvailable) return;
+    if (!user?.id || !chatId) return;
 
     const socket = getSocket(user.id);
     if (!socket.connected) socket.connect();
