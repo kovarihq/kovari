@@ -23,13 +23,7 @@ export function buildMessageInsertPayload(
     }
   }
 
-  const keepEncrypted = resolvedMode === 'legacy' || resolvedMode === 'dual';
-
   return {
-    encrypted_content: keepEncrypted ? (input.encryptedContent ?? null) : null,
-    encryption_iv: keepEncrypted ? (input.iv ?? null) : null,
-    encryption_salt: keepEncrypted ? (input.salt ?? null) : null,
-    is_encrypted: keepEncrypted && !!input.isEncrypted,
     message_content: input.text ?? null,
     migration_version: input.migrationVersion,
     media_url: input.mediaUrl ?? null,

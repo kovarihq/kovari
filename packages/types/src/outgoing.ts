@@ -16,10 +16,6 @@ export interface OutgoingMessageInput {
  */
 export interface OutgoingMessageContract {
   messageContent: string | null;
-  encryptedContent: string | null;
-  iv: string | null;
-  salt: string | null;
-  isEncrypted: boolean;
   migrationVersion: number;
   mediaUrl: string | null;
   mediaType: string | null;
@@ -36,10 +32,6 @@ export function buildOutgoingMessage(
 ): OutgoingMessageContract {
   return {
     messageContent: input.text ?? null,
-    encryptedContent: null,
-    iv: null,
-    salt: null,
-    isEncrypted: false,
     migrationVersion: CURRENT_MESSAGE_WRITE_VERSION,
     mediaUrl: input.mediaUrl ?? null,
     mediaType: input.mediaType ?? null,

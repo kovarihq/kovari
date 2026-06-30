@@ -2,7 +2,7 @@ import { getUserUuidByClerkId , getGroupChatId } from "@kovari/api/client";
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useUser } from "@clerk/nextjs";
 import { getSocket } from "@/lib/socket";
-import { buildOutgoingMessage } from "@kovari/types";
+import { buildOutgoingMessage, SocketMessageV2 } from "@kovari/types";
 import { useGroupEncryption } from "./useGroupEncryption";
 import { hydrateMessageContent } from "@/services/messaging/messageHydrator";
 
@@ -21,8 +21,6 @@ export interface ChatMessage {
   mediaType?: "image" | "video";
   status?: "sending" | "sent" | "delivered" | "seen";
   isEncrypted?: boolean;
-  encryptionIv?: string;
-  encryptionSalt?: string;
 }
 
 export interface GroupInfo {
@@ -126,10 +124,6 @@ export const useGroupChat = (groupId: string) => {
 
       const mappedData = data.map((msg: any) => ({
         ...msg,
-        isEncrypted: msg.isEncrypted ?? msg.is_encrypted,
-        encryptedContent: msg.encryptedContent ?? msg.encrypted_content,
-        encryptionIv: msg.encryptionIv ?? msg.encryption_iv,
-        encryptionSalt: msg.encryptionSalt ?? msg.encryption_salt,
         mediaUrl: msg.mediaUrl ?? msg.media_url ?? undefined,
         mediaType: msg.mediaType ?? msg.media_type ?? undefined,
       }));
@@ -146,7 +140,6 @@ export const useGroupChat = (groupId: string) => {
           return {
             ...message,
             content: hydration.content || "[Empty message]",
-            isEncrypted: false,
           };
         }),
       );
@@ -281,22 +274,16 @@ export const useGroupChat = (groupId: string) => {
           if (socket.connected) {
             const tempId = crypto.randomUUID();
 
-            const incomingMsg = {
+            const createdAt = new Date().toISOString();
+
+            const incomingMsg: SocketMessageV2 = {
+              ...outgoing,
               id: tempId,
               tempId,
               senderId: user.id,
-              messageContent: outgoing.messageContent,
-              encryptedContent: outgoing.encryptedContent,
-              iv: outgoing.iv,
-              salt: outgoing.salt,
-              mediaUrl: mediaUrl || null,
-              mediaType: mediaType || null,
-              createdAt: new Date().toISOString(),
-              isEncrypted: outgoing.isEncrypted,
               senderName: user.fullName || user.firstName || "Unknown User",
               senderUsername: user.username || undefined,
               avatar: currentUserAvatar || undefined,
-              migrationVersion: outgoing.migrationVersion,
             };
 
             // Add optimistic message with "sending" status
@@ -304,16 +291,16 @@ export const useGroupChat = (groupId: string) => {
               id: tempId,
               tempId,
               content: content.trim(),
-              timestamp: new Date(incomingMsg.createdAt).toLocaleTimeString([], {
+              timestamp: new Date(createdAt).toLocaleTimeString([], {
                 hour: "2-digit",
                 minute: "2-digit",
                 timeZone: "Asia/Kolkata",
               }),
-              sender: incomingMsg.senderName,
-              senderUsername: incomingMsg.senderUsername,
-              avatar: incomingMsg.avatar,
+              sender: incomingMsg.senderName || "Unknown User",
+              senderUsername: incomingMsg.senderUsername ?? undefined,
+              avatar: incomingMsg.avatar ?? undefined,
               isCurrentUser: true,
-              createdAt: incomingMsg.createdAt,
+              createdAt,
               mediaUrl,
               mediaType,
               status: "sending",
@@ -344,10 +331,6 @@ export const useGroupChat = (groupId: string) => {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             content: content.trim(),
-            encryptedContent: outgoing.encryptedContent,
-            encryptionIv: outgoing.iv,
-            encryptionSalt: outgoing.salt,
-            isEncrypted: outgoing.isEncrypted,
             mediaUrl,
             mediaType,
             text: content.trim() || null,
@@ -507,15 +490,12 @@ export const useGroupChat = (groupId: string) => {
         sender: incomingMsg.senderName || "Unknown",
         avatar: incomingMsg.avatar,
         status: isFromMe ? "sent" : "delivered",
-        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', timeZone: "Asia/Kolkata" }), // Added timeZone
+        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', timeZone: "Asia/Kolkata" }),
         createdAt: incomingMsg.createdAt || new Date().toISOString(),
         isCurrentUser: isFromMe,
-        isEncrypted: incomingMsg.isEncrypted,
         mediaUrl: incomingMsg.mediaUrl,
         mediaType: incomingMsg.mediaType,
-        senderUsername: incomingMsg.senderUsername, // Added senderUsername
-        encryptionIv: incomingMsg.iv || incomingMsg.encryptionIv || incomingMsg.encryption_iv,
-        encryptionSalt: incomingMsg.salt || incomingMsg.encryptionSalt || incomingMsg.encryption_salt,
+        senderUsername: incomingMsg.senderUsername,
       };
 
       const merged = [...prev, newMessage];

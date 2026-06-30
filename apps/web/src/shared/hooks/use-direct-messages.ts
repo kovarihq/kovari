@@ -6,10 +6,6 @@ export interface DirectMessage {
   id: string;
   sender_id: string;
   receiver_id: string;
-  encrypted_content?: string;
-  encryption_iv?: string;
-  encryption_salt?: string;
-  is_encrypted?: boolean;
   created_at: string;
 }
 

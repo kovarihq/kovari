@@ -540,16 +540,10 @@ export const registerSocketEvents = (
         if (callback) {
           callback({
             status: "success",
-            // FINDING-6 FIX: Include full E2EE fields so gap-recovered messages can be decrypted.
             messages: messages.map((m: any) => ({
               id: m.id,
               senderId: m.sender_id || m.user_id,
-              // text is kept for backward compat, but clients should use encryptedContent for decryption
-              text: m.encrypted_content || "",
-              encryptedContent: m.encrypted_content || null,
-              iv: m.encryption_iv || null,
-              salt: m.encryption_salt || null,
-              isEncrypted: m.is_encrypted ?? false,
+              text: m.message_content || "",
               mediaUrl: m.media_url || null,
               mediaType: m.media_type || null,
               conversationSequence: m.conversation_sequence,
@@ -611,32 +605,14 @@ async function persistMessageToDb(
       conv = newConv;
     }
 
-    const outgoingContract = {
-      messageContent: message.messageContent ?? null,
-      encryptedContent: message.encryptedContent ?? null,
-      iv: message.iv ?? null,
-      salt: message.salt ?? null,
-      isEncrypted: !!message.isEncrypted,
-      mediaUrl: message.mediaUrl ?? null,
-      mediaType: message.mediaType ?? null,
-    };
-
-    const resolvedMode = assertMessagePayload(outgoingContract);
-
-    const migrationVersion = message.migrationVersion || (outgoingContract.messageContent !== null
-      ? MESSAGE_MIGRATION_VERSION.DUAL_PERSISTENCE
-      : MESSAGE_MIGRATION_VERSION.LEGACY_E2EE);
+    const migrationVersion = message.migrationVersion || MESSAGE_MIGRATION_VERSION.DUAL_PERSISTENCE;
 
     const insertPayload = buildMessageInsertPayload({
-      encryptedContent: outgoingContract.encryptedContent,
-      iv: outgoingContract.iv,
-      salt: outgoingContract.salt,
-      isEncrypted: outgoingContract.isEncrypted,
-      text: outgoingContract.messageContent,
-      mediaUrl: outgoingContract.mediaUrl,
-      mediaType: outgoingContract.mediaType,
+      text: message.messageContent ?? null,
+      mediaUrl: message.mediaUrl ?? null,
+      mediaType: message.mediaType ?? null,
       migrationVersion,
-    }, resolvedMode);
+    }, 'plaintext');
 
     const { data, error } = await supabase
       .from("direct_messages")
@@ -657,32 +633,14 @@ async function persistMessageToDb(
     return data;
   } else {
     // It's a group chat, the chatId is the groupId
-    const outgoingContract = {
-      messageContent: message.messageContent ?? null,
-      encryptedContent: message.encryptedContent ?? null,
-      iv: message.iv ?? null,
-      salt: message.salt ?? null,
-      isEncrypted: !!message.isEncrypted,
-      mediaUrl: message.mediaUrl ?? null,
-      mediaType: message.mediaType ?? null,
-    };
-
-    const resolvedMode = assertMessagePayload(outgoingContract);
-
-    const migrationVersion = message.migrationVersion || (outgoingContract.messageContent !== null
-      ? MESSAGE_MIGRATION_VERSION.DUAL_PERSISTENCE
-      : MESSAGE_MIGRATION_VERSION.LEGACY_E2EE);
+    const migrationVersion = message.migrationVersion || MESSAGE_MIGRATION_VERSION.DUAL_PERSISTENCE;
 
     const insertPayload = buildMessageInsertPayload({
-      encryptedContent: outgoingContract.encryptedContent,
-      iv: outgoingContract.iv,
-      salt: outgoingContract.salt,
-      isEncrypted: outgoingContract.isEncrypted,
-      text: outgoingContract.messageContent,
-      mediaUrl: outgoingContract.mediaUrl,
-      mediaType: outgoingContract.mediaType,
+      text: message.messageContent ?? null,
+      mediaUrl: message.mediaUrl ?? null,
+      mediaType: message.mediaType ?? null,
       migrationVersion,
-    }, resolvedMode);
+    }, 'plaintext');
 
     const { data, error } = await supabase
       .from("group_messages")

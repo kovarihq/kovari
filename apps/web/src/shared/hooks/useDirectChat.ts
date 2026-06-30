@@ -11,11 +11,9 @@ export interface DirectChatMessage {
   id: string;
   sender_id: string;
   receiver_id: string;
-  encrypted_content?: string;
-  encryption_iv?: string;
-  encryption_salt?: string;
-  is_encrypted?: boolean;
   created_at: string;
+  message_content?: string | null;
+  migration_version?: number;
   status?: "sending" | "failed" | "sent" | "persisted" | "delivered" | "seen";
   tempId?: string;
   plain_content?: string; // for optimistic UI
@@ -279,10 +277,6 @@ export const useDirectChat = (
         tempId,
         sender_id: currentUserUuid,
         receiver_id: partnerUuid,
-        encrypted_content: outgoing.encryptedContent || "",
-        encryption_iv: outgoing.iv || "",
-        encryption_salt: outgoing.salt || "",
-        is_encrypted: outgoing.isEncrypted,
         created_at: new Date().toISOString(),
         status: "sending",
         plain_content: value.trim() || undefined,
@@ -307,19 +301,12 @@ export const useDirectChat = (
               socket.emit("send_message", {
                  chatId,
                  message: {
-                    id: tempId, // Use tempId as id for optimistic socket message
-                    tempId,
-                    senderId: currentUserUuid,
-                    receiverId: partnerUuid,
-                    messageContent: outgoing.messageContent,
-                    encryptedContent: outgoing.encryptedContent,
-                    iv: outgoing.iv,
-                    salt: outgoing.salt,
-                    mediaUrl: mediaUrl || null,
-                    mediaType: mediaType || null,
-                    isEncrypted: outgoing.isEncrypted,
-                    migrationVersion: outgoing.migrationVersion,
-                 }
+                     ...buildOutgoingMessage({ text: outgoing.messageContent, mediaUrl: mediaUrl || null, mediaType: mediaType || null }),
+                     id: tempId,
+                     tempId,
+                     senderId: currentUserUuid,
+                     receiverId: partnerUuid,
+                  }
               }, (ack: any) => {
                  if (ack?.status === "sent") {
                     // This ack is for the socket server receiving the message, not persisted
@@ -338,10 +325,6 @@ export const useDirectChat = (
           credentials: "include",
           body: JSON.stringify({
             partnerId: partnerUuid,
-            encrypted_content: outgoing.encryptedContent,
-            encryption_iv: outgoing.iv,
-            encryption_salt: outgoing.salt,
-            is_encrypted: outgoing.isEncrypted,
             clientId,
             media_url: mediaUrl ?? null,
             media_type: mediaType ?? null,
@@ -441,6 +424,9 @@ export const useDirectChat = (
       const hasTempId = incomingMsg.tempId && seenIdsRef.current.has(incomingMsg.tempId);
       const hasClientId = incomingMsg.client_id && seenIdsRef.current.has(incomingMsg.client_id);
 
+      const incomingContent = incomingMsg.messageContent ?? incomingMsg.message_content ?? incomingMsg.text ?? incomingMsg.plain_content;
+      const incomingVersion = incomingMsg.migrationVersion ?? incomingMsg.migration_version;
+
       if (hasId || hasTempId || hasClientId) {
         // If we've already seen this message (e.g., from optimistic send or initial fetch),
         // update its status and ID so it matches the server's persisted ID.
@@ -453,6 +439,8 @@ export const useDirectChat = (
           ? { 
               ...m, 
               id: incomingMsg.id || m.id, 
+              message_content: incomingContent ?? m.message_content,
+              migration_version: incomingVersion ?? m.migration_version,
               status: m.status === 'sending' ? "sent" : m.status 
             }
           : m
@@ -477,6 +465,8 @@ export const useDirectChat = (
             ? { 
                 ...m, 
                 id: incomingMsg.id || m.id, 
+                message_content: incomingContent ?? m.message_content,
+                migration_version: incomingVersion ?? m.migration_version,
                 status: m.status === 'sending' ? "sent" : m.status 
               }
             : m
@@ -484,8 +474,8 @@ export const useDirectChat = (
         }
         const hydration = hydrateMessageContent(
           {
-            message_content: incomingMsg.text ?? incomingMsg.message_content ?? incomingMsg.plain_content,
-            migration_version: incomingMsg.migration_version ?? incomingMsg.migrationVersion,
+            message_content: incomingContent,
+            migration_version: incomingVersion,
           }
         );
 
@@ -515,10 +505,6 @@ export const useDirectChat = (
                       id: m.id,
                       sender_id: m.senderId || m.sender_id,
                       receiver_id: m.receiverId || m.receiver_id,
-                      encrypted_content: m.encryptedContent || m.encrypted_content,
-                      encryption_iv: m.iv || m.encryption_iv,
-                      encryption_salt: m.salt || m.encryption_salt,
-                      is_encrypted: m.isEncrypted ?? m.is_encrypted ?? false,
                       created_at: m.createdAt || m.created_at || new Date().toISOString(),
                       plain_content: m.text || m.plain_content || "",
                       status: "delivered" as const,
@@ -547,10 +533,6 @@ export const useDirectChat = (
           id: incomingMsg.id || incomingMsg.tempId,
           sender_id: senderId,
           receiver_id: receiverId,
-          encrypted_content: incomingMsg.encryptedContent,
-          encryption_iv: incomingMsg.iv,
-          encryption_salt: incomingMsg.salt,
-          is_encrypted: incomingMsg.isEncrypted,
           created_at: incomingMsg.created_at || incomingMsg.createdAt || new Date().toISOString(),
           plain_content: finalContent, // Store decrypted content here
           mediaUrl: incomingMsg.mediaUrl,
