@@ -21,7 +21,7 @@
     "sib-api-v3-sdk": "^8.5.0",
     "zod": "^3.24.1",
     "react-icons": "^5.5.0",
-    "@sentry/nextjs": "^10.30.0"
+    "@sentry/nextjs": "^10.62.0"
   },
   "devDependencies": {
     "typescript": "^5"
