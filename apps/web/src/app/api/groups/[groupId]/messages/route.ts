@@ -2,8 +2,6 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
 import { createAdminSupabaseClient } from "@kovari/api";
 import { buildMessageInsertPayload } from "@/services/messaging/persistence";
-import { assertMessagePayload } from "@/services/messaging/assertMessagePayload";
-import { MESSAGE_MIGRATION_VERSION } from "@kovari/types";
 
 export async function GET(
   req: NextRequest,
@@ -237,20 +235,11 @@ export async function POST(
         mediaType: mediaType === "image" || mediaType === "video" ? mediaType : null,
       };
 
-      const resolvedMode = assertMessagePayload(outgoingContract);
-
-      const migrationVersion = body?.migrationVersion || MESSAGE_MIGRATION_VERSION.DUAL_PERSISTENCE;
-
       const basePayload = buildMessageInsertPayload({
-        encryptedContent: null,
-        iv: null,
-        salt: null,
-        isEncrypted: false,
         text: outgoingContract.messageContent,
         mediaUrl: outgoingContract.mediaUrl,
         mediaType: outgoingContract.mediaType,
-        migrationVersion,
-      }, resolvedMode);
+      });
 
       const messageData = {
         ...basePayload,

@@ -40,7 +40,6 @@ void main() {
         senderId: '',
         createdAt: DateTime.now(),
         status: '',
-        messageMigrationVersion: 1,
       ),
     );
     registerFallbackValue(
@@ -82,7 +81,6 @@ void main() {
           senderId: 'user_1',
           createdAt: DateTime.now(),
           status: 'sent',
-          messageMigrationVersion: 2,
         ),
       ];
 
@@ -105,7 +103,6 @@ void main() {
           senderId: 'user_1',
           createdAt: DateTime.now(),
           status: 'sent',
-          messageMigrationVersion: 2,
         ),
       ];
 
@@ -154,7 +151,6 @@ void main() {
         baseParams: {'partnerId': 'partner_abc', 'limit': 75},
         partnerClerkId: 'partner_clerk',
         myUserId: 'my_user_id',
-        decryptCallback: (entity) async => entity.text ?? '',
       );
 
       verify(() => mockCache.saveMessages(any())).called(1);
@@ -172,7 +168,6 @@ void main() {
           senderId: 'user_1',
           createdAt: DateTime.now(),
           status: 'sent',
-          messageMigrationVersion: 2,
         ),
       ];
 
@@ -197,7 +192,6 @@ void main() {
         chatId: 'chat_123',
         data: socketData,
         myUserId: 'my_user_id',
-        decryptCallback: (entity) async => entity.text ?? '',
       );
 
       expect(result.id, 'msg_2');
@@ -218,7 +212,6 @@ void main() {
           senderId: 'user_1',
           createdAt: DateTime.now(),
           status: 'pending',
-          messageMigrationVersion: 2,
         ),
       ];
 
@@ -231,7 +224,6 @@ void main() {
           senderId: 'user_1',
           createdAt: DateTime.now(),
           status: 'sent',
-          messageMigrationVersion: 2,
         ),
       ];
 

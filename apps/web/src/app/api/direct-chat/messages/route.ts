@@ -3,8 +3,6 @@ import { createAdminSupabaseClient } from "@kovari/api";
 import { getAuthenticatedUser } from "@/lib/auth/get-user";
 import { assertUUID } from "@/lib/validation/uuid";
 import { buildMessageInsertPayload } from "@/services/messaging/persistence";
-import { assertMessagePayload } from "@/services/messaging/assertMessagePayload";
-import { MESSAGE_MIGRATION_VERSION } from "@kovari/types";
 
 const DEFAULT_LIMIT = 30;
 const MAX_LIMIT = 100;
@@ -166,20 +164,11 @@ export async function POST(req: NextRequest) {
       mediaType: body?.media_type === "image" || body?.media_type === "video" ? body.media_type : null,
     };
 
-    const resolvedMode = assertMessagePayload({ ...outgoingContract, encryptedContent: null, iv: null, salt: null, isEncrypted: false });
-
-    const migrationVersion = body?.migrationVersion || MESSAGE_MIGRATION_VERSION.DUAL_PERSISTENCE;
-
     const basePayload = buildMessageInsertPayload({
-      encryptedContent: null,
-      iv: null,
-      salt: null,
-      isEncrypted: false,
       text: outgoingContract.messageContent,
       mediaUrl: outgoingContract.mediaUrl,
       mediaType: outgoingContract.mediaType,
-      migrationVersion,
-    }, resolvedMode);
+    });
 
     const insertPayload = {
       ...basePayload,

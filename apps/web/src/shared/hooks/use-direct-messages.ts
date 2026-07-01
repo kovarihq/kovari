@@ -1,12 +1,12 @@
 import { useEffect, useState, useCallback } from "react";
 import { createClient } from "@kovari/api/client";
-import { hydrateMessageContent } from "@/services/messaging/messageHydrator";
 
 export interface DirectMessage {
   id: string;
   sender_id: string;
   receiver_id: string;
   created_at: string;
+  message_content?: string | null;
 }
 
 interface UseDirectMessagesResult {
@@ -23,12 +23,6 @@ export const useDirectMessages = (
   const [messages, setMessages] = useState<DirectMessage[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const supabase = createClient();
-
-  // For demo: derive a shared secret from both UUIDs (in production, use a secure key exchange)
-  const sharedSecret =
-    currentUserUuid < partnerUuid
-      ? `${currentUserUuid}:${partnerUuid}`
-      : `${partnerUuid}:${currentUserUuid}`;
 
   const fetchMessages = useCallback(async () => {
     if (!currentUserUuid || !partnerUuid) {
@@ -48,27 +42,14 @@ export const useDirectMessages = (
         console.error("[useDirectMessages] Supabase error:", error);
       }
       if (!error && data) {
-        const decrypted = data.map((msg: any) => {
-          const hydration = hydrateMessageContent(
-            {
-              message_content: msg.message_content,
-              migration_version: msg.migration_version,
-            }
-          );
-
-          return {
-            ...msg,
-            plain_content: hydration.content,
-          };
-        });
-        setMessages(decrypted);
+        setMessages(data);
       }
     } catch (err) {
       console.error("[useDirectMessages] Exception during fetch:", err);
     } finally {
       setLoading(false);
     }
-  }, [currentUserUuid, partnerUuid, supabase, sharedSecret]);
+  }, [currentUserUuid, partnerUuid, supabase]);
 
   useEffect(() => {
     if (!currentUserUuid || !partnerUuid) return;

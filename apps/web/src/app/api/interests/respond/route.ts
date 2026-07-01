@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminSupabaseClient, AI } from "@kovari/api";
 import { getAuthenticatedUser } from "@/lib/auth/get-user";
+import { NotificationType } from "@kovari/types";
 import { createNotification } from "../../../../lib/notifications/createNotification";
-import { NotificationType, MESSAGE_MIGRATION_VERSION } from "@kovari/types";
 import { buildMessageInsertPayload } from "@/services/messaging/persistence";
 
 const { logMatchEvent, createMatchEventLog } = AI.Logging;
@@ -430,11 +430,9 @@ export async function POST(request: NextRequest) {
         // and Inbox UI fallthrough to display empty string.
 
         const initPayload = buildMessageInsertPayload({
-          isEncrypted: false,
           mediaUrl: "system",
           mediaType: "init",
-          migrationVersion: MESSAGE_MIGRATION_VERSION.LEGACY_E2EE,
-        }, 'legacy');
+        });
 
         const { error: msgError } = await supabaseAdmin
           .from("direct_messages")

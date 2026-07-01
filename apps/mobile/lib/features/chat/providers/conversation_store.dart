@@ -184,11 +184,7 @@ class ConversationStore extends Notifier<Map<String, ConversationEntity>> {
             lastMessage: lastMsgRaw,
           );
 
-          // 🔓 Zero-Flicker Decryption: Unlock BEFORE adding to the map
-          final decrypted = await _decryptMessageEntity(lastMsgRaw, conv);
-          newConversations[canonicalChatId] = conv.copyWith(
-            lastMessage: decrypted ?? lastMsgRaw,
-          );
+          newConversations[canonicalChatId] = conv;
         }
       }
 
@@ -203,54 +199,16 @@ class ConversationStore extends Notifier<Map<String, ConversationEntity>> {
     }
   }
 
-  /// 🔓 Decrypt all last messages in the current inbox state
-  Future<void> _decryptConversations() async {
-    final updatedState = Map<String, ConversationEntity>.from(state);
-    var changed = false;
-
-    for (final conv in updatedState.values) {
-      final lastMsg = conv.lastMessage;
-      if (lastMsg == null ||
-          !lastMsg.isEncrypted ||
-          (lastMsg.text?.isNotEmpty ?? false))
-        continue;
-
-      final decryptedMsg = await _decryptMessageEntity(lastMsg, conv);
-      if (decryptedMsg != null && decryptedMsg.text != lastMsg.text) {
-        updatedState[conv.chatId] = conv.copyWith(lastMessage: decryptedMsg);
-        changed = true;
-      }
-    }
-
-    if (changed) {
-      state = updatedState;
-    }
-  }
-
-  /// 🗝️ Centralized decryption logic for inbox previews
-  Future<MessageEntity?> _decryptMessageEntity(
-    MessageEntity entity,
-    ConversationEntity conv,
-  ) async {
-    // Delegate to ConversationRuntimeManager to respect the invariant limit
-    final manager = ref.read(conversationRuntimeManagerProvider(conv.chatId).notifier);
-    return manager.decryptMessageDirect(entity, partnerClerkId: conv.partnerClerkId);
-  }
-
   /// Update the last message snippet when a new message arrives.
   Future<void> updateLastMessage(String chatId, MessageEntity message) async {
     final existing = state[chatId];
     if (existing == null) return;
 
-    // Decrypt on-the-fly for real-time inbox updates
-    final decrypted = await _decryptMessageEntity(message, existing);
-    final finalMsg = decrypted ?? message;
-
     state = {
       ...state,
       chatId: existing.copyWith(
-        lastMessage: finalMsg,
-        lastMessageAt: finalMsg.createdAt,
+        lastMessage: message,
+        lastMessageAt: message.createdAt,
       ),
     };
 
@@ -259,12 +217,12 @@ class ConversationStore extends Notifier<Map<String, ConversationEntity>> {
         .read(conversationRuntimeStoreProvider.notifier)
         .updateLastMessage(
           chatId: chatId,
-          messageId: finalMsg.id,
-          snippet: finalMsg.text,
-          at: finalMsg.createdAt,
-          senderId: finalMsg.senderId,
-          mediaType: finalMsg.mediaType,
-          deliveryState: finalMsg.deliveryStatus,
+          messageId: message.id,
+          snippet: message.text,
+          at: message.createdAt,
+          senderId: message.senderId,
+          mediaType: message.mediaType,
+          deliveryState: message.deliveryStatus,
         );
   }
 

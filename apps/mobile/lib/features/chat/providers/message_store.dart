@@ -214,12 +214,10 @@ class MessageStore extends Notifier<ConversationMessageState> {
           text: m.text,
           mediaUrl: m.mediaUrl,
           mediaType: m.mediaType,
-          isEncrypted: false,
           deliveryStatus: MessageDeliveryStatus.values.firstWhere(
             (e) => e.name == m.status,
             orElse: () => MessageDeliveryStatus.sent,
           ),
-          migrationVersion: m.messageMigrationVersion,
         );
       }).toList();
 
@@ -303,7 +301,6 @@ class MessageStore extends Notifier<ConversationMessageState> {
           baseParams: {'limit': _kHotWindowSize},
           partnerClerkId: null,
           myUserId: userId,
-          decryptCallback: null,
         );
       } else {
         final partnerId = directChatPartnerId(
@@ -319,7 +316,6 @@ class MessageStore extends Notifier<ConversationMessageState> {
             baseParams: {'partnerId': partnerId, 'limit': _kHotWindowSize},
             partnerClerkId: partnerClerkId,
             myUserId: userId,
-            decryptCallback: null,
           );
         }
       }
@@ -335,12 +331,10 @@ class MessageStore extends Notifier<ConversationMessageState> {
           text: m.text,
           mediaUrl: m.mediaUrl,
           mediaType: m.mediaType,
-          isEncrypted: false,
           deliveryStatus: MessageDeliveryStatus.values.firstWhere(
             (e) => e.name == m.status,
             orElse: () => MessageDeliveryStatus.sent,
           ),
-          migrationVersion: m.messageMigrationVersion,
         );
       }).toList();
 
@@ -895,16 +889,6 @@ class MessageStore extends Notifier<ConversationMessageState> {
         chatId: _chatId,
         data: data,
         myUserId: userId,
-        decryptCallback: (entity) async {
-          final manager = ref.read(
-            conversationRuntimeManagerProvider(_chatId).notifier,
-          );
-          final res = await manager.decryptMessageDirect(
-            entity,
-            partnerClerkId: partnerClerkId,
-          );
-          return res?.text ?? '';
-        },
       );
 
       final entity = MessageEntity(
@@ -915,12 +899,10 @@ class MessageStore extends Notifier<ConversationMessageState> {
         text: cachedMsg.text,
         mediaUrl: cachedMsg.mediaUrl,
         mediaType: cachedMsg.mediaType,
-        isEncrypted: false,
         deliveryStatus: MessageDeliveryStatus.values.firstWhere(
           (e) => e.name == cachedMsg.status,
           orElse: () => MessageDeliveryStatus.sent,
         ),
-        migrationVersion: cachedMsg.messageMigrationVersion,
         conversationSequence: cachedMsg.sequence,
       );
 
@@ -1006,16 +988,6 @@ class MessageStore extends Notifier<ConversationMessageState> {
         <String, dynamic>{'chatId': _chatId, 'messageId': entity.id},
       );
 
-      // Decrypt legacy E2EE message if needed
-      final manager = ref.read(
-        conversationRuntimeManagerProvider(_chatId).notifier,
-      );
-      if (entity.isEncrypted) {
-        await manager.decryptMessageDirect(
-          entity,
-          partnerClerkId: partnerClerkId,
-        );
-      }
     } catch (e, stack) {
       AppLogger.e(
         '[MessageStore] Error in _onReceiveMessage',

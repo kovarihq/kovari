@@ -2,7 +2,6 @@ import { getDirectChatId } from "@kovari/api/client";
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useUser } from "@clerk/nextjs";
 import { buildOutgoingMessage } from "@kovari/types";
-import { hydrateMessageContent } from "@/services/messaging/messageHydrator";
 import { diagLog } from "@/lib/observability/performance";
 import { getSocket } from "@/lib/socket";
 import { v4 as uuidv4 } from "uuid";
@@ -13,10 +12,8 @@ export interface DirectChatMessage {
   receiver_id: string;
   created_at: string;
   message_content?: string | null;
-  migration_version?: number;
   status?: "sending" | "failed" | "sent" | "persisted" | "delivered" | "seen";
   tempId?: string;
-  plain_content?: string; // for optimistic UI
   client_id?: string;
   read_at?: string; // Added for read_at
   // Sender profile information
@@ -130,18 +127,8 @@ export const useDirectChat = (
           const data = Array.isArray(payload?.messages) ? payload.messages : [];
           // Transform messages to include sender profile information and normalize media fields
           const transformedMessages = data.map((msg: any) => {
-            const sId = msg.sender_id;
-            const rId = msg.receiver_id;
-            const hydration = hydrateMessageContent(
-              {
-                message_content: msg.message_content,
-                migration_version: msg.migration_version,
-              }
-            );
-
             return {
               ...msg,
-              plain_content: hydration.content,
               sender_profile: msg.sender?.profiles?.[0] || undefined,
               mediaUrl: (msg as any)["media_url"] || msg.mediaUrl,
               mediaType: (msg as any)["media_type"] || msg.mediaType,
@@ -279,7 +266,7 @@ export const useDirectChat = (
         receiver_id: partnerUuid,
         created_at: new Date().toISOString(),
         status: "sending",
-        plain_content: value.trim() || undefined,
+        message_content: value.trim() || undefined,
         client_id: clientId,
         mediaUrl,
         mediaType,
@@ -329,7 +316,6 @@ export const useDirectChat = (
             media_url: mediaUrl ?? null,
             media_type: mediaType ?? null,
             text: value.trim() || null,
-            migrationVersion: outgoing.migrationVersion,
           }),
         });
         if (!response.ok) {
@@ -424,8 +410,7 @@ export const useDirectChat = (
       const hasTempId = incomingMsg.tempId && seenIdsRef.current.has(incomingMsg.tempId);
       const hasClientId = incomingMsg.client_id && seenIdsRef.current.has(incomingMsg.client_id);
 
-      const incomingContent = incomingMsg.messageContent ?? incomingMsg.message_content ?? incomingMsg.text ?? incomingMsg.plain_content;
-      const incomingVersion = incomingMsg.migrationVersion ?? incomingMsg.migration_version;
+      const incomingContent = incomingMsg.messageContent ?? incomingMsg.message_content ?? incomingMsg.text;
 
       if (hasId || hasTempId || hasClientId) {
         // If we've already seen this message (e.g., from optimistic send or initial fetch),
@@ -440,7 +425,6 @@ export const useDirectChat = (
               ...m, 
               id: incomingMsg.id || m.id, 
               message_content: incomingContent ?? m.message_content,
-              migration_version: incomingVersion ?? m.migration_version,
               status: m.status === 'sending' ? "sent" : m.status 
             }
           : m
@@ -451,7 +435,6 @@ export const useDirectChat = (
       if (incomingMsg.tempId) seenIdsRef.current.add(incomingMsg.tempId);
       if (incomingMsg.client_id) seenIdsRef.current.add(incomingMsg.client_id);
 
-      // We handle decryption inside state update to use the latest keys
       setMessages((prev) => {
         const exists = prev.some(
           (m) =>
@@ -466,21 +449,13 @@ export const useDirectChat = (
                 ...m, 
                 id: incomingMsg.id || m.id, 
                 message_content: incomingContent ?? m.message_content,
-                migration_version: incomingVersion ?? m.migration_version,
                 status: m.status === 'sending' ? "sent" : m.status 
               }
             : m
           );
         }
-        const hydration = hydrateMessageContent(
-          {
-            message_content: incomingContent,
-            migration_version: incomingVersion,
-          }
-        );
 
-        let finalContent = hydration.content;
-        let finalIsEncrypted = false;
+        const finalContent = incomingContent || "";
 
         // --- Workstream 7: Sequence Gap Detection & Idempotent Merge ---
         const incomingSeq: number | undefined = (incomingMsg as any).conversationSequence;
@@ -506,7 +481,7 @@ export const useDirectChat = (
                       sender_id: m.senderId || m.sender_id,
                       receiver_id: m.receiverId || m.receiver_id,
                       created_at: m.createdAt || m.created_at || new Date().toISOString(),
-                      plain_content: m.text || m.plain_content || "",
+                      message_content: m.text || m.message_content || "",
                       status: "delivered" as const,
                     }));
                   return [...prev, ...gapMessages].sort(
@@ -534,7 +509,7 @@ export const useDirectChat = (
           sender_id: senderId,
           receiver_id: receiverId,
           created_at: incomingMsg.created_at || incomingMsg.createdAt || new Date().toISOString(),
-          plain_content: finalContent, // Store decrypted content here
+          message_content: finalContent,
           mediaUrl: incomingMsg.mediaUrl,
           mediaType: incomingMsg.mediaType,
           client_id: incomingMsg.tempId, // from optimism

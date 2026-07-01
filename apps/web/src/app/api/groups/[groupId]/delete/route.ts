@@ -103,20 +103,6 @@ export async function DELETE(
       );
     }
 
-    // Delete group encryption keys
-    const { error: encryptionKeysError } = await supabase
-      .from("group_encryption_keys")
-      .delete()
-      .eq("group_id", groupId);
-
-    if (encryptionKeysError) {
-      console.error("Error deleting group encryption keys:", encryptionKeysError);
-      return NextResponse.json(
-        { error: "Failed to delete group data" },
-        { status: 500 },
-      );
-    }
-
     // Delete group email invitations
     const { error: emailInviteError } = await supabase
       .from("group_email_invitations")

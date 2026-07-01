@@ -1,5 +1,3 @@
-import { CURRENT_MESSAGE_WRITE_VERSION, MessageWriteMode } from './migration';
-
 /**
  * Platform-agnostic input from the user/UI layer.
  */
@@ -12,27 +10,23 @@ export interface OutgoingMessageInput {
 /**
  * Canonical outgoing message contract.
  * Every sender (socket, REST, optimistic UI, retry queue) must build this first.
- * Persistence is a separate layer.
+ * Base properties only.
  */
 export interface OutgoingMessageContract {
   messageContent: string | null;
-  migrationVersion: number;
   mediaUrl: string | null;
   mediaType: string | null;
 }
 
 /**
- * Phase 8B: E2EE fully decommissioned. buildOutgoingMessage always returns
- * a plaintext contract. The mode parameter is retained for call-site
- * compatibility but is ignored — callers may be updated to drop it over time.
+ * Phase 8B: E2EE and migration layers fully decommissioned.
+ * buildOutgoingMessage returns a clean plaintext contract.
  */
 export function buildOutgoingMessage(
-  input: OutgoingMessageInput,
-  _mode?: MessageWriteMode
+  input: OutgoingMessageInput
 ): OutgoingMessageContract {
   return {
     messageContent: input.text ?? null,
-    migrationVersion: CURRENT_MESSAGE_WRITE_VERSION,
     mediaUrl: input.mediaUrl ?? null,
     mediaType: input.mediaType ?? null,
   };

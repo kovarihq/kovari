@@ -197,15 +197,11 @@ class ChatMutationService {
       id: 'pending_$clientMessageId',
       chatId: chatId,
       senderId: payload.senderId,
-      senderClerkId: payload.senderClerkId,
-      receiverClerkId: payload.receiverClerkId,
       clientMessageId: clientMessageId,
       createdAt: DateTime.now(),
       text: payload.mediaType == 'image' ? '📷 Photo' : '🎥 Video',
       mediaUrl: payload.mediaUrl,
       mediaType: payload.mediaType,
-      encryptionIv: payload.encryptionIv,
-      encryptionSalt: payload.encryptionSalt,
       deliveryStatus: MessageDeliveryStatus.pending,
     );
 

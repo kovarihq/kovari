@@ -1,6 +1,4 @@
 import { useEffect, useState, useRef, useCallback } from "react";
-import { hydrateMessageContent } from "@/services/messaging/messageHydrator";
-import { MESSAGE_MIGRATION_VERSION } from "@kovari/types";
 import { useUser } from "@clerk/nextjs";
 import { getSocket } from "@/lib/socket";
 
@@ -71,14 +69,7 @@ export const useDirectInbox = (
       const isMe = senderId === currentUserUuid;
       const partnerId = isMe ? receiverId : senderId;
 
-      const hydration = hydrateMessageContent(
-        {
-          message_content: incomingMsg.text ?? incomingMsg.message_content ?? incomingMsg.plain_content,
-          migration_version: incomingMsg.migration_version ?? incomingMsg.migrationVersion,
-        }
-      );
-
-      let messageText = hydration.content || "[Empty message]";
+      let messageText = (incomingMsg.text ?? incomingMsg.message_content ?? incomingMsg.messageContent) || "[Empty message]";
 
       // Emit delivery ack for messages from others
       if (!isMe && msgId) {
@@ -181,13 +172,7 @@ export const useDirectInbox = (
             lastMessage = "";
             lastMediaType = msg.media_type;
           } else {
-            const hydration = hydrateMessageContent(
-              {
-                message_content: msg.message_content,
-                migration_version: msg.migration_version,
-              }
-            );
-            lastMessage = hydration.content || "[Empty message]";
+            lastMessage = msg.message_content || "[Empty message]";
           }
 
           map.set(partnerId, {

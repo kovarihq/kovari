@@ -3,8 +3,6 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { useUser } from "@clerk/nextjs";
 import { getSocket } from "@/lib/socket";
 import { buildOutgoingMessage, SocketMessageV2 } from "@kovari/types";
-import { useGroupEncryption } from "./useGroupEncryption";
-import { hydrateMessageContent } from "@/services/messaging/messageHydrator";
 
 export interface ChatMessage {
   id: string;
@@ -80,11 +78,6 @@ export const useGroupChat = (groupId: string) => {
     }
   }, [user?.id, groupId]);
 
-  const {
-    encryptMessage,
-    isEncryptionAvailable,
-  } = useGroupEncryption(groupId);
-
   const seenIdsRef = useRef(new Set<string>());
   // Gap detection: track the highest conversation sequence seen
   const lastKnownSequenceRef = useRef<number>(0);
@@ -128,21 +121,12 @@ export const useGroupChat = (groupId: string) => {
         mediaType: msg.mediaType ?? msg.media_type ?? undefined,
       }));
 
-      const decryptedMessages = await Promise.all(
-        mappedData.map(async (message: any) => {
-          const hydration = hydrateMessageContent(
-            {
-              message_content: message.message_content,
-              migration_version: message.migration_version,
-            }
-          );
-
-          return {
-            ...message,
-            content: hydration.content || "[Empty message]",
-          };
-        }),
-      );
+      const decryptedMessages = mappedData.map((message: any) => {
+        return {
+          ...message,
+          content: message.message_content || "[Empty message]",
+        };
+      });
 
       setMessages((prev) => {
         // Build a map of existing messages for quick lookup
@@ -151,7 +135,7 @@ export const useGroupChat = (groupId: string) => {
           prev.filter((m) => m.tempId).map((m) => [m.tempId!, m])
         );
 
-        const mergedMessages = decryptedMessages.map((msg) => {
+        const mergedMessages = decryptedMessages.map((msg: any) => {
           const existing = existingMessages.get(msg.id) || existingTempMessages.get(msg.id);
           
           let status = msg.status;
@@ -168,7 +152,7 @@ export const useGroupChat = (groupId: string) => {
 
         if (loadMore) {
           const newMessages = mergedMessages.filter(
-            (msg) => !existingMessages.has(msg.id)
+            (msg: any) => !existingMessages.has(msg.id)
           );
           
           const combined = [...newMessages, ...prev];
@@ -182,7 +166,7 @@ export const useGroupChat = (groupId: string) => {
             (m) =>
               m.tempId && // Is an optimistic message
               (m.status === "sending" || m.status === "sent" || m.status === "delivered") &&
-              !decryptedMessages.some((dm) => dm.id === m.id || dm.id === m.tempId)
+              !decryptedMessages.some((dm: any) => dm.id === m.id || dm.id === m.tempId)
           );
 
           const combined = [...mergedMessages, ...pendingMessages];
@@ -334,7 +318,6 @@ export const useGroupChat = (groupId: string) => {
             mediaUrl,
             mediaType,
             text: content.trim() || null,
-            migrationVersion: outgoing.migrationVersion,
           }),
         });
 
@@ -373,7 +356,7 @@ export const useGroupChat = (groupId: string) => {
         setSending(false);
       }
     },
-    [groupId, user, encryptMessage, chatId, stopTyping, currentUserAvatar],
+    [groupId, user, chatId, stopTyping, currentUserAvatar],
   );
 
   const notifyMessagesSeen = useCallback(
@@ -420,11 +403,7 @@ export const useGroupChat = (groupId: string) => {
           }, async (response: any) => {
             if (response?.status === "success" && Array.isArray(response.messages)) {
               const decryptedGap = response.messages.map((m: any) => {
-                const hydration = hydrateMessageContent({
-                  message_content: m.text ?? m.message_content ?? m.plain_content,
-                  migration_version: m.migration_version ?? m.migrationVersion,
-                });
-                const decryptedContent = hydration.content || "[Empty message]";
+                const decryptedContent = (m.text ?? m.message_content ?? m.messageContent) || "[Empty message]";
                 return {
                   id: m.id,
                   content: decryptedContent,
@@ -465,14 +444,7 @@ export const useGroupChat = (groupId: string) => {
       );
       if (exists) return prev;
 
-       const hydration = hydrateMessageContent(
-        {
-          message_content: incomingMsg.text ?? incomingMsg.message_content ?? incomingMsg.plain_content,
-          migration_version: incomingMsg.migration_version ?? incomingMsg.migrationVersion,
-        }
-      );
-
-      const decryptedContent = hydration.content || "[Empty message]";
+       const content = (incomingMsg.text ?? incomingMsg.message_content ?? incomingMsg.messageContent) || "[Empty message]";
 
       const isFromMe = incomingMsg.senderId === user?.id;
 
@@ -485,7 +457,7 @@ export const useGroupChat = (groupId: string) => {
       const newMessage: ChatMessage = { // Changed from GroupChatMessage to ChatMessage
         id: incomingMsg.id,
         tempId: incomingMsg.tempId,
-        content: decryptedContent,
+        content: content,
         senderId: incomingMsg.senderId,
         sender: incomingMsg.senderName || "Unknown",
         avatar: incomingMsg.avatar,
@@ -606,17 +578,14 @@ export const useGroupChat = (groupId: string) => {
       socket.off("user_online", handleUserOnline);
       socket.off("user_offline", handleUserOffline);
       socket.off("gap_found", handleGapFound);
-      socket.emit("leave_chat", { chatId });
     };
-  }, [groupId, user?.id, handleReceiveMessage, handleMessagesSeen, fetchMessages, chatId, isEncryptionAvailable]); // Added chatId, isEncryptionAvailable to deps
+  }, [groupId, user?.id, handleReceiveMessage, handleMessagesSeen, fetchMessages, chatId]);
 
   // Initial data fetch
   useEffect(() => {
-    if (isEncryptionAvailable) {
-      fetchMessages();
-      fetchGroupInfo();
-    }
-  }, [fetchMessages, fetchGroupInfo, isEncryptionAvailable]);
+    fetchMessages();
+    fetchGroupInfo();
+  }, [fetchMessages, fetchGroupInfo]);
 
   return {
     messages,

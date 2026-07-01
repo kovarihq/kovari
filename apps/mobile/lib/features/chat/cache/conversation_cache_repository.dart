@@ -277,7 +277,6 @@ class ConversationCacheRepository {
       'mediaUrl': m.mediaUrl,
       'mediaType': m.mediaType,
       'status': m.status,
-      'messageMigrationVersion': m.messageMigrationVersion,
     };
   }
 
@@ -292,7 +291,6 @@ class ConversationCacheRepository {
       mediaUrl: map['mediaUrl'] as String?,
       mediaType: map['mediaType'] as String?,
       status: map['status'] as String,
-      messageMigrationVersion: map['messageMigrationVersion'] as int,
     );
   }
 }

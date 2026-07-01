@@ -33,14 +33,7 @@ import { PiPaperclip } from "react-icons/pi";
 import { BiCheckDouble, BiCheck, BiTime } from "react-icons/bi";
 import { HiPlay } from "react-icons/hi";
 import { getUserUuidByClerkId, isUserBlocked, blockUser, unblockUser, checkBlockStatus } from "@kovari/api/client";
-import { 
-  formatMessageDate, 
-  isSameDay, 
-  linkifyMessage,
-  getFullImageUrl,
-} from "@kovari/utils";
-import { hydrateMessageContent } from "@/services/messaging/messageHydrator";
-import { MESSAGE_MIGRATION_VERSION } from "@kovari/types";
+import { formatMessageDate, isSameDay, linkifyMessage, getFullImageUrl } from "@kovari/utils";
 import Link from "next/link";
 import { useToast } from "@/shared/hooks/use-toast";
 import Picker from "@emoji-mart/react";
@@ -418,26 +411,13 @@ const MessageList = ({
 
           const msg = item.data;
           const isSent = msg.sender_id === currentUserUuid;
-          let content: string = "";
-          let showSpinner = false;
-          let showError = false;
 
           // Check if sender is deleted
           const isSenderDeleted = msg.sender_profile?.deleted === true;
 
-          if (msg.status === "sending" || msg.status === "failed") {
-            content = msg.plain_content || "";
-            showSpinner = msg.status === "sending";
-            showError = msg.status === "failed";
-          } else {
-            const hydration = hydrateMessageContent(
-              {
-                message_content: msg.message_content,
-                migration_version: msg.migration_version,
-              }
-            );
-            content = hydration.content || "";
-          }
+          const content = msg.message_content || "";
+          const showSpinner = msg.status === "sending";
+          const showError = msg.status === "failed";
           return (
             <div role="listitem" key={msg.tempId || msg.id}>
               <MessageRow
@@ -981,8 +961,8 @@ const DirectChatPage = () => {
   // Retry handler for failed messages
   const handleRetry = useCallback(
     (msg: any) => {
-      if (msg.plain_content) {
-        sendMessage(msg.plain_content, msg.mediaUrl, msg.mediaType);
+      if (msg.message_content) {
+        sendMessage(msg.message_content, msg.mediaUrl, msg.mediaType);
       }
     },
     [sendMessage],
@@ -992,17 +972,7 @@ const DirectChatPage = () => {
   const getDisplayableContent = (msg: any) => {
     // If media, do not try to decrypt or show text
     if (msg.mediaUrl) return "";
-    if (msg.status === "sending" || msg.status === "failed") {
-      return msg.plain_content || "";
-    } else {
-      const hydration = hydrateMessageContent(
-        {
-          message_content: msg.message_content,
-          migration_version: msg.migration_version,
-        }
-      );
-      return hydration.content || "";
-    }
+    return msg.message_content || "";
   };
 
   // Dispatch event after sending or receiving a message
@@ -1251,23 +1221,9 @@ const DirectChatPage = () => {
 
           const isSent = msg.sender_id === currentUserUuid;
           const isSenderDeleted = msg.sender_profile?.deleted === true;
-          let content = "";
-          let showSpinner = false;
-          let showError = false;
-
-          if (msg.status === "sending" || msg.status === "failed") {
-            content = msg.plain_content || "";
-            showSpinner = msg.status === "sending";
-            showError = msg.status === "failed";
-          } else {
-            const hydration = hydrateMessageContent(
-              {
-                message_content: msg.message_content,
-                migration_version: msg.migration_version,
-              }
-            );
-            content = hydration.content || "";
-          }
+          const content = msg.message_content || "";
+          const showSpinner = msg.status === "sending";
+          const showError = msg.status === "failed";
 
           result.push({
             type: "message",

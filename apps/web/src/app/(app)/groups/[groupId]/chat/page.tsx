@@ -28,7 +28,6 @@ import { HiPlay } from "react-icons/hi";
 import { useGroupChat, type ChatMessage } from "@/shared/hooks/useGroupChat";
 import { sanitizeMessage } from "@/lib/sanitize";
 import { useGroupMembers } from "@/shared/hooks/useGroupMembers";
-import { useGroupEncryption } from "@/shared/hooks/useGroupEncryption";
 import { useGroupMembership } from "@/shared/hooks/useGroupMembership";
 import { toast } from "sonner";
 import { Shield, ShieldCheck } from "lucide-react";
@@ -245,11 +244,7 @@ export default function GroupChatInterface() {
   } = useGroupChat(groupId);
 
   const { members, loading: membersLoading } = useGroupMembers(groupId);
-  const {
-    keyFingerprint,
-    loading: encryptionLoading,
-    isEncryptionAvailable,
-  } = useGroupEncryption(groupId);
+
 
   // Check user membership status
   const {

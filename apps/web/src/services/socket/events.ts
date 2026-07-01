@@ -17,8 +17,6 @@ import {
 
 import { sequenceManager } from "./sequences";
 import { buildMessageInsertPayload } from "../messaging/persistence";
-import { assertMessagePayload } from "../messaging/assertMessagePayload";
-import { MESSAGE_MIGRATION_VERSION } from "@kovari/types";
 
 export const registerSocketEvents = (
   io: Server<
@@ -605,14 +603,11 @@ async function persistMessageToDb(
       conv = newConv;
     }
 
-    const migrationVersion = message.migrationVersion || MESSAGE_MIGRATION_VERSION.DUAL_PERSISTENCE;
-
     const insertPayload = buildMessageInsertPayload({
       text: message.messageContent ?? null,
       mediaUrl: message.mediaUrl ?? null,
       mediaType: message.mediaType ?? null,
-      migrationVersion,
-    }, 'plaintext');
+    });
 
     const { data, error } = await supabase
       .from("direct_messages")
@@ -633,14 +628,11 @@ async function persistMessageToDb(
     return data;
   } else {
     // It's a group chat, the chatId is the groupId
-    const migrationVersion = message.migrationVersion || MESSAGE_MIGRATION_VERSION.DUAL_PERSISTENCE;
-
     const insertPayload = buildMessageInsertPayload({
       text: message.messageContent ?? null,
       mediaUrl: message.mediaUrl ?? null,
       mediaType: message.mediaType ?? null,
-      migrationVersion,
-    }, 'plaintext');
+    });
 
     const { data, error } = await supabase
       .from("group_messages")

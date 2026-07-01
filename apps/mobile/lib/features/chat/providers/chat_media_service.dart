@@ -131,8 +131,6 @@ class ChatMediaService {
       senderId: myUserId,
       localFilePath: persistentFile.path,
       mediaType: type,
-      senderClerkId: authUser.id,
-      receiverClerkId: partnerClerkId,
       thumbnailUrl: localThumbnailPath,
     );
     _ref.read(messageStoreProvider(chatId).notifier).addOptimistic(optimistic);

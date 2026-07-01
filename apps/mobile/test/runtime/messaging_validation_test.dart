@@ -12,8 +12,6 @@ import 'package:mobile/core/providers/auth_provider.dart';
 import 'package:mobile/core/realtime/socket_service.dart';
 import 'package:mobile/core/realtime/socket_state.dart';
 import 'package:mobile/core/runtime/mutation_journal.dart';
-import 'package:mobile/core/security/encryption_service.dart';
-import 'package:mobile/core/security/group_encryption_service.dart';
 import 'package:mobile/core/telemetry/messaging_telemetry_service.dart';
 import 'package:mobile/features/chat/models/conversation_entity.dart';
 import 'package:mobile/features/chat/models/message_entity.dart';
@@ -42,9 +40,6 @@ class MockSocketService extends Mock implements SocketService {}
 
 class MockMessagingTelemetryService extends Mock
     implements MessagingTelemetryService {}
-
-class MockGroupEncryptionService extends Mock
-    implements GroupEncryptionService {}
 
 class MockCloudinaryService extends Mock implements CloudinaryService {}
 
@@ -231,7 +226,6 @@ void main() {
         senderId: '',
         createdAt: DateTime.now(),
         status: '',
-        messageMigrationVersion: 1,
       ),
     );
     registerFallbackValue(
@@ -253,7 +247,6 @@ void main() {
   late MockApiClient mockApiClient;
   late MockSocketService mockSocketService;
   late MockMessagingTelemetryService mockTelemetry;
-  late MockGroupEncryptionService mockGroupEnc;
   late MockCloudinaryService mockCloudinaryService;
   late FakeMutationJournal fakeMutationJournal;
 
@@ -264,7 +257,6 @@ void main() {
     mockApiClient = MockApiClient();
     mockSocketService = MockSocketService();
     mockTelemetry = MockMessagingTelemetryService();
-    mockGroupEnc = MockGroupEncryptionService();
     mockCloudinaryService = MockCloudinaryService();
     fakeMutationJournal = FakeMutationJournal();
 
@@ -344,11 +336,7 @@ void main() {
           ApiResponse<Map<String, dynamic>>.fallback(reason: 'test_stub'),
     );
 
-    // Stub group encryption to avoid real network calls
-    when(
-      () => mockGroupEnc.encryptMessage(any(), any()),
-    ).thenAnswer((_) async => null);
-    when(() => mockGroupEnc.isKeyAvailable(any())).thenReturn(true);
+
 
     container = ProviderContainer(
       overrides: [
@@ -357,7 +345,6 @@ void main() {
           () => SocketServiceMock(mockSocketService),
         ),
         messagingTelemetryProvider.overrideWithValue(mockTelemetry),
-        groupEncryptionServiceProvider.overrideWithValue(mockGroupEnc),
         cloudinaryServiceProvider.overrideWithValue(mockCloudinaryService),
         // In-memory MutationJournal — no Hive initialization needed
         mutationJournalProvider.overrideWith((_) => fakeMutationJournal),
@@ -803,19 +790,6 @@ void main() {
       container.read(conversationRuntimeManagerProvider(chatId));
       await Future<void>.delayed(const Duration(milliseconds: 50));
 
-      // Stub group decryption for userB and userC
-      when(
-        () => mockGroupEnc.decryptMessage(
-          groupId: chatId,
-          encryptedContent: any(named: 'encryptedContent'),
-          iv: any(named: 'iv'),
-          salt: any(named: 'salt'),
-        ),
-      ).thenAnswer((invocation) async {
-        final content = invocation.namedArguments[#encryptedContent] as String;
-        return 'Decrypted: $content';
-      });
-
       print(
         '[OBSERVED LOGS] Simulating encrypted messages from userB and userC...',
       );
@@ -924,8 +898,6 @@ void main() {
           senderId: 'uuid-user-1',
           localFilePath: file.path,
           mediaType: 'image',
-          senderClerkId: 'user1',
-          receiverClerkId: 'clerk2',
         ).copyWith(mediaUploadState: MediaUploadState.uploading),
       );
 

@@ -27,7 +27,6 @@ import 'package:mobile/features/chat/providers/conversation_store.dart';
 import 'package:mobile/features/chat/providers/message_store.dart';
 import 'package:mobile/features/chat/providers/conversation_runtime_store.dart';
 import 'package:mobile/features/chat/providers/conversation_runtime_manager.dart';
-import 'package:mobile/features/chat/providers/decryption_cache.dart';
 import 'package:mobile/features/chat/utils/direct_chat_id.dart';
 import 'package:mobile/features/groups/providers/entity_stores.dart';
 import 'package:mobile/features/groups/models/group.dart';
@@ -263,7 +262,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     // Keep the runtime manager alive for this chat session
     ref.watch(conversationRuntimeManagerProvider(_chatId));
 
-    final visibleMessages = ref.watch(decryptedMessagesProvider(_chatId))
+    final visibleMessages = ref
+        .watch(decryptedMessagesProvider(_chatId))
         .where((m) => m.mediaType != 'init')
         .toList();
 
@@ -1135,24 +1135,34 @@ class _MessageBubble extends ConsumerWidget {
                                   File(message.localFilePath!),
                                   fit: BoxFit.cover,
                                 )
-                              : _EncryptedImage(
-                                  url: message.mediaUrl!,
-                                  iv: message.encryptionIv ?? '',
-                                  salt: message.encryptionSalt ?? '',
-                                  chatId: message.chatId,
-                                  placeholder: Container(
-                                    height: 200 * scale,
-                                    color: AppColors.surface(context, level: 2),
-                                    child: const Center(
-                                      child: SizedBox(
-                                        width: 20,
-                                        height: 20,
-                                        child: CircularProgressIndicator(
-                                          strokeWidth: 3,
-                                        ),
+                              : Image.network(
+                                  message.mediaUrl!,
+                                  fit: BoxFit.cover,
+                                  errorBuilder: (context, error, stackTrace) =>
+                                      const Center(
+                                        child: Icon(Icons.broken_image),
                                       ),
-                                    ),
-                                  ),
+                                  loadingBuilder:
+                                      (context, child, loadingProgress) {
+                                        if (loadingProgress == null)
+                                          return child;
+                                        return Container(
+                                          height: 200 * scale,
+                                          color: AppColors.surface(
+                                            context,
+                                            level: 2,
+                                          ),
+                                          child: const Center(
+                                            child: SizedBox(
+                                              width: 20,
+                                              height: 20,
+                                              child: CircularProgressIndicator(
+                                                strokeWidth: 3,
+                                              ),
+                                            ),
+                                          ),
+                                        );
+                                      },
                                 ))
                         : Container(
                             height: 200 * scale,
@@ -2001,166 +2011,6 @@ class _LinkifiedText extends StatelessWidget {
   }
 }
 
-class _EncryptedImage extends StatefulWidget {
-  const _EncryptedImage({
-    required this.url,
-    required this.iv,
-    required this.salt,
-    required this.chatId,
-    this.placeholder,
-  });
-
-  final String url;
-  final String iv;
-  final String salt;
-  final String chatId;
-  final Widget? placeholder;
-
-  @override
-  State<_EncryptedImage> createState() => _EncryptedImageState();
-}
-
-class _EncryptedImageState extends State<_EncryptedImage> {
-  Uint8List? _imageBytes;
-  String? _error;
-
-  @override
-  void initState() {
-    super.initState();
-    _loadAndDecrypt();
-  }
-
-  Future<void> _loadAndDecrypt() async {
-    try {
-      // 1. Check local storage cache first
-      final filename = widget.url.replaceAll(RegExp(r'[^a-zA-Z0-9]'), '_');
-      final tempDir = await getTemporaryDirectory();
-      final localPath = '${tempDir.path}/$filename';
-      final file = File(localPath);
-
-      if (await file.exists()) {
-        final cachedBytes = await file.readAsBytes();
-        if (mounted) {
-          setState(() {
-            _imageBytes = cachedBytes;
-          });
-        }
-        AppLogger.i(
-          '📦 [_EncryptedImage] Loaded media from local cache: $localPath',
-        );
-        return;
-      }
-
-      // 2. Download encrypted bytes if not cached
-      final response = await Dio().get<List<int>>(
-        widget.url,
-        options: Options(responseType: ResponseType.bytes),
-      );
-
-      if (response.data == null) throw Exception('No data received');
-
-      final dataLength = response.data!.length;
-      AppLogger.i('🛡️ [_EncryptedImage] Downloaded $dataLength bytes');
-
-      // 3. Decrypt or bypass
-      final rawBytes = Uint8List.fromList(response.data!);
-
-      bool isUnencrypted = false;
-      if (rawBytes.length % 16 != 0) {
-        isUnencrypted = true;
-      } else if (rawBytes.length >= 4) {
-        if (rawBytes[0] == 137 &&
-            rawBytes[1] == 80 &&
-            rawBytes[2] == 78 &&
-            rawBytes[3] == 71) {
-          isUnencrypted = true;
-        } else if (rawBytes[0] == 255 &&
-            rawBytes[1] == 216 &&
-            rawBytes[2] == 255) {
-          isUnencrypted = true;
-        } else if (rawBytes[0] == 71 &&
-            rawBytes[1] == 73 &&
-            rawBytes[2] == 70 &&
-            rawBytes[3] == 56) {
-          isUnencrypted = true;
-        } else if (rawBytes[0] == 82 &&
-            rawBytes[1] == 73 &&
-            rawBytes[2] == 70 &&
-            rawBytes[3] == 70) {
-          isUnencrypted = true;
-        } else if (rawBytes.length >= 8 &&
-            rawBytes[4] == 102 &&
-            rawBytes[5] == 116 &&
-            rawBytes[6] == 121 &&
-            rawBytes[7] == 112) {
-          isUnencrypted = true;
-        }
-      }
-
-      Uint8List decrypted = rawBytes;
-
-      // 4. Save decrypted bytes to local cache directory for future hits
-      try {
-        await file.writeAsBytes(decrypted);
-        AppLogger.d(
-          '🔒 [_EncryptedImage] Saved decrypted media to local cache: $localPath',
-        );
-      } catch (e) {
-        AppLogger.e('Failed to write media to local cache storage', error: e);
-      }
-
-      if (mounted) {
-        setState(() {
-          _imageBytes = decrypted;
-        });
-      }
-    } catch (e) {
-      AppLogger.e('🛡️ [_EncryptedImage] Failed to load/decrypt', error: e);
-      if (mounted) {
-        setState(() {
-          _error = e.toString();
-        });
-      }
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    if (_error != null) {
-      return Container(
-        height: 200,
-        width: double.infinity,
-        color: AppColors.surface(context, level: 2),
-        child: Center(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Icon(LucideIcons.circleAlert, color: AppColors.destructive),
-              const SizedBox(height: 8),
-              Text(
-                'Decryption Error',
-                style: AppTextStyles.bodySmall.copyWith(
-                  color: AppColors.destructive,
-                ),
-              ),
-            ],
-          ),
-        ),
-      );
-    }
-
-    if (_imageBytes == null) {
-      return widget.placeholder ?? const SizedBox(height: 200);
-    }
-
-    return Image.memory(
-      _imageBytes!,
-      fit: BoxFit.cover,
-      width: double.infinity,
-    );
-  }
-}
-
 // ── Fullscreen Media Viewer ──────────────────────────────────────────────────
 
 class _FullscreenMediaViewer extends StatefulWidget {
@@ -2245,20 +2095,30 @@ class _FullscreenMediaViewerState extends State<_FullscreenMediaViewer> {
                                   File(message.localFilePath!),
                                   fit: BoxFit.contain,
                                 )
-                              : _EncryptedImage(
-                                  url: message.mediaUrl!,
-                                  iv: message.encryptionIv ?? '',
-                                  salt: message.encryptionSalt ?? '',
-                                  chatId: message.chatId,
-                                  placeholder: Container(
-                                    height: 300,
-                                    color: AppColors.surface(context, level: 2),
-                                    child: const Center(
-                                      child: CircularProgressIndicator(
-                                        color: Colors.white,
+                              : Image.network(
+                                  message.mediaUrl!,
+                                  fit: BoxFit.contain,
+                                  errorBuilder: (context, error, stackTrace) =>
+                                      const Center(
+                                        child: Icon(Icons.broken_image),
                                       ),
-                                    ),
-                                  ),
+                                  loadingBuilder:
+                                      (context, child, loadingProgress) {
+                                        if (loadingProgress == null)
+                                          return child;
+                                        return Container(
+                                          height: 300,
+                                          color: AppColors.surface(
+                                            context,
+                                            level: 2,
+                                          ),
+                                          child: const Center(
+                                            child: CircularProgressIndicator(
+                                              color: Colors.white,
+                                            ),
+                                          ),
+                                        );
+                                      },
                                 ),
                         ),
                       ),

@@ -46,7 +46,6 @@ class CachedMessage {
   final String? mediaUrl;
   final String? mediaType;
   final String status;
-  final int messageMigrationVersion;
 
   CachedMessage({
     required this.id,
@@ -58,7 +57,6 @@ class CachedMessage {
     this.mediaUrl,
     this.mediaType,
     required this.status,
-    required this.messageMigrationVersion,
   });
 
   CachedMessage copyWith({
@@ -71,7 +69,6 @@ class CachedMessage {
     String? mediaUrl,
     String? mediaType,
     String? status,
-    int? messageMigrationVersion,
   }) {
     return CachedMessage(
       id: id ?? this.id,
@@ -83,8 +80,6 @@ class CachedMessage {
       mediaUrl: mediaUrl ?? this.mediaUrl,
       mediaType: mediaType ?? this.mediaType,
       status: status ?? this.status,
-      messageMigrationVersion:
-          messageMigrationVersion ?? this.messageMigrationVersion,
     );
   }
 }

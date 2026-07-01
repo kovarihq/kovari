@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'package:mobile/core/utils/app_logger.dart';
 import 'package:mobile/features/chat/models/message_entity.dart';
-import 'package:mobile/features/chat/services/message_hydrator.dart';
 import 'package:mobile/features/chat/telemetry/cache_metrics_events.dart';
 import 'conversation_cache_models.dart';
 import 'conversation_cache_repository.dart';
@@ -34,7 +33,6 @@ class ConversationSyncEngine {
     required Map<String, dynamic> baseParams,
     required String? partnerClerkId,
     required String? myUserId,
-    required Future<String> Function(MessageEntity)? decryptCallback,
   }) async {
     final stopwatch = Stopwatch()..start();
     MetricsService.record(DeltaSyncStartedEvent(chatId));
@@ -93,28 +91,7 @@ class ConversationSyncEngine {
         );
       }
 
-      final decision = MessageHydrator.resolve(
-        messageContent: entity.messageContent,
-        migrationVersion: entity.migrationVersion,
-        encryptedContent: entity.encryptedContent,
-        isEncrypted: entity.isEncrypted,
-        iv: entity.encryptionIv,
-        salt: entity.encryptionSalt,
-      );
-
-      String finalContent = '';
-      if (decision.action == HydrationAction.usePlaintext &&
-          decision.messageContent != null) {
-        finalContent = decision.messageContent!;
-      } else if (decision.action == HydrationAction.decrypt) {
-        if (decryptCallback != null) {
-          finalContent = await decryptCallback(entity);
-        } else {
-          finalContent = entity.text ?? '';
-        }
-      } else {
-        finalContent = entity.text ?? '';
-      }
+      final String finalContent = entity.text ?? '';
 
       newCachedMsgs.add(
         CachedMessage(
@@ -127,8 +104,6 @@ class ConversationSyncEngine {
           mediaUrl: entity.mediaUrl,
           mediaType: entity.mediaType,
           status: entity.deliveryStatus.name,
-          messageMigrationVersion:
-              entity.migrationVersion ?? MessageHydrator.legacy,
         ),
       );
     }
@@ -175,7 +150,6 @@ class ConversationSyncEngine {
     required String chatId,
     required Map<String, dynamic> data,
     required String? myUserId,
-    required Future<String> Function(MessageEntity) decryptCallback,
   }) async {
     final entity = MessageEntity.fromSocket(
       data,
@@ -183,25 +157,7 @@ class ConversationSyncEngine {
       currentUserId: myUserId,
     );
     final seq = entity.conversationSequence ?? 0;
-
-    final decision = MessageHydrator.resolve(
-      messageContent: entity.messageContent,
-      migrationVersion: entity.migrationVersion,
-      encryptedContent: entity.encryptedContent,
-      isEncrypted: entity.isEncrypted,
-      iv: entity.encryptionIv,
-      salt: entity.encryptionSalt,
-    );
-
-    String finalContent = '';
-    if (decision.action == HydrationAction.usePlaintext &&
-        decision.messageContent != null) {
-      finalContent = decision.messageContent!;
-    } else if (decision.action == HydrationAction.decrypt) {
-      finalContent = await decryptCallback(entity);
-    } else {
-      finalContent = entity.text ?? '';
-    }
+    final String finalContent = entity.text ?? '';
 
     final newCached = CachedMessage(
       id: entity.id,
@@ -213,8 +169,6 @@ class ConversationSyncEngine {
       mediaUrl: entity.mediaUrl,
       mediaType: entity.mediaType,
       status: entity.deliveryStatus.name,
-      messageMigrationVersion:
-          entity.migrationVersion ?? MessageHydrator.legacy,
     );
 
     final existing = _cacheRepository.getMessages(chatId);
