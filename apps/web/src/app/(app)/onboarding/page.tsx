@@ -48,7 +48,13 @@ export default function ProfileSetupPage() {
             if (activation.isActivated) {
               router.replace("/dashboard");
             } else {
-              router.replace("/profile/edit");
+              if (!activation.hasProfilePicture) {
+                router.replace("/profile/edit?tab=general");
+              } else if (!activation.hasTravelIntentions) {
+                router.replace("/profile/edit?tab=travel");
+              } else {
+                router.replace("/profile/edit");
+              }
             }
           } else {
             setChecking(false);

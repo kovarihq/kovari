@@ -67,7 +67,13 @@ export function ActivationModal({ profileData, onContinue }: ActivationModalProp
         : false;
 
       if (activation.isOnboardingCompletedFlag || isExistingUser) {
-        router.push("/profile/edit");
+        if (!hasProfilePicture) {
+          router.push("/profile/edit?tab=general");
+        } else if (!hasTravelIntentions) {
+          router.push("/profile/edit?tab=travel");
+        } else {
+          router.push("/profile/edit");
+        }
       } else {
         router.push("/onboarding");
       }
