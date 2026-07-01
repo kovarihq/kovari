@@ -10,11 +10,19 @@ import { activationService } from "@/lib/activation/activation.service";
 import { ActivationModal } from "@/shared/components/activation-modal";
 
 const ONBOARDING_PATH_PREFIX = "/onboarding";
+const PROFILE_EDIT_PATH_PREFIX = "/profile/edit";
 
 function isOnboardingPath(path: string | null): boolean {
   return (
     path === ONBOARDING_PATH_PREFIX ||
     (path?.startsWith(`${ONBOARDING_PATH_PREFIX}/`) ?? false)
+  );
+}
+
+function isProfileEditPath(path: string | null): boolean {
+  return (
+    path === PROFILE_EDIT_PATH_PREFIX ||
+    (path?.startsWith(`${PROFILE_EDIT_PATH_PREFIX}/`) ?? false)
   );
 }
 
@@ -65,7 +73,7 @@ export default function ProtectedRoute({
 
     const path = pathname ?? "";
 
-    if (isOnboardingPath(path)) {
+    if (isOnboardingPath(path) || isProfileEditPath(path)) {
       if (!profileConfirmedRef.current) checkDoneThisCycleRef.current = false;
       setPhase("allow");
       return;
@@ -131,7 +139,7 @@ export default function ProtectedRoute({
   }
 
   const path = pathname ?? "";
-  if (isOnboardingPath(path)) {
+  if (isOnboardingPath(path) || isProfileEditPath(path)) {
     return <>{children}</>;
   }
 
