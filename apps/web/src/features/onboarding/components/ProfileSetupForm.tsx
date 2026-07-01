@@ -392,7 +392,6 @@ export default function ProfileSetupForm() {
           if (profileData) {
             if (profileData.firstName) step1Form.setValue("firstName", profileData.firstName);
             if (profileData.lastName) step1Form.setValue("lastName", profileData.lastName);
-            if (profileData.username) step1Form.setValue("username", profileData.username);
             if (profileData.gender) step1Form.setValue("gender", profileData.gender);
             if (profileData.bio) step2Form.setValue("bio", profileData.bio);
             if (profileData.avatar) {
@@ -407,7 +406,16 @@ export default function ProfileSetupForm() {
             const { activationService } = await import("@/lib/activation/activation.service");
             const activation = activationService.verifyActivation(profileData);
 
-            if (!activation.hasProfilePicture) {
+            const hasCompletedStep1 = Boolean(
+              profileData.firstName &&
+              profileData.lastName &&
+              profileData.username &&
+              profileData.gender
+            );
+
+            if (!hasCompletedStep1) {
+              setStep(1);
+            } else if (!activation.hasProfilePicture) {
               setStep(2); // Open Edit Profile
             } else if (!activation.hasTravelIntentions) {
               setStep(7); // Open Create Travel Intention

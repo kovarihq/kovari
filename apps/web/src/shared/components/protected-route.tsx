@@ -36,7 +36,7 @@ export default function ProtectedRoute({
 }: {
   children: React.ReactNode;
 }) {
-  const { isLoaded, isSignedIn } = useUser();
+  const { isLoaded, isSignedIn, user } = useUser();
   const router = useRouter();
   const pathname = usePathname();
   const { syncUser } = useSyncUserToSupabase();
@@ -103,6 +103,10 @@ export default function ProtectedRoute({
       })
         .then(async (res) => {
           diagLog(`ProtectedRoute fetchProfile completed in ${Math.round(performance.now() - start)}ms`);
+          const isExistingUser = user?.createdAt
+            ? (new Date().getTime() - new Date(user.createdAt).getTime()) > 24 * 60 * 60 * 1000
+            : false;
+
           if (res.ok) {
             const json = await res.json();
             const profileData = json?.data;
@@ -112,16 +116,32 @@ export default function ProtectedRoute({
             if (activation.isActivated && profileData?.onboardingCompleted === true) {
               profileConfirmedRef.current = true;
               setPhase("allow");
-            } else {
+            } else if (profileData?.onboardingCompleted === true || isExistingUser) {
               setPhase("activation_modal");
+            } else {
+              setPhase("redirect");
+              router.replace(ONBOARDING_PATH_PREFIX);
             }
           } else {
-            setPhase("activation_modal");
+            if (isExistingUser) {
+              setPhase("activation_modal");
+            } else {
+              setPhase("redirect");
+              router.replace(ONBOARDING_PATH_PREFIX);
+            }
           }
         })
         .catch((err) => {
           diagLog(`ProtectedRoute fetchProfile failed in ${Math.round(performance.now() - start)}ms`);
-          setPhase("activation_modal");
+          const isExistingUser = user?.createdAt
+            ? (new Date().getTime() - new Date(user.createdAt).getTime()) > 24 * 60 * 60 * 1000
+            : false;
+          if (isExistingUser) {
+            setPhase("activation_modal");
+          } else {
+            setPhase("redirect");
+            router.replace(ONBOARDING_PATH_PREFIX);
+          }
         });
     };
 
@@ -132,7 +152,7 @@ export default function ProtectedRoute({
 
     setPhase("check_profile");
     runProfileCheck();
-  }, [isLoaded, isSignedIn, phase, pathname, router]);
+  }, [isLoaded, isSignedIn, phase, pathname, router, user]);
 
   if (!isLoaded || !isSignedIn) {
     return null;

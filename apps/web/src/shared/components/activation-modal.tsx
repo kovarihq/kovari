@@ -35,12 +35,11 @@ export function ActivationModal({ profileData, onContinue }: ActivationModalProp
 
     if (user) {
       const authProvider = user.externalAccounts?.[0]?.provider || (user.passwordEnabled ? "password" : "email");
-      const userType = profileData?.onboardingCompleted ? "existing" : "new";
       void trackActivationEvent("activation_modal_shown", {
         userId: user.id,
         sessionId,
         authProvider,
-        userType,
+        userType: "existing",
       });
     }
 
@@ -59,23 +58,15 @@ export function ActivationModal({ profileData, onContinue }: ActivationModalProp
     if (onContinue) {
       onContinue();
     } else {
-      if (typeof window !== "undefined" && window.location.pathname !== "/onboarding" && window.location.pathname !== "/profile/edit") {
+      if (typeof window !== "undefined" && window.location.pathname !== "/profile/edit") {
         sessionStorage.setItem("kovari_origin_url", window.location.pathname + window.location.search);
       }
-      const isExistingUser = user?.createdAt 
-        ? (new Date().getTime() - new Date(user.createdAt).getTime()) > 24 * 60 * 60 * 1000
-        : false;
-
-      if (activation.isOnboardingCompletedFlag || isExistingUser) {
-        if (!hasProfilePicture) {
-          router.push("/profile/edit?tab=general");
-        } else if (!hasTravelIntentions) {
-          router.push("/profile/edit?tab=travel");
-        } else {
-          router.push("/profile/edit");
-        }
+      if (!hasProfilePicture) {
+        router.push("/profile/edit?tab=general");
+      } else if (!hasTravelIntentions) {
+        router.push("/profile/edit?tab=travel");
       } else {
-        router.push("/onboarding");
+        router.push("/profile/edit");
       }
     }
   };
@@ -86,7 +77,7 @@ export function ActivationModal({ profileData, onContinue }: ActivationModalProp
         initial={{ opacity: 0, scale: 0.95, y: 10 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
         transition={{ duration: 0.3, ease: "easeOut" }}
-        className="w-full max-w-md bg-card border border-border/80 rounded-2xl shadow-2xl p-6 sm:p-8 flex flex-col gap-6 text-card-foreground relative overflow-hidden"
+        className="w-full max-w-lg bg-card border border-border/80 rounded-2xl shadow-2xl p-6 sm:p-8 flex flex-col gap-6 text-card-foreground relative overflow-hidden"
       >
         {/* Background Ambient Decorative Light */}
         <div className="absolute -top-16 -right-16 w-36 h-36 rounded-full bg-primary/10 blur-3xl pointer-events-none" />
@@ -96,10 +87,10 @@ export function ActivationModal({ profileData, onContinue }: ActivationModalProp
         <div className="flex flex-col items-center text-center gap-3">
           <div>
             <h2 className="text-xl font-bold tracking-tight text-foreground">
-              Complete Your Kovari Setup
+              Complete your profile to continue using Kovari
             </h2>
             <p className="text-sm text-muted-foreground mt-1.5 leading-relaxed">
-              You&apos;re almost ready to explore and connect with travel buddies! Complete these quick steps to get started.
+              Please add a profile picture and at least one travel intention to restore access.
             </p>
           </div>
         </div>
@@ -191,7 +182,7 @@ export function ActivationModal({ profileData, onContinue }: ActivationModalProp
           onClick={handleCTA}
           className="w-full h-11 bg-primary hover:bg-primary/90 text-primary-foreground font-semibold rounded-xl transition-all shadow-md flex items-center justify-center gap-2 text-sm"
         >
-          <span>Continue Setup</span>
+          <span>Complete Profile</span>
           <ChevronRight className="w-4 h-4" />
         </Button>
       </motion.div>

@@ -21,7 +21,6 @@ class TravelIntentionsStep extends ConsumerStatefulWidget {
 class _TravelIntentionsStepState extends ConsumerState<TravelIntentionsStep> {
   final TextEditingController _destinationController = TextEditingController();
   GeoapifyResult? _selectedDetails;
-  String? _intentError;
 
   @override
   void dispose() {
@@ -151,10 +150,9 @@ class _TravelIntentionsStepState extends ConsumerState<TravelIntentionsStep> {
                               details: _selectedDetails,
                             );
 
-                        // Clear input and error
+                        // Clear input
                         _destinationController.clear();
                         _selectedDetails = null;
-                        setState(() => _intentError = null);
                       },
                       child: Text(
                         'Add',
@@ -195,7 +193,6 @@ class _TravelIntentionsStepState extends ConsumerState<TravelIntentionsStep> {
                         ref
                             .read(onboardingProvider.notifier)
                             .addTravelIntent(dest);
-                        setState(() => _intentError = null);
                       },
                       borderRadius: BorderRadius.circular(20),
                       child: Container(
@@ -224,26 +221,13 @@ class _TravelIntentionsStepState extends ConsumerState<TravelIntentionsStep> {
 
           Text(
             state.travelIntents.isEmpty
-                ? 'Please add at least one destination to continue.'
+                ? 'You can skip this and add destinations later from your profile.'
                 : '${state.travelIntents.length}/3 added',
             style: AppTextStyles.bodySmall.copyWith(
               color: AppColors.mutedForeground,
             ),
             textAlign: TextAlign.center,
           ),
-
-          if (_intentError != null) ...[
-            const SizedBox(height: 8),
-            Text(
-              _intentError!,
-              style: AppTextStyles.bodySmall.copyWith(
-                color: AppColors.destructive,
-                fontWeight: FontWeight.w500,
-              ),
-              textAlign: TextAlign.center,
-            ),
-          ],
-
           const SizedBox(height: AppSpacing.lg),
 
           // Navigation buttons
@@ -261,15 +245,8 @@ class _TravelIntentionsStepState extends ConsumerState<TravelIntentionsStep> {
               const SizedBox(width: AppSpacing.sm),
               Expanded(
                 child: PrimaryButton(
-                  text: 'Continue',
+                  text: state.travelIntents.isNotEmpty ? 'Continue' : 'Skip for now',
                   onPressed: () {
-                    if (state.travelIntents.isEmpty) {
-                      setState(() {
-                        _intentError = 'Please add at least one travel destination to continue.';
-                      });
-                      return;
-                    }
-                    setState(() => _intentError = null);
                     ref.read(onboardingProvider.notifier).setStep(8);
                   },
                   icon: LucideIcons.chevronRight,

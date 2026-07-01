@@ -288,6 +288,29 @@ class _MediaBioStepState extends ConsumerState<MediaBioStep> {
           ),
           const SizedBox(height: 8),
 
+          // Skip photo for now text button
+          TextButton(
+            onPressed: () {
+              ref
+                  .read(onboardingProvider.notifier)
+                  .updateMediaBio(url: null, localPath: null);
+              setState(() => _photoError = null);
+              ref.read(onboardingProvider.notifier).setStep(3);
+            },
+            style: TextButton.styleFrom(
+              minimumSize: Size.zero,
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            ),
+            child: Text(
+              'Skip photo for now',
+              style: AppTextStyles.bodySmall.copyWith(
+                color: AppColors.mutedForeground,
+                decoration: TextDecoration.underline,
+              ),
+            ),
+          ),
+
           if (_photoError != null) ...[
             const SizedBox(height: 8),
             Text(
@@ -332,7 +355,7 @@ class _MediaBioStepState extends ConsumerState<MediaBioStep> {
                     if (!hasPhoto) {
                       setState(() {
                         _photoError =
-                            "Please upload a profile picture to continue.";
+                            "Please add a profile photo to continue, or tap 'Skip photo for now'.";
                       });
                       return;
                     }

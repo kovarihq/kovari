@@ -7,7 +7,6 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { logPerformanceMetric } from "@/lib/observability/performance";
 import { generateRequestId } from "@/lib/api/requestId";
-import { activationService } from "@/lib/activation/activation.service";
 
 const isBannedPage = createRouteMatcher(["/banned"]);
 const isAuthPage = createRouteMatcher(["/sign-in(.*)", "/sign-up(.*)"]);
@@ -187,8 +186,6 @@ const clerk = clerkMiddleware(async (auth, req: NextRequest) => {
     return NextResponse.redirect(redirectUrl);
   }
 
-  let fetchedUser: any = null;
-
   // 3. Absolute Priority: Ban & Deletion Checks
   // We must do this before ANY bypass logic (like waitlist admin bypass)
   if (userId) {
@@ -217,11 +214,10 @@ const clerk = clerkMiddleware(async (auth, req: NextRequest) => {
         const dbStart = performance.now();
         const { data: user, error } = await supabase
           .from("users")
-          .select('created_at, banned, ban_expires_at, "isDeleted", onboarding_completed, profiles(profile_photo, travel_intentions)')
+          .select('banned, ban_expires_at, "isDeleted"')
           .eq("clerk_user_id", userId)
           .maybeSingle();
         
-        fetchedUser = user;
         const dbDuration = performance.now() - dbStart;
         logPerformanceMetric("middleware_db_ms", dbDuration, { userId, requestId: mwRequestId });
 
@@ -331,7 +327,7 @@ const clerk = clerkMiddleware(async (auth, req: NextRequest) => {
     return NextResponse.redirect(new URL("/", req.url));
   }
 
-  // 5. Normal Mode: Enforce login requirement and activation check on all protected app routes
+  // 5. Normal Mode: Enforce login requirement on all non-public routes
   if (!isPublicRoute(req)) {
     if (!userId) {
       const pathname = req.nextUrl.pathname;
@@ -340,56 +336,6 @@ const clerk = clerkMiddleware(async (auth, req: NextRequest) => {
       }
       return authObj.redirectToSignIn({ returnBackUrl: req.url });
     }
-
-    const isApiRoute = pathname.startsWith("/api/") || pathname.startsWith("/trpc/");
-    const isOnboarding = pathname.startsWith("/onboarding");
-    const isProfileEdit = pathname.startsWith("/profile/edit");
-
-    if (!isApiRoute && !isOnboarding && !isProfileEdit) {
-      const activationCookie = req.cookies.get("kovari_activated")?.value;
-      if (activationCookie !== "true" && fetchedUser) {
-        const profileObj = Array.isArray(fetchedUser.profiles) ? fetchedUser.profiles[0] : fetchedUser.profiles;
-        const activation = activationService.verifyActivation({
-          onboarding_completed: fetchedUser.onboarding_completed,
-          profile_photo: profileObj?.profile_photo,
-          travel_intentions: profileObj?.travel_intentions,
-        });
-
-        const isExistingUser = fetchedUser?.created_at
-          ? (new Date().getTime() - new Date(fetchedUser.created_at).getTime()) > 24 * 60 * 60 * 1000
-          : false;
-
-        // Only redirect new users to /onboarding.
-        // Existing users pass through to let ProtectedRoute handle display of ActivationModal.
-        if (!activation.isActivated && !activation.isOnboardingCompletedFlag && !isExistingUser) {
-          const url = req.nextUrl.clone();
-          url.pathname = "/onboarding";
-          return NextResponse.redirect(url);
-        }
-
-        // Optimize: If user is fully activated, set the cookie to avoid future DB calls in middleware
-        if (activation.isActivated && activation.isOnboardingCompletedFlag) {
-          const response = nextResponseWithHeaders(req);
-          response.cookies.set("kovari_activated", "true", {
-            path: "/",
-            maxAge: 60 * 60 * 24 * 30, // 30 days
-            sameSite: "lax",
-          });
-          return response;
-        }
-      }
-    }
-  }
-
-  // If user is not logged in but has the activated cookie, clear it (handles logout, session expiration)
-  if (!userId && req.cookies.get("kovari_activated")?.value) {
-    const response = nextResponseWithHeaders(req);
-    response.cookies.set("kovari_activated", "false", {
-      path: "/",
-      maxAge: 0,
-      sameSite: "lax",
-    });
-    return response;
   }
 
   return nextResponseWithHeaders(req);

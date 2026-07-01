@@ -73,7 +73,7 @@ export async function GET(request: NextRequest) {
     const profileData: ProfileResponse = {
       ...userDto,
       name: userDto.displayName, // Map DTO displayName to Contract name
-      onboardingCompleted: isFullyActivated,
+      onboardingCompleted: activation.isOnboardingCompletedFlag,
       followers: followersCount || 0,
       following: followingCount || 0,
     };
@@ -84,27 +84,11 @@ export async function GET(request: NextRequest) {
     logPerformanceMetric("profile_serialization_ms", performance.now() - serialStart, { requestId });
     logPerformanceMetric("profile_total_ms", performance.now() - start, { requestId });
     
-    const response = formatStandardResponse(
+    return formatStandardResponse(
       parsed,
       { contractState: 'clean', degraded: false },
       { requestId, latencyMs: Math.round(performance.now() - start) }
     );
-
-    if (isFullyActivated) {
-      response.cookies.set("kovari_activated", "true", {
-        path: "/",
-        maxAge: 60 * 60 * 24 * 30, // 30 days
-        sameSite: "lax",
-      });
-    } else {
-      response.cookies.set("kovari_activated", "false", {
-        path: "/",
-        maxAge: 0,
-        sameSite: "lax",
-      });
-    }
-
-    return response;
   } catch (error) {
     logger.error(requestId, "Error in profile fetch", error);
     Sentry.captureException(error, {
