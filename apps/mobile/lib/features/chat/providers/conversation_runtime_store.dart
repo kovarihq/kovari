@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/legacy.dart';
 import 'package:mobile/core/realtime/socket_service.dart';
+import 'package:mobile/core/realtime/realtime_event_pipeline.dart';
 import 'package:mobile/core/utils/app_logger.dart';
 import 'package:mobile/core/services/fcm_service.dart';
 import 'package:mobile/core/providers/auth_provider.dart';
@@ -214,8 +215,12 @@ class ConversationRuntimeStore
       Future.microtask(() => fetchInbox());
     }
 
-    final events = ref.watch(socketServiceProvider.notifier).events;
-    final sub = events.listen(_handleSocketEvent);
+    final pipeline = ref.watch(realtimeEventPipelineProvider);
+    final sub = pipeline.batchedEvents.listen((List<SocketEvent> events) {
+      for (final event in events) {
+        _handleSocketEvent(event);
+      }
+    });
     ref.onDispose(() {
       sub.cancel();
       for (final t in _typingTimers.values) {

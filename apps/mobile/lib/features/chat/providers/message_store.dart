@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mobile/core/network/api_client.dart';
 import 'package:mobile/core/providers/auth_provider.dart';
 import 'package:mobile/core/realtime/socket_service.dart';
+import 'package:mobile/core/realtime/realtime_event_pipeline.dart';
 import 'package:mobile/core/runtime/mutation_journal.dart';
 
 import 'package:mobile/core/telemetry/messaging_telemetry_service.dart';
@@ -149,14 +150,19 @@ class MessageStore extends Notifier<ConversationMessageState> {
     final link = ref.keepAlive();
     _isActive = true;
 
-    final eventsStream = ref.watch(socketServiceProvider.notifier).events;
+    final pipeline = ref.watch(realtimeEventPipelineProvider);
+    final eventsStream = pipeline.batchedEvents;
 
     Timer? disposeTimer;
-    StreamSubscription<SocketEvent>? sub;
+    StreamSubscription<List<SocketEvent>>? sub;
 
     void startSubscription() {
       sub?.cancel();
-      sub = eventsStream.listen((SocketEvent event) => _handleSocketEvent(event));
+      sub = eventsStream.listen((List<SocketEvent> events) {
+        for (final event in events) {
+          _handleSocketEvent(event);
+        }
+      });
     }
 
     ref.onDispose(() {
