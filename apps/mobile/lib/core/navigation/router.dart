@@ -29,7 +29,11 @@ final routerProvider = Provider<GoRouter>((ref) {
         name: 'chat_screen',
         builder: (context, state) {
           final chatId = state.pathParameters['chatId']!;
-          return ChatScreen(chatId: chatId);
+          // ValueKey ensures Flutter disposes + recreates the State when chatId
+          // changes. Without this, GoRouter reuses the same widget instance and
+          // initState never re-runs, leaving stale messages/scroll/subscriptions
+          // from the previous chat on screen.
+          return ChatScreen(key: ValueKey(chatId), chatId: chatId);
         },
       ),
     ],
@@ -84,7 +88,9 @@ final routerProvider = Provider<GoRouter>((ref) {
     final entityType = data['entity_type'] as String?;
     final entityId = data['entity_id'] as String?;
 
-    AppLogger.i('🔔 [FCM] Routing tap: entityType=$entityType entityId=$entityId');
+    AppLogger.i(
+      '🔔 [FCM] Routing tap: entityType=$entityType entityId=$entityId',
+    );
 
     switch (entityType) {
       case 'chat':
@@ -92,10 +98,12 @@ final routerProvider = Provider<GoRouter>((ref) {
           String targetChatId = entityId;
           final chatType = data['chat_type'] as String?;
           final isGroup = chatType == 'group';
-          
+
           if (!isGroup && !entityId.contains('_')) {
             final hasGroup = ref.read(groupStoreProvider).containsKey(entityId);
-            final hasConversation = ref.read(conversationStoreProvider).containsKey(entityId);
+            final hasConversation = ref
+                .read(conversationStoreProvider)
+                .containsKey(entityId);
             if (!hasGroup && !hasConversation) {
               final myUuid = ref.read(authProvider).user?.resolvedUuid;
               if (myUuid != null) {
@@ -125,7 +133,9 @@ final routerProvider = Provider<GoRouter>((ref) {
       case 'notification':
         router.push('/notifications');
       default:
-        AppLogger.w('🔔 [FCM] Unknown entityType: $entityType — routing to notifications.');
+        AppLogger.w(
+          '🔔 [FCM] Unknown entityType: $entityType — routing to notifications.',
+        );
         router.push('/notifications');
     }
   });

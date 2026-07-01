@@ -129,7 +129,7 @@ class _PublicProfileScreenState extends ConsumerState<PublicProfileScreen> {
 
     unawaited(
       Navigator.of(context, rootNavigator: true).push<void>(
-        MaterialPageRoute<void>(builder: (_) => ChatScreen(chatId: chatId)),
+        MaterialPageRoute<void>(builder: (_) => ChatScreen(key: ValueKey(chatId), chatId: chatId)),
       ),
     );
   }

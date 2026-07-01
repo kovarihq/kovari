@@ -121,6 +121,49 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     super.dispose();
   }
 
+  @override
+  void didUpdateWidget(ChatScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.chatId == widget.chatId) return;
+
+    // ─── Tear down old chat ───────────────────────────────────────────────
+    ref.read(realtimeCoordinatorProvider.notifier).leaveChat(oldWidget.chatId);
+    final activeId = ref.read(activeConversationProvider);
+    if (activeId == oldWidget.chatId) {
+      ref.read(activeConversationProvider.notifier).set(null);
+    }
+    final wasGroup = oldWidget.chatId.split('_').length != 2;
+    if (wasGroup) {
+      ref.read(memberStoreProvider.notifier).unsubscribe(oldWidget.chatId);
+    }
+
+    // ─── Reset all local UI state ─────────────────────────────────────────
+    _inputController.clear();
+    if (_scrollController.hasClients) {
+      _scrollController.jumpTo(0);
+    }
+    setState(() {
+      _isComposing = false;
+      _isSending = false;
+      _showScrollToBottom = false;
+      _showNewMessageBanner = false;
+    });
+
+    // ─── Bootstrap new chat ───────────────────────────────────────────────
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      Future.microtask(() {
+        if (!mounted) return;
+        ref.read(activeConversationProvider.notifier).set(widget.chatId);
+      });
+      ref.read(realtimeCoordinatorProvider.notifier).joinChat(widget.chatId);
+      final isGroup = widget.chatId.split('_').length != 2;
+      if (isGroup) {
+        ref.read(memberStoreProvider.notifier).subscribe(widget.chatId);
+      }
+    });
+  }
+
   void _sendMessage() {
     final text = _inputController.text.trim();
     if (text.isEmpty || _isSending) return;
@@ -1135,34 +1178,32 @@ class _MessageBubble extends ConsumerWidget {
                                   File(message.localFilePath!),
                                   fit: BoxFit.cover,
                                 )
-                              : Image.network(
-                                  message.mediaUrl!,
+                              : CachedNetworkImage(
+                                  imageUrl: message.mediaUrl!,
                                   fit: BoxFit.cover,
-                                  errorBuilder: (context, error, stackTrace) =>
-                                      const Center(
-                                        child: Icon(Icons.broken_image),
+                                  fadeInDuration: const Duration(
+                                    milliseconds: 200,
+                                  ),
+                                  fadeOutDuration: const Duration(
+                                    milliseconds: 100,
+                                  ),
+                                  placeholderFadeInDuration: Duration.zero,
+                                  placeholder: (context, url) =>
+                                      _ShimmerPlaceholder(height: 200 * scale),
+                                  errorWidget: (context, url, error) =>
+                                      Container(
+                                        height: 200 * scale,
+                                        color: AppColors.surface(
+                                          context,
+                                          level: 2,
+                                        ),
+                                        child: const Center(
+                                          child: Icon(
+                                            Icons.broken_image,
+                                            color: Colors.grey,
+                                          ),
+                                        ),
                                       ),
-                                  loadingBuilder:
-                                      (context, child, loadingProgress) {
-                                        if (loadingProgress == null)
-                                          return child;
-                                        return Container(
-                                          height: 200 * scale,
-                                          color: AppColors.surface(
-                                            context,
-                                            level: 2,
-                                          ),
-                                          child: const Center(
-                                            child: SizedBox(
-                                              width: 20,
-                                              height: 20,
-                                              child: CircularProgressIndicator(
-                                                strokeWidth: 3,
-                                              ),
-                                            ),
-                                          ),
-                                        );
-                                      },
                                 ))
                         : Container(
                             height: 200 * scale,
@@ -1292,15 +1333,6 @@ class _MessageBubble extends ConsumerWidget {
                     height: 1.4,
                   ),
                   linkColor: isMe ? Colors.white : AppColors.primary,
-                )
-              else
-                Text(
-                  '🔒 Encrypted message',
-                  style: AppTextStyles.bodyMedium.copyWith(
-                    color: textColor.withValues(alpha: 0.6),
-                    fontSize: 13 * scale,
-                    fontStyle: FontStyle.italic,
-                  ),
                 ),
               SizedBox(height: 1 * scale),
               Align(
@@ -2177,6 +2209,68 @@ class _FullscreenMediaViewerState extends State<_FullscreenMediaViewer> {
           ),
         ],
       ),
+    );
+  }
+}
+
+/// Animated shimmer placeholder — same UX pattern as Instagram/Hinge.
+/// Shows a moving gradient highlight instead of a spinner, giving the
+/// illusion of near-instant content while the image decodes/downloads.
+class _ShimmerPlaceholder extends StatefulWidget {
+  final double height;
+  const _ShimmerPlaceholder({required this.height});
+
+  @override
+  State<_ShimmerPlaceholder> createState() => _ShimmerPlaceholderState();
+}
+
+class _ShimmerPlaceholderState extends State<_ShimmerPlaceholder>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _ctrl;
+  late final Animation<double> _anim;
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1200),
+    )..repeat();
+    _anim = CurvedAnimation(parent: _ctrl, curve: Curves.easeInOut);
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final baseColor = isDark
+        ? const Color(0xFF2A2A2A)
+        : const Color(0xFFE8E8E8);
+    final highlightColor = isDark
+        ? const Color(0xFF3D3D3D)
+        : const Color(0xFFF5F5F5);
+
+    return AnimatedBuilder(
+      animation: _anim,
+      builder: (context, _) {
+        return Container(
+          height: widget.height,
+          width: double.infinity,
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment(-1.5 + _anim.value * 3, 0),
+              end: Alignment(-0.5 + _anim.value * 3, 0),
+              colors: [baseColor, highlightColor, baseColor],
+              stops: const [0.0, 0.5, 1.0],
+            ),
+          ),
+        );
+      },
     );
   }
 }

@@ -352,7 +352,9 @@ class _ConversationTile extends StatelessWidget {
     final typingUsers = state.typingUserIds;
     if (typingUsers.isNotEmpty) {
       final String name = metadata?.isGroup == true
-          ? (typingUsers.length == 1 ? 'Someone' : '${typingUsers.length} people')
+          ? (typingUsers.length == 1
+                ? 'Someone'
+                : '${typingUsers.length} people')
           : (metadata?.displayName ?? 'User');
       return Text(
         '$name is typing…',
@@ -418,10 +420,8 @@ class _ConversationTile extends StatelessWidget {
       );
     }
 
-    // Text message (or encrypted placeholder)
-    final displayText = snippet?.isNotEmpty == true
-        ? snippet!
-        : '🔒 Encrypted message';
+    // Text message — show snippet or neutral fallback
+    final displayText = snippet?.isNotEmpty == true ? snippet! : 'Message';
     return Text(
       displayText,
       style: AppTextStyles.bodySmall.copyWith(

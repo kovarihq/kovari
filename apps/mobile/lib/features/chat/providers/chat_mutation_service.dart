@@ -236,21 +236,18 @@ class ChatMutationService {
         ? (ids[0] == myUserId ? ids[1] : ids[0])
         : null;
 
-    final isEncrypted =
-        uploadResult.encryptionIv != null &&
-        uploadResult.encryptionSalt != null;
-
+    // E2EE fully decommissioned — always send plaintext, never set encryptedContent.
     final payload = SendMessagePayload(
       chatId: chatId,
       clientMessageId: clientMessageId,
       senderId: myUserId,
-      encryptedContent: isEncrypted ? '[Media Message]' : null,
+      encryptedContent: null,
       mediaUrl: uploadResult.secureUrl,
       mediaType: mediaType,
       receiverId: partnerId,
-      encryptionIv: uploadResult.encryptionIv,
-      encryptionSalt: uploadResult.encryptionSalt,
-      isEncrypted: isEncrypted,
+      encryptionIv: null,
+      encryptionSalt: null,
+      isEncrypted: false,
       senderClerkId: authUser.id,
       receiverClerkId: partnerClerkId,
     );
