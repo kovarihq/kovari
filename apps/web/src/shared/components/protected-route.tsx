@@ -6,8 +6,11 @@ import { useEffect, useState, useRef } from "react";
 import { Spinner } from "@heroui/react";
 import { useSyncUserToSupabase } from "@kovari/api/client";
 import { diagLog } from "@/lib/observability/performance";
+import { activationService } from "@/lib/activation/activation.service";
+import { ActivationModal } from "@/shared/components/activation-modal";
 
 const ONBOARDING_PATH_PREFIX = "/onboarding";
+const PROFILE_EDIT_PATH_PREFIX = "/profile/edit";
 
 function isOnboardingPath(path: string | null): boolean {
   return (
@@ -16,26 +19,33 @@ function isOnboardingPath(path: string | null): boolean {
   );
 }
 
+function isProfileEditPath(path: string | null): boolean {
+  return (
+    path === PROFILE_EDIT_PATH_PREFIX ||
+    (path?.startsWith(`${PROFILE_EDIT_PATH_PREFIX}/`) ?? false)
+  );
+}
+
 /**
  * Protects app routes: ensures user is signed in, synced to Supabase, and has
- * completed onboarding (profile exists). New users without a profile are
- * redirected to /onboarding and can't access the app until they complete it.
- * Profile check runs at most once per session for existing users.
+ * completed activation (profile picture & travel intentions exist). Unactivated users
+ * see the premium ActivationModal and are guided to complete setup.
  */
 export default function ProtectedRoute({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  const { isLoaded, isSignedIn } = useUser();
+  const { isLoaded, isSignedIn, user } = useUser();
   const router = useRouter();
   const pathname = usePathname();
   const { syncUser } = useSyncUserToSupabase();
   const debug = process.env.NODE_ENV !== "production";
 
   const [phase, setPhase] = useState<
-    "sync" | "check_profile" | "allow" | "redirect"
+    "sync" | "check_profile" | "allow" | "activation_modal" | "redirect"
   >("sync");
+  const [currentProfileData, setCurrentProfileData] = useState<any>(null);
   const syncedRef = useRef(false);
   const profileConfirmedRef = useRef(false);
   const checkDoneThisCycleRef = useRef(false);
@@ -51,28 +61,25 @@ export default function ProtectedRoute({
     syncedRef.current = true;
     setPhase("sync");
     diagLog("Syncing User Triggered");
-    // if (debug) console.log("[ProtectedRoute] Syncing user to Supabase…");
     syncUser()
-      .then((ok) => {
-        // if (debug) console.log("[ProtectedRoute] Sync result", { ok });
-      })
+      .then((ok) => {})
       .catch((err) => console.error("[ProtectedRoute] sync failed", err))
       .finally(() => setPhase("check_profile"));
   }, [isLoaded, isSignedIn, syncUser]);
 
-  // 3. Onboarding gate: allow /onboarding; otherwise require profile (once per session or after onboarding)
+  // 3. Onboarding gate: allow /onboarding; otherwise require profile activation
   useEffect(() => {
     if (!isLoaded || !isSignedIn || phase === "sync") return;
 
     const path = pathname ?? "";
 
-    if (isOnboardingPath(path)) {
+    if (isOnboardingPath(path) || isProfileEditPath(path)) {
       if (!profileConfirmedRef.current) checkDoneThisCycleRef.current = false;
       setPhase("allow");
       return;
     }
 
-    if (phase === "redirect") return;
+    if (phase === "redirect" || phase === "activation_modal") return;
 
     if (profileConfirmedRef.current) {
       setPhase("allow");
@@ -89,7 +96,6 @@ export default function ProtectedRoute({
     const runProfileCheck = () => {
       diagLog("ProtectedRoute fetchProfile triggered");
       const start = performance.now();
-      // Use cache: 'no-store' to ensure we never get a stale onboarding status
       fetch("/api/profile/current", {
         method: "GET",
         headers: { "Content-Type": "application/json" },
@@ -97,34 +103,48 @@ export default function ProtectedRoute({
       })
         .then(async (res) => {
           diagLog(`ProtectedRoute fetchProfile completed in ${Math.round(performance.now() - start)}ms`);
+          const isExistingUser = user?.createdAt
+            ? (new Date().getTime() - new Date(user.createdAt).getTime()) > 24 * 60 * 60 * 1000
+            : false;
+
           if (res.ok) {
             const json = await res.json();
-            // Kovari API v1 wraps the response in a 'data' field.
-            const onboarded = 
-              json?.data?.onboardingCompleted === true || 
-              json?.data?.onboarding_completed === true;
+            const profileData = json?.data;
+            setCurrentProfileData(profileData);
+            const activation = activationService.verifyActivation(profileData);
             
-            if (onboarded) {
+            if (activation.isActivated && profileData?.onboardingCompleted === true) {
               profileConfirmedRef.current = true;
               setPhase("allow");
+            } else if (profileData?.onboardingCompleted === true || isExistingUser) {
+              setPhase("activation_modal");
             } else {
               setPhase("redirect");
               router.replace(ONBOARDING_PATH_PREFIX);
             }
           } else {
-            setPhase("redirect");
-            router.replace(ONBOARDING_PATH_PREFIX);
+            if (isExistingUser) {
+              setPhase("activation_modal");
+            } else {
+              setPhase("redirect");
+              router.replace(ONBOARDING_PATH_PREFIX);
+            }
           }
         })
         .catch((err) => {
           diagLog(`ProtectedRoute fetchProfile failed in ${Math.round(performance.now() - start)}ms`);
-          setPhase("redirect");
-          router.replace(ONBOARDING_PATH_PREFIX);
+          const isExistingUser = user?.createdAt
+            ? (new Date().getTime() - new Date(user.createdAt).getTime()) > 24 * 60 * 60 * 1000
+            : false;
+          if (isExistingUser) {
+            setPhase("activation_modal");
+          } else {
+            setPhase("redirect");
+            router.replace(ONBOARDING_PATH_PREFIX);
+          }
         });
     };
 
-    // If already in "allow" (e.g. came from onboarding), check in background
-    // without showing spinner; only redirect if profile incomplete.
     if (phase === "allow") {
       runProfileCheck();
       return;
@@ -132,24 +152,31 @@ export default function ProtectedRoute({
 
     setPhase("check_profile");
     runProfileCheck();
-  }, [isLoaded, isSignedIn, phase, pathname, router]);
+  }, [isLoaded, isSignedIn, phase, pathname, router, user]);
 
   if (!isLoaded || !isSignedIn) {
     return null;
   }
 
-  // Onboarding path: always render children immediately. Do not show spinner or
-  // run profile check, so we never redirect away from onboarding.
   const path = pathname ?? "";
-  if (isOnboardingPath(path)) {
+  if (isOnboardingPath(path) || isProfileEditPath(path)) {
     return <>{children}</>;
   }
 
-  if (phase === "sync" || phase === "check_profile" || phase === "redirect") {
+  if (phase === "sync" || phase === "check_profile") {
     return (
       <div className="fixed inset-0 z-50 flex items-center justify-center bg-card h-screen">
         <Spinner variant="spinner" size="md" color="primary" />
       </div>
+    );
+  }
+
+  if (phase === "activation_modal") {
+    return (
+      <>
+        <ActivationModal profileData={currentProfileData} />
+        {children}
+      </>
     );
   }
 

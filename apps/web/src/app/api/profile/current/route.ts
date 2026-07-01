@@ -8,6 +8,7 @@ import { ApiErrorCode } from "@/types/api";
 import { logger } from "@/lib/api/logger";
 import { profileMapper } from "@/lib/mappers/profileMapper";
 import { logPerformanceMetric, logInvocation } from "@/lib/observability/performance";
+import { activationService } from "@/lib/activation/activation.service";
 
 export async function GET(request: NextRequest) {
   const start = performance.now();
@@ -45,7 +46,13 @@ export async function GET(request: NextRequest) {
     // 2. Map to standardized DTO
     const userDto = profileMapper.fromDb(dbUser, dbProfile);
 
-    const hasCompletedOnboarding = Boolean(dbUser.onboarding_completed ?? false);
+    const activation = activationService.verifyActivation({
+      onboarding_completed: dbUser.onboarding_completed,
+      avatar: userDto.avatar,
+      travel_intentions: userDto.travel_intentions,
+    });
+
+    const isFullyActivated = activation.isActivated && activation.isOnboardingCompletedFlag;
 
     // Counts are optimized to use single PostgREST count queries with joins filtering deleted users
     const countStart = performance.now();
@@ -66,7 +73,7 @@ export async function GET(request: NextRequest) {
     const profileData: ProfileResponse = {
       ...userDto,
       name: userDto.displayName, // Map DTO displayName to Contract name
-      onboardingCompleted: hasCompletedOnboarding,
+      onboardingCompleted: activation.isOnboardingCompletedFlag,
       followers: followersCount || 0,
       following: followingCount || 0,
     };

@@ -7,6 +7,7 @@ import ProfileSetupForm from "@/features/onboarding/components/ProfileSetupForm"
 import { useAuth, useUser } from "@clerk/nextjs";
 import { AlertCircle, LogOut, Compass, Mail, Loader2 } from "lucide-react";
 import { Button } from "@/shared/components/ui/button";
+import { activationService } from "@/lib/activation/activation.service";
 
 export default function ProfileSetupPage() {
   const { syncUser } = useSyncUserToSupabase();
@@ -37,8 +38,24 @@ export default function ProfileSetupPage() {
         });
         if (res.ok) {
           const data = await res.json();
-          if (data?.data?.onboardingCompleted === true) {
-            router.replace("/dashboard");
+          const profileData = data?.data;
+          const activation = activationService.verifyActivation(profileData);
+          const isExistingUser = user?.createdAt
+            ? (new Date().getTime() - new Date(user.createdAt).getTime()) > 24 * 60 * 60 * 1000
+            : false;
+
+          if (profileData?.onboardingCompleted === true || isExistingUser) {
+            if (activation.isActivated) {
+              router.replace("/dashboard");
+            } else {
+              if (!activation.hasProfilePicture) {
+                router.replace("/profile/edit?tab=general");
+              } else if (!activation.hasTravelIntentions) {
+                router.replace("/profile/edit?tab=travel");
+              } else {
+                router.replace("/profile/edit");
+              }
+            }
           } else {
             setChecking(false);
           }

@@ -31,8 +31,9 @@ import {
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import Image from "next/image";
-import { useUser } from "@clerk/nextjs";
+import { useUser, useAuth } from "@clerk/nextjs";
 import { useSyncUserToSupabase } from "@kovari/api/client";
+import { trackActivationEvent } from "@/lib/analytics/trackActivation";
 
 // Import UI components
 import {
@@ -120,7 +121,11 @@ const step2Schema = z.object({
     .string()
     .max(300, { message: "Bio must be less than 300 characters" })
     .optional(),
-  profilePic: z.any().optional(),
+  profilePic: z
+    .any()
+    .refine((val) => typeof val === "string" && val.length > 0, {
+      message: "Please upload a profile picture to continue",
+    }),
   location: z.string().min(1, { message: "Please select your location" }),
   nationality: z.string().optional(),
   jobType: z.string().optional(),
@@ -270,6 +275,7 @@ export default function ProfileSetupForm() {
 
   const [intentDestination, setIntentDestination] = useState("");
   const [intentDestinationDetails, setIntentDestinationDetails] = useState<any>(null);
+  const [travelIntentError, setTravelIntentError] = useState<string | null>(null);
   const [completeClickedOnce, setCompleteClickedOnce] = useState(false);
   const [showMorePrefs, setShowMorePrefs] = useState(false);
   const [photoError, setPhotoError] = useState<string | null>(null);
@@ -369,6 +375,64 @@ export default function ProfileSetupForm() {
       }
     }
   }, [user, step1Form]);
+
+  const hasAutoNavigatedRef = useRef(false);
+
+  // Automatic Activation Flow Step Determination & Deep-linking
+  useEffect(() => {
+    if (!user || hasAutoNavigatedRef.current) return;
+    hasAutoNavigatedRef.current = true;
+
+    const fetchCurrentProfile = async () => {
+      try {
+        const res = await fetch("/api/profile/current", { cache: "no-store" });
+        if (res.ok) {
+          const json = await res.json();
+          const profileData = json?.data;
+          if (profileData) {
+            if (profileData.firstName) step1Form.setValue("firstName", profileData.firstName);
+            if (profileData.lastName) step1Form.setValue("lastName", profileData.lastName);
+            if (profileData.gender) step1Form.setValue("gender", profileData.gender);
+            if (profileData.bio) step2Form.setValue("bio", profileData.bio);
+            if (profileData.avatar) {
+              setProfileImage(profileData.avatar);
+              step2Form.setValue("profilePic", profileData.avatar);
+            }
+            if (profileData.location) step2Form.setValue("location", profileData.location);
+            if (Array.isArray(profileData.travel_intentions) && profileData.travel_intentions.length > 0) {
+              setTravelIntents(profileData.travel_intentions);
+            }
+
+            const { activationService } = await import("@/lib/activation/activation.service");
+            const activation = activationService.verifyActivation(profileData);
+
+            const hasCompletedStep1 = Boolean(
+              profileData.firstName &&
+              profileData.lastName &&
+              profileData.username &&
+              profileData.gender
+            );
+
+            if (!hasCompletedStep1) {
+              setStep(1);
+            } else if (!activation.hasProfilePicture) {
+              setStep(2); // Open Edit Profile
+            } else if (!activation.hasTravelIntentions) {
+              setStep(7); // Open Create Travel Intention
+            } else if (activation.isActivated && profileData.onboardingCompleted) {
+              const originUrl = sessionStorage.getItem("kovari_origin_url");
+              sessionStorage.removeItem("kovari_origin_url");
+              router.replace(originUrl && originUrl !== "/onboarding" ? originUrl : "/dashboard");
+            }
+          }
+        }
+      } catch (e) {
+        console.error("Error checking activation profile in setup:", e);
+      }
+    };
+
+    void fetchCurrentProfile();
+  }, [user, step1Form, step2Form, router]);
 
   // Async username uniqueness check
   const checkUsernameUnique = async (username: string) => {
@@ -517,6 +581,12 @@ export default function ProfileSetupForm() {
       step2Form.setValue("profilePic", url, { shouldValidate: true });
       setPhotoError(null);
       toast.success("Profile photo updated successfully!");
+      if (user) {
+        void trackActivationEvent("profile_picture_completed", {
+          userId: user.id,
+          authProvider: user.externalAccounts?.[0]?.provider || (user.passwordEnabled ? "password" : "email"),
+        });
+      }
       setCropModalOpen(false);
     } catch (error) {
       console.error("Cropped image upload error:", error);
@@ -546,16 +616,6 @@ export default function ProfileSetupForm() {
     }
   };
 
-  // Skip photo handler: bypass profilePic validation, keep other validations active, and advance step
-  const handleSkipPhoto = async () => {
-    const valid = await step2Form.trigger(["bio"], { shouldFocus: true });
-    if (!valid) return;
-    step2Form.setValue("profilePic", null, { shouldValidate: false });
-    setProfileImage(null);
-    setPhotoError(null);
-    setStep(3);
-  };
-
   // Step-scoped next navigation with partial validation
   const handleNext = async () => {
     if (step === 1) {
@@ -580,12 +640,14 @@ export default function ProfileSetupForm() {
       return;
     }
     if (step === 2) {
-      const isBioValid = await step2Form.trigger(["bio"], { shouldFocus: true });
-      if (!isBioValid) return;
-
-      const profilePicValue = step2Form.getValues("profilePic");
-      if (!profilePicValue) {
-        setPhotoError("Please add a profile photo to continue, or tap 'Skip photo for now'.");
+      const valid = await step2Form.trigger(["bio", "profilePic"], {
+        shouldFocus: true,
+      });
+      if (!valid) {
+        const profilePicValue = step2Form.getValues("profilePic");
+        if (!profilePicValue) {
+          setPhotoError("Please upload a profile picture to continue.");
+        }
         return;
       }
       setPhotoError(null);
@@ -628,7 +690,11 @@ export default function ProfileSetupForm() {
       return;
     }
     if (step === 7) {
-      // Travel intent step — fully optional, always allow proceeding
+      if (travelIntents.length === 0) {
+        setTravelIntentError("Please add at least one travel destination to continue");
+        return;
+      }
+      setTravelIntentError(null);
       setStep(8);
       return;
     }
@@ -858,6 +924,13 @@ export default function ProfileSetupForm() {
 
 
       toast.success("Profile saved successfully!");
+      if (user) {
+        void trackActivationEvent("activation_completed", {
+          userId: user.id,
+          authProvider: user.externalAccounts?.[0]?.provider || (user.passwordEnabled ? "password" : "email"),
+          userType: "new",
+        });
+      }
 
       // Record policy acceptance
       try {
@@ -1154,13 +1227,6 @@ export default function ProfileSetupForm() {
                           </Button>
                         )}
                       </div>
-                      <button
-                        type="button"
-                        onClick={handleSkipPhoto}
-                        className="text-xs text-muted-foreground hover:text-foreground underline underline-offset-2 transition-colors self-center md:self-start mt-2"
-                      >
-                        Skip photo for now
-                      </button>
                       {photoError && (
                         <p className="text-xs text-destructive mt-1.5 font-medium text-center md:text-left animate-in fade-in slide-in-from-top-1 duration-200">
                           {photoError}
@@ -1916,6 +1982,13 @@ export default function ProfileSetupForm() {
               ]);
               setIntentDestination("");
               setIntentDestinationDetails(null);
+              setTravelIntentError(null);
+              if (user) {
+                void trackActivationEvent("travel_intention_completed", {
+                  userId: user.id,
+                  authProvider: user.externalAccounts?.[0]?.provider || (user.passwordEnabled ? "password" : "email"),
+                });
+              }
             }}
             className="h-9 px-4 shrink-0"
           >
@@ -1936,13 +2009,20 @@ export default function ProfileSetupForm() {
               <button
                 key={dest}
                 type="button"
-                onClick={() =>
+                onClick={() => {
                   setTravelIntents(prev =>
                     prev.length < 3
                       ? [...prev, { destination: dest }]
                       : prev
-                  )
-                }
+                  );
+                  setTravelIntentError(null);
+                  if (user) {
+                    void trackActivationEvent("travel_intention_completed", {
+                      userId: user.id,
+                      authProvider: user.externalAccounts?.[0]?.provider || (user.passwordEnabled ? "password" : "email"),
+                    });
+                  }
+                }}
                 className="px-3 py-1 rounded-full border border-border text-xs text-muted-foreground hover:border-primary/40 hover:text-primary transition-colors"
               >
                 {dest}
@@ -1954,9 +2034,15 @@ export default function ProfileSetupForm() {
 
       <p className="text-center text-xs text-muted-foreground">
         {travelIntents.length === 0
-          ? "You can skip this and add destinations later from your profile."
+          ? "Please add at least one destination to continue."
           : `${travelIntents.length}/3 added`}
       </p>
+
+      {travelIntentError && (
+        <p className="text-xs text-destructive text-center font-medium animate-in fade-in slide-in-from-top-1 duration-200">
+          {travelIntentError}
+        </p>
+      )}
 
       {/* Navigation */}
       <div className="flex space-x-2 pt-2">
@@ -1971,10 +2057,10 @@ export default function ProfileSetupForm() {
         </Button>
         <Button
           type="button"
-          onClick={() => setStep(8)}
+          onClick={async () => await handleNext()}
           className="flex-1 h-9 text-sm bg-primary text-primary-foreground font-medium rounded-lg flex items-center justify-center gap-1"
         >
-          {travelIntents.length > 0 ? "Continue" : "Skip for now"}
+          Continue
           <ChevronRight className="h-3.5 w-3.5" />
         </Button>
       </div>
@@ -2223,7 +2309,11 @@ export default function ProfileSetupForm() {
       </div>
 
       <Button
-        onClick={() => router.replace("/dashboard")}
+        onClick={() => {
+          const originUrl = sessionStorage.getItem("kovari_origin_url");
+          sessionStorage.removeItem("kovari_origin_url");
+          router.replace(originUrl && originUrl !== "/onboarding" ? originUrl : "/dashboard");
+        }}
         className="w-full h-9 text-sm bg-primary hover:bg-primary-hover text-primary-foreground font-medium rounded-lg transition-all duration-200"
       >
         Get Started
