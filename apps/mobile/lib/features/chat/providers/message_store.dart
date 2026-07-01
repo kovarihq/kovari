@@ -674,9 +674,13 @@ class MessageStore extends Notifier<ConversationMessageState> {
   void updateDeliveryStatus(String messageId, MessageDeliveryStatus status) {
     final msg = state.messages[messageId];
     if (msg == null) return;
+    if (status.statePriority <= msg.deliveryStatus.statePriority) return;
+
+    final updatedEntity = msg.copyWith(deliveryStatus: status);
     final updated = Map<String, MessageEntity>.from(state.messages)
-      ..[messageId] = msg.copyWith(deliveryStatus: status);
+      ..[messageId] = updatedEntity;
     state = state.copyWith(messages: updated);
+    unawaited(_persistMessageToHistoryCache(updatedEntity));
   }
 
   /// 💎 Instagram-Pro: Update upload progress for a pending media message.
@@ -713,7 +717,7 @@ class MessageStore extends Notifier<ConversationMessageState> {
     for (final entry in updated.entries) {
       final msg = entry.value;
       if (!_isOwnSentMessage(msg)) continue;
-      if (msg.deliveryStatus == MessageDeliveryStatus.seen) continue;
+      if (msg.deliveryStatus.statePriority >= MessageDeliveryStatus.seen.statePriority) continue;
 
       final clientId = msg.clientMessageId;
       final matches =
@@ -722,10 +726,12 @@ class MessageStore extends Notifier<ConversationMessageState> {
           (clientId != null && idSet.contains('pending_$clientId'));
 
       if (matches) {
-        updated[entry.key] = msg.copyWith(
+        final updatedEntity = msg.copyWith(
           deliveryStatus: MessageDeliveryStatus.seen,
         );
+        updated[entry.key] = updatedEntity;
         changed = true;
+        unawaited(_persistMessageToHistoryCache(updatedEntity));
       }
     }
 
@@ -742,11 +748,13 @@ class MessageStore extends Notifier<ConversationMessageState> {
       final csn = msg.conversationSequence;
       if (csn != null &&
           csn <= lastSeenSequence &&
-          msg.deliveryStatus != MessageDeliveryStatus.seen) {
-        updated[entry.key] = msg.copyWith(
+          msg.deliveryStatus.statePriority < MessageDeliveryStatus.seen.statePriority) {
+        final updatedEntity = msg.copyWith(
           deliveryStatus: MessageDeliveryStatus.seen,
         );
+        updated[entry.key] = updatedEntity;
         changed = true;
+        unawaited(_persistMessageToHistoryCache(updatedEntity));
       }
     }
     if (changed) state = state.copyWith(messages: updated);

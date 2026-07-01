@@ -9,6 +9,21 @@ enum MessageDeliveryStatus {
 
   bool get isFinal => this == seen || this == failed;
   bool get isOptimistic => this == pending;
+
+  int get statePriority {
+    switch (this) {
+      case MessageDeliveryStatus.failed:
+        return 0;
+      case MessageDeliveryStatus.pending:
+        return 1;
+      case MessageDeliveryStatus.sent:
+        return 2;
+      case MessageDeliveryStatus.delivered:
+        return 3;
+      case MessageDeliveryStatus.seen:
+        return 4;
+    }
+  }
 }
 
 /// Media upload state for Phase 11 readiness.

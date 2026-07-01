@@ -231,5 +231,68 @@ void main() {
       expect(result.messages.first.status, 'sent');
       expect(result.updated, 1);
     });
+
+    test('Conflict Resolver: monotonic status transition (read overrides late delivered)', () {
+      final cached = [
+        CachedMessage(
+          id: 'msg_2',
+          conversationId: 'chat_123',
+          sequence: 2,
+          text: 'Message',
+          senderId: 'user_1',
+          createdAt: DateTime.now(),
+          status: 'seen',
+        ),
+      ];
+
+      final incoming = [
+        CachedMessage(
+          id: 'msg_2',
+          conversationId: 'chat_123',
+          sequence: 2,
+          text: 'Message',
+          senderId: 'user_1',
+          createdAt: DateTime.now(),
+          status: 'delivered',
+        ),
+      ];
+
+      final result = ConversationConflictResolver.merge(cached: cached, incoming: incoming);
+      // Status should remain 'seen' (read) and incoming 'delivered' should be ignored
+      expect(result.messages.first.status, 'seen');
+      expect(result.ignored, 1);
+    });
+
+    test('Conflict Resolver: duplicate ACKs are idempotent (100x)', () {
+      final cached = [
+        CachedMessage(
+          id: 'msg_3',
+          conversationId: 'chat_123',
+          sequence: 3,
+          text: 'Message',
+          senderId: 'user_1',
+          createdAt: DateTime.now(),
+          status: 'sent',
+        ),
+      ];
+
+      var currentCached = cached;
+      for (int i = 0; i < 100; i++) {
+        final incoming = [
+          CachedMessage(
+            id: 'msg_3',
+            conversationId: 'chat_123',
+            sequence: 3,
+            text: 'Message',
+            senderId: 'user_1',
+            createdAt: DateTime.now(),
+            status: 'sent',
+          ),
+        ];
+        final result = ConversationConflictResolver.merge(cached: currentCached, incoming: incoming);
+        currentCached = result.messages;
+        expect(result.messages.first.status, 'sent');
+      }
+    });
   });
 }

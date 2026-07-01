@@ -5,6 +5,7 @@ import { buildOutgoingMessage } from "@kovari/types";
 import { diagLog } from "@/lib/observability/performance";
 import { getSocket } from "@/lib/socket";
 import { v4 as uuidv4 } from "uuid";
+import { MessageStatusReconciler } from "@/services/messaging/messageStatusReconciler";
 
 export interface DirectChatMessage {
   id: string;
@@ -55,6 +56,7 @@ export const useDirectChat = (
   partnerClerkId?: string,
 ): UseDirectChatResult => {
   const { user } = useUser();
+  const reconciler = useMemo(() => new MessageStatusReconciler(), []);
   const [messages, setMessages] = useState<DirectChatMessage[]>([]);
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
@@ -147,14 +149,7 @@ export const useDirectChat = (
 
           if (loadMore) {
             setMessages((prev) => {
-              const existingIds = new Set(prev.map((m) => m.id));
-              const existingClientIds = new Set(prev.map((m) => m.client_id || m.tempId).filter(Boolean));
-              
-              const newMessages = chronologicalMessages.filter(
-                (msg: DirectChatMessage) => !existingIds.has(msg.id) && !existingClientIds.has(msg.client_id),
-              );
-              
-              const combined = [...newMessages, ...prev];
+              const combined = reconciler.reconcileList(prev, chronologicalMessages);
               if (combined.length > 0) {
                 setCursor(combined[0].created_at); // oldest is at index 0
               }
@@ -163,29 +158,11 @@ export const useDirectChat = (
           } else {
             // For regular polling refresh, we merge gracefully to preserve temp messages and avoid duplicates
             setMessages((prev) => {
-              const existingClientIds = new Set(prev.map((m) => m.client_id || m.tempId).filter(Boolean));
-              const prevMap = new Map(prev.map(m => [m.id, m]));
-              
-              const merged = [...prev];
-              chronologicalMessages.forEach((msg: any) => {
-                 if (prevMap.has(msg.id)) return;
-                 // If the message has a client_id matching a tempId of a local optimistic message, update the local message
-                 const localTempIndex = merged.findIndex(m => m.tempId && m.tempId === msg.client_id);
-                 if (localTempIndex > -1) {
-                    merged[localTempIndex] = { ...merged[localTempIndex], ...msg, status: "sent" };
-                 } else if (!existingClientIds.has(msg.client_id)) {
-                    merged.push(msg); // Add new completed message from polling
-                 }
-              });
-              // Sort by created_at 
-              const sorted = merged.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
-              
-              // Only update cursor if we don't have one, or if we completely replaced messages (which shouldn't happen here)
-              // Actually, since this is polling the *latest* messages, the oldest message shouldn't change unless we fetched the very first batch.
-              if (!cursor && sorted.length > 0) {
-                setCursor(sorted[0].created_at);
+              const combined = reconciler.reconcileList(prev, chronologicalMessages);
+              if (!cursor && combined.length > 0) {
+                setCursor(combined[0].created_at);
               }
-              return sorted;
+              return combined;
             });
           }
 
@@ -202,7 +179,7 @@ export const useDirectChat = (
         }
       }
     },
-    [currentUserUuid, partnerUuid, sharedSecret],
+    [currentUserUuid, partnerUuid, sharedSecret, reconciler],
   );
 
   // Load more messages function
@@ -241,9 +218,9 @@ export const useDirectChat = (
      if (user?.id && chatId) {
         const socket = getSocket(user.id);
         socket.emit("mark_seen", { chatId, messageIds });
-        setMessages(prev => prev.map(m => messageIds.includes(m.id) ? { ...m, status: "seen" } : m));
+        setMessages(prev => reconciler.reconcileList(prev, messageIds.map(id => ({ id, status: "seen" }))));
      }
-  }, [user?.id, currentUserUuid, partnerUuid]);
+  }, [user?.id, currentUserUuid, partnerUuid, reconciler]);
 
   // Send a message (optimistic)
   const sendMessage = useCallback(
@@ -252,7 +229,7 @@ export const useDirectChat = (
         return;
       setError(null);
       const tempId = uuidv4();
-      const clientId = uuidv4();
+      const clientId = tempId;
 
       // build the outgoing message using buildOutgoingMessage
       const outgoing = await buildOutgoingMessage(
@@ -274,7 +251,7 @@ export const useDirectChat = (
 
       setSending(true);
       seenIdsRef.current.add(tempId); // Add tempId to seenIdsRef
-      setMessages((prev) => [...prev, optimisticMsg]);
+      setMessages((prev) => reconciler.reconcileList(prev, [optimisticMsg]));
       
       // Stop typing immediately when a message is sent
       if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
@@ -296,9 +273,11 @@ export const useDirectChat = (
                   }
               }, (ack: any) => {
                  if (ack?.status === "sent") {
-                    // This ack is for the socket server receiving the message, not persisted
-                    // The message_persisted event will handle the final status update
-                    setMessages((prev) => prev.map((m) => m.tempId === tempId ? { ...m, status: "sent" } : m));
+                    setMessages((prev) => reconciler.reconcileList(prev, [{
+                      tempId,
+                      client_id: clientId,
+                      status: "sent"
+                    }]));
                  }
               });
               setSending(false);
@@ -332,20 +311,22 @@ export const useDirectChat = (
           status: "sent",
         };
         setMessages((prev) =>
-          prev.map((msg) => (msg.tempId === tempId ? serverMessage : msg)),
+          reconciler.reconcileList(prev, [serverMessage]),
         );
       } catch (err: any) {
         setMessages((prev) =>
-          prev.map((msg) =>
-            msg.tempId === tempId ? { ...msg, status: "failed" } : msg,
-          ),
+          reconciler.reconcileList(prev, [{
+            tempId,
+            client_id: clientId,
+            status: "failed"
+          }]),
         );
         setError(err.message || "Failed to send message");
       } finally {
         setSending(false);
       }
     },
-    [currentUserUuid, partnerUuid, sharedSecret, user?.id],
+    [currentUserUuid, partnerUuid, sharedSecret, user?.id, reconciler],
   );
 
   // Add markMessagesRead function
@@ -358,19 +339,16 @@ export const useDirectChat = (
         credentials: "include",
         body: JSON.stringify({ partnerId: partnerUuid }),
       });
-      setMessages((prev) =>
-        prev.map((msg) =>
-          msg.receiver_id === currentUserUuid &&
-          msg.sender_id === partnerUuid &&
-          !msg.read_at
-            ? { ...msg, read_at: new Date().toISOString() }
-            : msg,
-        ),
-      );
+      setMessages((prev) => reconciler.reconcileList(
+        prev,
+        prev
+          .filter(msg => msg.receiver_id === currentUserUuid && msg.sender_id === partnerUuid && !msg.read_at)
+          .map(msg => ({ id: msg.id, status: "seen", read_at: new Date().toISOString() }))
+      ));
     } catch (err) {
       // Optionally handle error
     }
-  }, [currentUserUuid, partnerUuid]);
+  }, [currentUserUuid, partnerUuid, reconciler]);
 
   // Initial fetch
   useEffect(() => {
@@ -406,158 +384,107 @@ export const useDirectChat = (
     }
 
     const handleReceiveMessage = async (incomingMsg: any) => {
-      const hasId = incomingMsg.id && seenIdsRef.current.has(incomingMsg.id);
-      const hasTempId = incomingMsg.tempId && seenIdsRef.current.has(incomingMsg.tempId);
-      const hasClientId = incomingMsg.client_id && seenIdsRef.current.has(incomingMsg.client_id);
-
       const incomingContent = incomingMsg.messageContent ?? incomingMsg.message_content ?? incomingMsg.text;
+      
+      const senderId = incomingMsg.senderId || incomingMsg.sender_id;
+      const receiverId = incomingMsg.receiverId || incomingMsg.receiver_id || (senderId === currentUserUuid ? partnerUuid : currentUserUuid);
 
-      if (hasId || hasTempId || hasClientId) {
-        // If we've already seen this message (e.g., from optimistic send or initial fetch),
-        // update its status and ID so it matches the server's persisted ID.
-        if (incomingMsg.id) seenIdsRef.current.add(incomingMsg.id);
-        if (incomingMsg.tempId) seenIdsRef.current.add(incomingMsg.tempId);
-        if (incomingMsg.client_id) seenIdsRef.current.add(incomingMsg.client_id);
+      const incomingDirectMsg: DirectChatMessage = {
+        id: incomingMsg.id || incomingMsg.tempId,
+        sender_id: senderId,
+        receiver_id: receiverId,
+        created_at: incomingMsg.created_at || incomingMsg.createdAt || new Date().toISOString(),
+        message_content: incomingContent || "",
+        mediaUrl: incomingMsg.mediaUrl,
+        mediaType: incomingMsg.mediaType,
+        client_id: incomingMsg.tempId,
+        tempId: incomingMsg.tempId,
+        status: incomingMsg.senderId === currentUserUuid ? "sent" : "delivered",
+        sender_profile: incomingMsg.senderName ? {
+          name: incomingMsg.senderName,
+          username: incomingMsg.senderUsername,
+        } : undefined,
+      };
 
-        setMessages((prev) => prev.map(m => 
-          (m.tempId === incomingMsg.tempId || m.id === incomingMsg.id || m.client_id === incomingMsg.client_id)
-          ? { 
-              ...m, 
-              id: incomingMsg.id || m.id, 
-              message_content: incomingContent ?? m.message_content,
-              status: m.status === 'sending' ? "sent" : m.status 
-            }
-          : m
-        ));
-        return;
-      }
       if (incomingMsg.id) seenIdsRef.current.add(incomingMsg.id);
       if (incomingMsg.tempId) seenIdsRef.current.add(incomingMsg.tempId);
       if (incomingMsg.client_id) seenIdsRef.current.add(incomingMsg.client_id);
 
-      setMessages((prev) => {
-        const exists = prev.some(
-          (m) =>
-            (incomingMsg.id && m.id === incomingMsg.id) ||
-            (incomingMsg.tempId && m.tempId === incomingMsg.tempId) ||
-            (incomingMsg.client_id && m.client_id === incomingMsg.client_id)
-        );
-        if (exists) {
-          return prev.map(m => 
-            (m.tempId === incomingMsg.tempId || m.id === incomingMsg.id || m.client_id === incomingMsg.client_id)
-            ? { 
-                ...m, 
-                id: incomingMsg.id || m.id, 
-                message_content: incomingContent ?? m.message_content,
-                status: m.status === 'sending' ? "sent" : m.status 
-              }
-            : m
-          );
+      const incomingSeq: number | undefined = (incomingMsg as any).conversationSequence;
+      if (incomingSeq && incomingSeq > 0) {
+        const lastSeq = lastKnownSequenceRef.current;
+        if (lastSeq > 0 && incomingSeq > lastSeq + 1) {
+          const fromSeq = lastSeq + 1;
+          const toSeq = incomingSeq - 1;
+          console.warn(`[useDirectChat] Gap detected: missing CSN ${fromSeq}–${toSeq}`);
+          socket.emit("request_gap_fill", {
+            chatId,
+            fromSequence: fromSeq,
+            toSequence: toSeq,
+          }, (response: any) => {
+            if (response?.status === "success" && Array.isArray(response.messages)) {
+              setMessages((prev) => {
+                const gapMessages = response.messages.map((m: any) => ({
+                  id: m.id,
+                  sender_id: m.senderId || m.sender_id,
+                  receiver_id: m.receiverId || m.receiver_id,
+                  created_at: m.createdAt || m.created_at || new Date().toISOString(),
+                  message_content: m.text || m.message_content || "",
+                  status: "delivered" as const,
+                }));
+                return reconciler.reconcileList(prev, gapMessages);
+              });
+            } else if (response?.status === "GAP_TOO_LARGE") {
+              fetchMessages();
+            }
+          });
         }
-
-        const finalContent = incomingContent || "";
-
-        // --- Workstream 7: Sequence Gap Detection & Idempotent Merge ---
-        const incomingSeq: number | undefined = (incomingMsg as any).conversationSequence;
-        if (incomingSeq && incomingSeq > 0) {
-          const lastSeq = lastKnownSequenceRef.current;
-          if (lastSeq > 0 && incomingSeq > lastSeq + 1) {
-            // Gap detected — request missing messages from server
-            const fromSeq = lastSeq + 1;
-            const toSeq = incomingSeq - 1;
-            console.warn(`[useDirectChat] Gap detected: missing CSN ${fromSeq}–${toSeq}`);
-            socket.emit("request_gap_fill", {
-              chatId,
-              fromSequence: fromSeq,
-              toSequence: toSeq,
-            }, (response: any) => {
-              if (response?.status === "success" && Array.isArray(response.messages)) {
-                setMessages((prev) => {
-                  const existingIds = new Set(prev.map((m) => m.id));
-                  const gapMessages: DirectChatMessage[] = response.messages
-                    .filter((m: any) => !existingIds.has(m.id))
-                    .map((m: any) => ({
-                      id: m.id,
-                      sender_id: m.senderId || m.sender_id,
-                      receiver_id: m.receiverId || m.receiver_id,
-                      created_at: m.createdAt || m.created_at || new Date().toISOString(),
-                      message_content: m.text || m.message_content || "",
-                      status: "delivered" as const,
-                    }));
-                  return [...prev, ...gapMessages].sort(
-                    (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
-                  );
-                });
-              } else if (response?.status === "GAP_TOO_LARGE") {
-                // Fall back to full REST fetch
-                fetchMessages();
-              }
-            });
-          }
-          // Update highest known sequence — idempotent: only move forward
-          if (incomingSeq > lastKnownSequenceRef.current) {
-            lastKnownSequenceRef.current = incomingSeq;
-          }
+        if (incomingSeq > lastKnownSequenceRef.current) {
+          lastKnownSequenceRef.current = incomingSeq;
         }
+      }
 
-        const senderId = incomingMsg.senderId || incomingMsg.sender_id;
-        const receiverId = incomingMsg.receiverId || incomingMsg.receiver_id || (senderId === currentUserUuid ? partnerUuid : currentUserUuid);
+      if (incomingDirectMsg.sender_id !== currentUserUuid) {
+        socket.emit("message_delivered", { chatId, messageId: incomingDirectMsg.id });
+      }
 
-        // Constructing a DirectChatMessage, not ChatMessage as per the original type
-        const newMessage: DirectChatMessage = {
-          id: incomingMsg.id || incomingMsg.tempId,
-          sender_id: senderId,
-          receiver_id: receiverId,
-          created_at: incomingMsg.created_at || incomingMsg.createdAt || new Date().toISOString(),
-          message_content: finalContent,
-          mediaUrl: incomingMsg.mediaUrl,
-          mediaType: incomingMsg.mediaType,
-          client_id: incomingMsg.tempId, // from optimism
-          status: "delivered", // Explicitly received by us, so delivered
-          sender_profile: incomingMsg.senderName ? {
-            name: incomingMsg.senderName,
-            username: incomingMsg.senderUsername,
-          } : undefined,
-        };
-        
-        // Let the sender know we got it
-        if (newMessage.sender_id !== currentUserUuid) {
-           socket.emit("message_delivered", { chatId, messageId: newMessage.id });
-        }
-        
-        const merged = [...prev, newMessage];
-        return merged.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
-      });
+      setMessages((prev) => reconciler.reconcileList(prev, [incomingDirectMsg]));
     };
 
     const handleMessagePersisted = (ack: { tempId: string, messageId: string, chatId: string, conversationSequence?: number }) => {
        if (ack.chatId === chatId) {
           seenIdsRef.current.add(ack.messageId);
-          // FINDING-3 FIX: Advance the gap detector's sequence cursor on the sender's own messages.
-          // Without this, the sender's side would not know their own message's sequence, causing
-          // false gap detections when the next receive_message arrives.
           if (ack.conversationSequence && ack.conversationSequence > lastKnownSequenceRef.current) {
             lastKnownSequenceRef.current = ack.conversationSequence;
           }
-          // Only upgrade status if it was stuck on 'sending', don't override delivery states
-          setMessages((prev) => prev.map(m => m.tempId === ack.tempId ? { ...m, id: ack.messageId, status: m.status === 'sending' ? "sent" : m.status } : m));
+          reconciler.registerMapping(ack.tempId, ack.messageId);
+          setMessages((prev) => reconciler.reconcileList(prev, [{
+            tempId: ack.tempId,
+            id: ack.messageId,
+            status: "sent",
+            conversationSequence: ack.conversationSequence,
+          }]));
        }
     };
 
-    const handleMessageDeliveredAck = ({ messageId, chatId: targetChat }: any) => {
+    const handleMessageDeliveredAck = ({ messageId, chatId: targetChat, conversationSequence }: any) => {
        if (targetChat === chatId) {
-          setMessages((prev) => prev.map((m) => 
-               (m.id === messageId || m.tempId === messageId || m.client_id === messageId) && 
-               (m.status === 'sent' || m.status === 'sending') 
-                  ? { ...m, status: "delivered" } 
-                  : m
-          ));
+          setMessages((prev) => reconciler.reconcileList(prev, [{
+            id: messageId,
+            status: "delivered",
+            conversationSequence,
+          }]));
        }
     };
 
-    const handleMessagesSeen = ({ chatId: targetChat, messageIds }: any) => {
+    const handleMessagesSeen = ({ chatId: targetChat, messageIds, lastSeenSequence }: any) => {
        if (targetChat === chatId) {
-          setMessages(prev => prev.map(m => messageIds.includes(m.id) || messageIds.includes(m.tempId) || messageIds.includes(m.client_id) ? { ...m, status: "seen" } : m));
+          setMessages(prev => reconciler.reconcileList(prev, messageIds.map((id: string) => ({
+            id,
+            status: "seen",
+            conversationSequence: lastSeenSequence,
+            read_at: new Date().toISOString(),
+          }))));
        }
     };
 

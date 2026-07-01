@@ -17,6 +17,23 @@ class MergeResult {
 }
 
 class ConversationConflictResolver {
+  static int _getStatusPriority(String status) {
+    switch (status) {
+      case 'failed':
+        return 0;
+      case 'pending':
+        return 1;
+      case 'sent':
+        return 2;
+      case 'delivered':
+        return 3;
+      case 'seen':
+        return 4;
+      default:
+        return 1;
+    }
+  }
+
   static MergeResult merge({
     required List<CachedMessage> cached,
     required List<CachedMessage> incoming,
@@ -30,6 +47,12 @@ class ConversationConflictResolver {
         final existing = map[m.id]!;
         if (m.sequence > existing.sequence) {
           map[m.id] = m;
+        } else if (m.sequence == existing.sequence) {
+          final incomingPriority = _getStatusPriority(m.status);
+          final existingPriority = _getStatusPriority(existing.status);
+          if (incomingPriority > existingPriority) {
+            map[m.id] = m;
+          }
         }
       } else {
         map[m.id] = m;
@@ -46,11 +69,19 @@ class ConversationConflictResolver {
         map[m.id] = m;
         inserted++;
       } else {
-        // Source priority rules: Server-acked "sent" overrides local optimistic "pending" status
-        final isServerAck = m.status == 'sent' && existing.status == 'pending';
-        if (m.sequence > existing.sequence || isServerAck) {
+        final incomingPriority = _getStatusPriority(m.status);
+        final existingPriority = _getStatusPriority(existing.status);
+        
+        if (m.sequence > existing.sequence) {
           map[m.id] = m;
           updated++;
+        } else if (m.sequence == existing.sequence) {
+          if (incomingPriority > existingPriority) {
+            map[m.id] = m;
+            updated++;
+          } else {
+            ignored++;
+          }
         } else {
           ignored++;
         }
