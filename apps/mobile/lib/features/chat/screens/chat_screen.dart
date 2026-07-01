@@ -940,6 +940,7 @@ class _MessageList extends ConsumerWidget {
       physics: const BouncingScrollPhysics(
         parent: AlwaysScrollableScrollPhysics(),
       ),
+      cacheExtent: MediaQuery.sizeOf(context).height * 1.5,
       padding: EdgeInsets.fromLTRB(
         16 * scale,
         hideHeader ? (16 * scale) : 92 + topPad,
@@ -981,19 +982,18 @@ class _MessageList extends ConsumerWidget {
         );
 
         return Column(
+          key: ValueKey('item_${msg.id}'),
           children: [
             if (showTimestamp) _DateDivider(date: msg.createdAt),
             if (showUnreadDivider) _UnreadDivider(),
-            RepaintBoundary(
-              child: _MessageBubble(
-                message: msg,
-                isMe: isMe,
-                isDark: isDark,
-                isGroup: isGroup,
-                isConsecutive: isConsecutive,
-                mediaMessages: mediaMessages,
-                isCompact: isCompact,
-              ),
+            _MessageBubble(
+              message: msg,
+              isMe: isMe,
+              isDark: isDark,
+              isGroup: isGroup,
+              isConsecutive: isConsecutive,
+              mediaMessages: mediaMessages,
+              isCompact: isCompact,
             ),
           ],
         );
@@ -1038,6 +1038,28 @@ class _MessageList extends ConsumerWidget {
   }
 }
 
+// ── KeepAlive Media Bubble Wrapper ──────────────────────────────────────────
+
+class _KeepAliveMediaBubble extends StatefulWidget {
+  const _KeepAliveMediaBubble({required this.child});
+  final Widget child;
+
+  @override
+  State<_KeepAliveMediaBubble> createState() => _KeepAliveMediaBubbleState();
+}
+
+class _KeepAliveMediaBubbleState extends State<_KeepAliveMediaBubble>
+    with AutomaticKeepAliveClientMixin {
+  @override
+  bool get wantKeepAlive => true;
+
+  @override
+  Widget build(BuildContext context) {
+    super.build(context);
+    return widget.child;
+  }
+}
+
 // ── Message Bubble ──────────────────────────────────────────────────────────
 
 class _MessageBubble extends ConsumerWidget {
@@ -1075,24 +1097,25 @@ class _MessageBubble extends ConsumerWidget {
 
     GroupMember? member;
     if (isGroup && !isMe) {
-      final members =
-          ref.watch(memberStoreProvider)[message.chatId]?.data ?? [];
-      final index = members.indexWhere(
-        (m) =>
-            m.userIdFromUserTable == message.senderId ||
-            m.clerkId == message.senderId ||
-            m.id == message.senderId,
+      final selectedMember = ref.watch(
+        memberStoreProvider.select((s) {
+          final list = s[message.chatId]?.data ?? [];
+          final idx = list.indexWhere(
+            (m) =>
+                m.userIdFromUserTable == message.senderId ||
+                m.clerkId == message.senderId ||
+                m.id == message.senderId,
+          );
+          return idx != -1 ? list[idx] : null;
+        }),
       );
-      if (index != -1) {
-        member = members[index];
-      } else {
-        member = GroupMember(
-          id: message.senderId,
-          name: 'User',
-          username: 'user',
-          role: 'member',
-        );
-      }
+      member = selectedMember ??
+          GroupMember(
+            id: message.senderId,
+            name: 'User',
+            username: 'user',
+            role: 'member',
+          );
     }
 
     final bubbleRadius = BorderRadius.only(
@@ -1122,9 +1145,10 @@ class _MessageBubble extends ConsumerWidget {
 
     Widget bubbleContent;
     if (hasMedia) {
-      bubbleContent = Align(
-        alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
-        child: GestureDetector(
+      bubbleContent = _KeepAliveMediaBubble(
+        child: Align(
+          alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
+          child: GestureDetector(
           onTap: () {
             // Unfocus any active text field to prevent keyboard auto-opening on route dismissal
             FocusManager.instance.primaryFocus?.unfocus();
@@ -1166,49 +1190,51 @@ class _MessageBubble extends ConsumerWidget {
                 alignment: Alignment.bottomRight,
                 children: [
                   // 🖼️ Media Content
-                  SizedBox(
-                    height: 200 * scale,
-                    width: double.infinity,
-                    child: message.mediaType == 'image'
-                        ? (message.localFilePath != null
-                              ? Image.file(
-                                  File(message.localFilePath!),
-                                  fit: BoxFit.cover,
-                                )
-                              : CachedNetworkImage(
-                                  imageUrl: message.mediaUrl!,
-                                  fit: BoxFit.cover,
-                                  fadeInDuration: const Duration(
-                                    milliseconds: 200,
-                                  ),
-                                  fadeOutDuration: const Duration(
-                                    milliseconds: 100,
-                                  ),
-                                  placeholderFadeInDuration: Duration.zero,
-                                  placeholder: (context, url) =>
-                                      _ShimmerPlaceholder(height: 200 * scale),
-                                  errorWidget: (context, url, error) =>
-                                      Container(
-                                        height: 200 * scale,
-                                        color: AppColors.surface(
-                                          context,
-                                          level: 2,
-                                        ),
-                                        child: const Center(
-                                          child: Icon(
-                                            Icons.broken_image,
-                                            color: Colors.grey,
+                  RepaintBoundary(
+                    child: SizedBox(
+                      height: 200 * scale,
+                      width: double.infinity,
+                      child: message.mediaType == 'image'
+                          ? (message.localFilePath != null
+                                ? Image.file(
+                                    File(message.localFilePath!),
+                                    fit: BoxFit.cover,
+                                  )
+                                : CachedNetworkImage(
+                                    imageUrl: message.mediaUrl!,
+                                    fit: BoxFit.cover,
+                                    fadeInDuration: const Duration(
+                                      milliseconds: 200,
+                                    ),
+                                    fadeOutDuration: const Duration(
+                                      milliseconds: 100,
+                                    ),
+                                    placeholderFadeInDuration: Duration.zero,
+                                    placeholder: (context, url) =>
+                                        _ShimmerPlaceholder(height: 200 * scale),
+                                    errorWidget: (context, url, error) =>
+                                        Container(
+                                          height: 200 * scale,
+                                          color: AppColors.surface(
+                                            context,
+                                            level: 2,
+                                          ),
+                                          child: const Center(
+                                            child: Icon(
+                                              Icons.broken_image,
+                                              color: Colors.grey,
+                                            ),
                                           ),
                                         ),
-                                      ),
-                                ))
-                        : Container(
-                            height: 200 * scale,
-                            color: AppColors.surface(context, level: 2),
-                            child: Center(
-                              child: Icon(LucideIcons.video, size: 40 * scale),
+                                  ))
+                          : Container(
+                              height: 200 * scale,
+                              color: AppColors.surface(context, level: 2),
+                              child: Center(
+                                child: Icon(LucideIcons.video, size: 40 * scale),
+                              ),
                             ),
-                          ),
+                    ),
                   ),
 
                   // 💎 Instagram-Pro: Upload Progress Overlay
@@ -1294,7 +1320,7 @@ class _MessageBubble extends ConsumerWidget {
             ),
           ),
         ),
-      );
+      ),);
     } else {
       bubbleContent = Container(
         padding: EdgeInsets.symmetric(
