@@ -150,15 +150,25 @@ class MessageStore extends Notifier<ConversationMessageState> {
     final link = ref.keepAlive();
     _isActive = true;
 
-    // Auto-dispose after 5 minutes of inactivity to save memory
     Timer? disposeTimer;
+    StreamSubscription<SocketEvent>? sub;
+
+    void startSubscription() {
+      sub?.cancel();
+      final events = ref.read(socketServiceProvider.notifier).events;
+      sub = events.listen((SocketEvent event) => _handleSocketEvent(event));
+    }
+
     ref.onDispose(() {
       disposeTimer?.cancel();
+      sub?.cancel();
       _isDisposed = true;
     });
 
     ref.onCancel(() {
       _isActive = false;
+      sub?.cancel();
+      sub = null;
       // Defer trim: modifying state inside onCancel violates Riverpod lifecycle
       Future.microtask(() => _trimMessages(50));
       disposeTimer = Timer(const Duration(minutes: 5), () => link.close());
@@ -167,11 +177,10 @@ class MessageStore extends Notifier<ConversationMessageState> {
     ref.onResume(() {
       _isActive = true;
       disposeTimer?.cancel();
+      startSubscription();
     });
 
-    final events = ref.read(socketServiceProvider.notifier).events;
-    final sub = events.listen((SocketEvent event) => _handleSocketEvent(event));
-    ref.onDispose(() => sub.cancel());
+    startSubscription();
 
     // Eagerly hydrate from API in the next microtask to ensure state is initialized
     Future.microtask(() => _hydrate());
@@ -203,9 +212,11 @@ class MessageStore extends Notifier<ConversationMessageState> {
 
       await cacheRepo.init();
 
-      // 1. Load instantly from cache
+      // 1. Load instantly from cache, filtering out any mismatched chatId records for strict integrity
       final cachedMsgs = await syncEngine.loadCachedMessages(_chatId);
-      final List<MessageEntity> cachedEntities = cachedMsgs.map((m) {
+      final List<MessageEntity> cachedEntities = cachedMsgs
+          .where((m) => m.conversationId == _chatId)
+          .map((m) {
         return MessageEntity(
           id: m.id,
           chatId: _chatId,
@@ -322,7 +333,9 @@ class MessageStore extends Notifier<ConversationMessageState> {
 
       // Update UI with newly synced cache state
       final freshMsgs = await syncEngine.loadCachedMessages(_chatId);
-      final List<MessageEntity> freshEntities = freshMsgs.map((m) {
+      final List<MessageEntity> freshEntities = freshMsgs
+          .where((m) => m.conversationId == _chatId)
+          .map((m) {
         return MessageEntity(
           id: m.id,
           chatId: _chatId,
@@ -529,7 +542,7 @@ class MessageStore extends Notifier<ConversationMessageState> {
       }
 
       // 3. Content Fingerprint (Robust fallback for modern social feel)
-      if (existingKey == null || existingKey.isEmpty) {
+      if ((existingKey == null || existingKey.isEmpty) && msg.text != null && msg.text!.isNotEmpty) {
         existingKey = updated.keys.firstWhere((k) {
           final e = updated[k]!;
           return e.senderId == msg.senderId &&
@@ -538,7 +551,7 @@ class MessageStore extends Notifier<ConversationMessageState> {
         }, orElse: () => '');
       }
 
-      if (existingKey.isNotEmpty) {
+      if (existingKey != null && existingKey.isNotEmpty) {
         // Merge: Keep existing ID if it's authoritative, but update data
         updated[existingKey] = updated[existingKey]!.copyWith(
           id: msg.id, // Ensure we have the latest server ID
@@ -611,12 +624,23 @@ class MessageStore extends Notifier<ConversationMessageState> {
     required int conversationSequence,
     required int serverSequence,
   }) {
+    if (state.messages.containsKey(serverMessageId)) {
+      AppLogger.i(
+        '[MessageStore] reconcileOptimistic: message $serverMessageId already reconciled. Skipping.',
+      );
+      // Ensure journal is marked successful
+      ref.read(mutationJournalProvider).resolve(_chatId, clientMessageId, MutationStatus.success);
+      return;
+    }
+
     final pendingId = 'pending_$clientMessageId';
     final optimistic = state.messages[pendingId];
     if (optimistic == null) {
       AppLogger.w(
         '[MessageStore] reconcileOptimistic: no pending msg for $clientMessageId',
       );
+      // Double check if it was already reconciled under another format
+      ref.read(mutationJournalProvider).resolve(_chatId, clientMessageId, MutationStatus.success);
       return;
     }
 

@@ -396,6 +396,7 @@ class ChatMutationService {
   void replayPendingMessages(String chatId) {
     final journal = _ref.read(mutationJournalProvider);
     final pending = journal.getPendingFor(chatId);
+    final store = _ref.read(messageStoreProvider(chatId));
 
     for (final entry in pending) {
       // 💎 Instagram-Pro: Skip if already in flight to prevent redundant re-sends
@@ -403,6 +404,18 @@ class ChatMutationService {
         AppLogger.d(
           '[ChatMutationService] Skipping replay for $chatId/${entry.id}: already SENDING',
         );
+        continue;
+      }
+
+      // If the message has already been reconciled (exists in store as non-pending),
+      // mark it success in journal and skip.
+      final hasAuthoritative = store.messages.values.any((m) =>
+          m.clientMessageId == entry.id && !m.id.startsWith('pending_'));
+      if (hasAuthoritative) {
+        AppLogger.i(
+          '[ChatMutationService] Skipping replay for $chatId/${entry.id}: already reconciled in store',
+        );
+        journal.resolve(chatId, entry.id, MutationStatus.success);
         continue;
       }
 
