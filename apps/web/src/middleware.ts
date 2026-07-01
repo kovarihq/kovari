@@ -366,8 +366,30 @@ const clerk = clerkMiddleware(async (auth, req: NextRequest) => {
           url.pathname = "/onboarding";
           return NextResponse.redirect(url);
         }
+
+        // Optimize: If user is fully activated, set the cookie to avoid future DB calls in middleware
+        if (activation.isActivated && activation.isOnboardingCompletedFlag) {
+          const response = nextResponseWithHeaders(req);
+          response.cookies.set("kovari_activated", "true", {
+            path: "/",
+            maxAge: 60 * 60 * 24 * 30, // 30 days
+            sameSite: "lax",
+          });
+          return response;
+        }
       }
     }
+  }
+
+  // If user is not logged in but has the activated cookie, clear it (handles logout, session expiration)
+  if (!userId && req.cookies.get("kovari_activated")?.value) {
+    const response = nextResponseWithHeaders(req);
+    response.cookies.set("kovari_activated", "false", {
+      path: "/",
+      maxAge: 0,
+      sameSite: "lax",
+    });
+    return response;
   }
 
   return nextResponseWithHeaders(req);
