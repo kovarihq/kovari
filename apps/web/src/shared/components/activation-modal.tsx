@@ -59,10 +59,18 @@ export function ActivationModal({ profileData, onContinue }: ActivationModalProp
     if (onContinue) {
       onContinue();
     } else {
-      if (typeof window !== "undefined" && window.location.pathname !== "/onboarding") {
+      if (typeof window !== "undefined" && window.location.pathname !== "/onboarding" && window.location.pathname !== "/profile/edit") {
         sessionStorage.setItem("kovari_origin_url", window.location.pathname + window.location.search);
       }
-      router.push("/onboarding");
+      const isExistingUser = user?.createdAt 
+        ? (new Date().getTime() - new Date(user.createdAt).getTime()) > 24 * 60 * 60 * 1000
+        : false;
+
+      if (activation.isOnboardingCompletedFlag || isExistingUser) {
+        router.push("/profile/edit");
+      } else {
+        router.push("/onboarding");
+      }
     }
   };
 

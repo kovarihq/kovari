@@ -217,7 +217,7 @@ const clerk = clerkMiddleware(async (auth, req: NextRequest) => {
         const dbStart = performance.now();
         const { data: user, error } = await supabase
           .from("users")
-          .select('banned, ban_expires_at, "isDeleted", onboarding_completed, profiles(profile_photo, travel_intentions)')
+          .select('created_at, banned, ban_expires_at, "isDeleted", onboarding_completed, profiles(profile_photo, travel_intentions)')
           .eq("clerk_user_id", userId)
           .maybeSingle();
         
@@ -343,8 +343,9 @@ const clerk = clerkMiddleware(async (auth, req: NextRequest) => {
 
     const isApiRoute = pathname.startsWith("/api/") || pathname.startsWith("/trpc/");
     const isOnboarding = pathname.startsWith("/onboarding");
+    const isProfileEdit = pathname.startsWith("/profile/edit");
 
-    if (!isApiRoute && !isOnboarding) {
+    if (!isApiRoute && !isOnboarding && !isProfileEdit) {
       const activationCookie = req.cookies.get("kovari_activated")?.value;
       if (activationCookie !== "true" && fetchedUser) {
         const profileObj = Array.isArray(fetchedUser.profiles) ? fetchedUser.profiles[0] : fetchedUser.profiles;
@@ -354,7 +355,13 @@ const clerk = clerkMiddleware(async (auth, req: NextRequest) => {
           travel_intentions: profileObj?.travel_intentions,
         });
 
-        if (!activation.isActivated || !activation.isOnboardingCompletedFlag) {
+        const isExistingUser = fetchedUser?.created_at
+          ? (new Date().getTime() - new Date(fetchedUser.created_at).getTime()) > 24 * 60 * 60 * 1000
+          : false;
+
+        // Only redirect new users to /onboarding.
+        // Existing users pass through to let ProtectedRoute handle display of ActivationModal.
+        if (!activation.isActivated && !activation.isOnboardingCompletedFlag && !isExistingUser) {
           const url = req.nextUrl.clone();
           url.pathname = "/onboarding";
           return NextResponse.redirect(url);

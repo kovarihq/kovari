@@ -40,8 +40,16 @@ export default function ProfileSetupPage() {
           const data = await res.json();
           const profileData = data?.data;
           const activation = activationService.verifyActivation(profileData);
-          if (activation.isActivated && profileData?.onboardingCompleted === true) {
-            router.replace("/dashboard");
+          const isExistingUser = user?.createdAt
+            ? (new Date().getTime() - new Date(user.createdAt).getTime()) > 24 * 60 * 60 * 1000
+            : false;
+
+          if (profileData?.onboardingCompleted === true || isExistingUser) {
+            if (activation.isActivated) {
+              router.replace("/dashboard");
+            } else {
+              router.replace("/profile/edit");
+            }
           } else {
             setChecking(false);
           }
