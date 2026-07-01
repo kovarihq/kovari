@@ -124,7 +124,7 @@ export const useGroupChat = (groupId: string) => {
       const decryptedMessages = mappedData.map((message: any) => {
         return {
           ...message,
-          content: message.message_content || "[Empty message]",
+          content: message.message_content || "",
         };
       });
 
@@ -403,7 +403,7 @@ export const useGroupChat = (groupId: string) => {
           }, async (response: any) => {
             if (response?.status === "success" && Array.isArray(response.messages)) {
               const decryptedGap = response.messages.map((m: any) => {
-                const decryptedContent = (m.text ?? m.message_content ?? m.messageContent) || "[Empty message]";
+                const decryptedContent = (m.text ?? m.message_content ?? m.messageContent) || "";
                 return {
                   id: m.id,
                   content: decryptedContent,
@@ -444,7 +444,7 @@ export const useGroupChat = (groupId: string) => {
       );
       if (exists) return prev;
 
-       const content = (incomingMsg.text ?? incomingMsg.message_content ?? incomingMsg.messageContent) || "[Empty message]";
+       const content = (incomingMsg.text ?? incomingMsg.message_content ?? incomingMsg.messageContent) || "";
 
       const isFromMe = incomingMsg.senderId === user?.id;
 
