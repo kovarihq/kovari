@@ -643,12 +643,7 @@ export default function ProfileSetupForm() {
         return;
       }
       setPhotoError(null);
-      // Automatically continue to Travel Intention if required
-      if (!travelIntents || travelIntents.length === 0) {
-        setStep(7);
-      } else {
-        setStep(3);
-      }
+      setStep(3);
       return;
     }
     if (step === 3) {
