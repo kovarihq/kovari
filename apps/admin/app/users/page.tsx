@@ -25,7 +25,8 @@ async function getUsers(
   page: number = 1,
   limit: number = 20,
   query?: string,
-  status?: string
+  status?: string,
+  sortOrder: "asc" | "desc" = "desc"
 ): Promise<{ users: User[]; page: number; limit: number }> {
   const from = (page - 1) * limit;
   const to = from + limit - 1;
@@ -49,7 +50,8 @@ async function getUsers(
       users${status && status !== 'deleted' ? '!inner' : ''}!profiles_user_id_fkey(
         banned,
         ban_reason,
-        ban_expires_at
+        ban_expires_at,
+        activation_date
       )
     `
   );
@@ -67,6 +69,8 @@ async function getUsers(
   } else if (status === "suspended") {
     base = base.filter("users.banned", "eq", true).filter("users.ban_expires_at", "gt", new Date().toISOString());
   }
+
+  base = base.order("created_at", { ascending: sortOrder === "asc" });
 
   const { data, error } = await base.range(from, to);
 
@@ -113,7 +117,7 @@ async function getUsers(
 export default async function UsersPage({
   searchParams,
 }: {
-  searchParams: Promise<{ page?: string; query?: string; status?: string }>;
+  searchParams: Promise<{ page?: string; query?: string; status?: string; sortOrder?: string }>;
 }) {
   await requireAdmin();
 
@@ -125,8 +129,9 @@ export default async function UsersPage({
   const limit = 20;
   const query = params.query || "";
   const status = params.status || "";
+  const sortOrder = (params.sortOrder || "desc") as "asc" | "desc";
 
-  const { users, page: currentPage } = await getUsers(page, limit, query, status);
+  const { users, page: currentPage } = await getUsers(page, limit, query, status, sortOrder);
 
   return (
     <div className="max-w-full mx-auto space-y-6">
@@ -143,6 +148,7 @@ export default async function UsersPage({
         initialLimit={limit}
         initialQuery={query}
         initialStatus={status}
+        initialSortOrder={sortOrder}
       />
     </div>
   );

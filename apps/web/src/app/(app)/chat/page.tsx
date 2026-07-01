@@ -10,8 +10,7 @@ export default function ChatPage() {
             Welcome to Chat
           </h2>
           <p className="text-muted-foreground text-sm max-w-lg">
-            Select a conversation from the inbox to start chatting. Your
-            messages are end-to-end encrypted for privacy and security.
+            Select a conversation from the inbox to start chatting.
           </p>
         </div>
       </div>

@@ -55,6 +55,11 @@ const menuItems = [
     title: "Dashboard",
     url: "/",
     icon: LayoutDashboard,
+  }, 
+  {
+    title: "Analytics",
+    url: "/analytics",
+    icon: TrendingUp,
   },
   {
     title: "Users",
@@ -73,29 +78,24 @@ const menuItems = [
     badge: "pendingFlags",
   },
   {
-    title: "Feedback",
-    url: "/feedback",
-    icon: MessageSquare,
-  },
-  {
     title: "Sessions",
     url: "/sessions",
     icon: Clock,
   },
   {
-    title: "Waitlist",
-    url: "/waitlist",
-    icon: BarChart3,
-  },
-  {
-    title: "Beta Analytics",
-    url: "/beta-analytics",
-    icon: TrendingUp,
+    title: "Feedback",
+    url: "/feedback",
+    icon: MessageSquare,
   },
   {
     title: "Emails",
     url: "/emails",
     icon: Mail,
+  },
+  {
+    title: "Waitlist",
+    url: "/waitlist",
+    icon: BarChart3,
   },
   {
     title: "Audit Logs",

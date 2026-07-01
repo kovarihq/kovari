@@ -9,6 +9,21 @@ enum MessageDeliveryStatus {
 
   bool get isFinal => this == seen || this == failed;
   bool get isOptimistic => this == pending;
+
+  int get statePriority {
+    switch (this) {
+      case MessageDeliveryStatus.failed:
+        return 0;
+      case MessageDeliveryStatus.pending:
+        return 1;
+      case MessageDeliveryStatus.sent:
+        return 2;
+      case MessageDeliveryStatus.delivered:
+        return 3;
+      case MessageDeliveryStatus.seen:
+        return 4;
+    }
+  }
 }
 
 /// Media upload state for Phase 11 readiness.
@@ -23,10 +38,6 @@ class MessageEntity {
     required this.deliveryStatus,
     this.clientMessageId,
     this.text,
-    this.encryptedContent,
-    this.encryptionIv,
-    this.encryptionSalt,
-    this.isEncrypted = false,
     this.conversationSequence,
     this.serverSequence,
     this.mediaUrl,
@@ -36,8 +47,6 @@ class MessageEntity {
     this.thumbnailUrl,
     this.mediaUploadState = MediaUploadState.idle,
     this.uploadProgress = 0.0,
-    this.senderClerkId,
-    this.receiverClerkId,
   });
 
   /// Authoritative server-assigned ID. Null when optimistic.
@@ -49,23 +58,13 @@ class MessageEntity {
   /// Database UUID of sender.
   final String senderId;
 
-  /// Clerk IDs for E2EE key derivation.
-  final String? senderClerkId;
-  final String? receiverClerkId;
-
   /// Local (ephemeral) ID used for optimistic reconciliation.
   final String? clientMessageId;
 
   final DateTime createdAt;
 
-  /// Decrypted text content (after hydration).
+  /// Plaintext content.
   final String? text;
-
-  /// Encrypted payload fields (from server).
-  final String? encryptedContent;
-  final String? encryptionIv;
-  final String? encryptionSalt;
-  final bool isEncrypted;
 
   // --- Authoritative Ordering ---
   /// Monotonic per-conversation sequence number. PRIMARY sort key.
@@ -95,10 +94,6 @@ class MessageEntity {
     String? clientMessageId,
     DateTime? createdAt,
     String? text,
-    String? encryptedContent,
-    String? encryptionIv,
-    String? encryptionSalt,
-    bool? isEncrypted,
     int? conversationSequence,
     int? serverSequence,
     String? mediaUrl,
@@ -117,10 +112,6 @@ class MessageEntity {
       clientMessageId: clientMessageId ?? this.clientMessageId,
       createdAt: createdAt ?? this.createdAt,
       text: text ?? this.text,
-      encryptedContent: encryptedContent ?? this.encryptedContent,
-      encryptionIv: encryptionIv ?? this.encryptionIv,
-      encryptionSalt: encryptionSalt ?? this.encryptionSalt,
-      isEncrypted: isEncrypted ?? this.isEncrypted,
       conversationSequence: conversationSequence ?? this.conversationSequence,
       serverSequence: serverSequence ?? this.serverSequence,
       mediaUrl: mediaUrl ?? this.mediaUrl,
@@ -131,8 +122,6 @@ class MessageEntity {
       mediaUploadState: mediaUploadState ?? this.mediaUploadState,
       uploadProgress: uploadProgress ?? this.uploadProgress,
       deliveryStatus: deliveryStatus ?? this.deliveryStatus,
-      senderClerkId: senderClerkId ?? this.senderClerkId,
-      receiverClerkId: receiverClerkId ?? this.receiverClerkId,
     );
   }
 
@@ -146,15 +135,12 @@ class MessageEntity {
     String? mediaType,
     String? localFilePath,
     String? blurHash,
-    String? senderClerkId,
-    String? receiverClerkId,
+    String? thumbnailUrl,
   }) {
     return MessageEntity(
       id: 'pending_$clientMessageId',
       chatId: chatId,
       senderId: senderId,
-      senderClerkId: senderClerkId,
-      receiverClerkId: receiverClerkId,
       clientMessageId: clientMessageId,
       createdAt: DateTime.now(),
       text: text,
@@ -162,6 +148,7 @@ class MessageEntity {
       mediaType: mediaType,
       localFilePath: localFilePath,
       blurHash: blurHash,
+      thumbnailUrl: thumbnailUrl,
       deliveryStatus: MessageDeliveryStatus.pending,
       mediaUploadState: mediaUrl == null && localFilePath != null
           ? MediaUploadState.uploading
@@ -185,8 +172,6 @@ class MessageEntity {
           '',
       chatId: chatId,
       senderId: senderId,
-      senderClerkId: data['senderClerkId'] as String?,
-      receiverClerkId: data['receiverClerkId'] as String?,
       clientMessageId:
           data['tempId'] as String? ?? data['client_id'] as String?,
       createdAt: data['createdAt'] != null
@@ -195,22 +180,7 @@ class MessageEntity {
                 ? DateTime.tryParse(data['created_at'] as String) ??
                       DateTime.now()
                 : DateTime.now()),
-      text: data['text'] as String?,
-      encryptedContent:
-          data['encryptedContent'] as String? ??
-          data['encrypted_content'] as String?,
-      encryptionIv:
-          data['encryptionIv'] as String? ??
-          data['encryption_iv'] as String? ??
-          data['iv'] as String?,
-      encryptionSalt:
-          data['encryptionSalt'] as String? ??
-          data['encryption_salt'] as String? ??
-          data['salt'] as String?,
-      isEncrypted:
-          data['isEncrypted'] as bool? ??
-          data['is_encrypted'] as bool? ??
-          false,
+      text: data['text'] as String? ?? data['messageContent'] as String? ?? data['message_content'] as String?,
       conversationSequence:
           data['conversationSequence'] as int? ??
           data['conversation_sequence'] as int?,
@@ -249,15 +219,9 @@ class MessageEntity {
       'id': id,
       'chatId': chatId,
       'senderId': senderId,
-      'senderClerkId': senderClerkId,
-      'receiverClerkId': receiverClerkId,
       'tempId': clientMessageId,
       'createdAt': createdAt.toIso8601String(),
       'text': text,
-      'encryptedContent': encryptedContent,
-      'encryptionIv': encryptionIv,
-      'encryptionSalt': encryptionSalt,
-      'isEncrypted': isEncrypted,
       'conversationSequence': conversationSequence,
       'serverSequence': serverSequence,
       'mediaUrl': mediaUrl,

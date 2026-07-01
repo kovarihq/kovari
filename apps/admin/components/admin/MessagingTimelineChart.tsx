@@ -33,7 +33,7 @@ interface MessagingTimelineChartProps {
 export function MessagingTimelineChart({ data }: MessagingTimelineChartProps) {
   if (!data || data.length === 0) {
     return (
-      <div className="h-[220px] bg-secondary/10 flex items-center justify-center border-t border-border">
+      <div className="h-[220px] bg-secondary/10 flex items-center justify-center">
         <div className="flex flex-col items-center space-y-1.5 text-center p-4">
           <MessageSquare className="h-6 w-6 text-muted-foreground/40" />
           <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">

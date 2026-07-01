@@ -26,6 +26,7 @@ export async function GET(req: NextRequest) {
     const status = searchParams.get("status") || "";
     const page = Number(searchParams.get("page") || "1");
     const limit = Number(searchParams.get("limit") || "20");
+    const sortOrder = (searchParams.get("sortOrder") || "desc") as "asc" | "desc";
     const from = (page - 1) * limit;
     const to = from + limit - 1;
 
@@ -77,6 +78,8 @@ export async function GET(req: NextRequest) {
     } else if (status === "not_invited" || status === "non_beta" || status === "non-beta") {
       base = base.filter("users.beta_status", "eq", "not_invited");
     }
+
+    base = base.order("created_at", { ascending: sortOrder === "asc" });
 
     const { data, error } = await base.range(from, to);
 

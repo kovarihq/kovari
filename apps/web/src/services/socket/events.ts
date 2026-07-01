@@ -16,6 +16,7 @@ import {
 } from "./resolveSocketUser";
 
 import { sequenceManager } from "./sequences";
+import { buildMessageInsertPayload } from "../messaging/persistence";
 
 export const registerSocketEvents = (
   io: Server<
@@ -537,16 +538,10 @@ export const registerSocketEvents = (
         if (callback) {
           callback({
             status: "success",
-            // FINDING-6 FIX: Include full E2EE fields so gap-recovered messages can be decrypted.
             messages: messages.map((m: any) => ({
               id: m.id,
               senderId: m.sender_id || m.user_id,
-              // text is kept for backward compat, but clients should use encryptedContent for decryption
-              text: m.encrypted_content || "",
-              encryptedContent: m.encrypted_content || null,
-              iv: m.encryption_iv || null,
-              salt: m.encryption_salt || null,
-              isEncrypted: m.is_encrypted ?? false,
+              text: m.message_content || "",
               mediaUrl: m.media_url || null,
               mediaType: m.media_type || null,
               conversationSequence: m.conversation_sequence,
@@ -608,19 +603,20 @@ async function persistMessageToDb(
       conv = newConv;
     }
 
+    const insertPayload = buildMessageInsertPayload({
+      text: message.messageContent ?? null,
+      mediaUrl: message.mediaUrl ?? null,
+      mediaType: message.mediaType ?? null,
+    });
+
     const { data, error } = await supabase
       .from("direct_messages")
       .insert({
+        ...insertPayload,
         conversation_id: conv.id,
         sender_id: userUuid,
         receiver_id: message.receiverId,
-        encrypted_content: message.encryptedContent || null,
-        encryption_iv: message.iv || null,
-        encryption_salt: message.salt || null,
-        media_url: message.mediaUrl || null,
-        media_type: message.mediaType || null,
         client_id: message.tempId || null,
-        is_encrypted: message.isEncrypted || false,
       })
       .select("*")
       .single();
@@ -632,17 +628,18 @@ async function persistMessageToDb(
     return data;
   } else {
     // It's a group chat, the chatId is the groupId
+    const insertPayload = buildMessageInsertPayload({
+      text: message.messageContent ?? null,
+      mediaUrl: message.mediaUrl ?? null,
+      mediaType: message.mediaType ?? null,
+    });
+
     const { data, error } = await supabase
       .from("group_messages")
       .insert({
+        ...insertPayload,
         group_id: chatId,
         user_id: userUuid,
-        encrypted_content: message.encryptedContent || null,
-        encryption_iv: message.iv || null,
-        encryption_salt: message.salt || null,
-        media_url: message.mediaUrl || null,
-        media_type: message.mediaType || null,
-        is_encrypted: message.isEncrypted ?? true,
       })
       .select("*")
       .single();

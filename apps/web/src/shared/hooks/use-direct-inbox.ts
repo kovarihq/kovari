@@ -1,5 +1,4 @@
 import { useEffect, useState, useRef, useCallback } from "react";
-import { decryptMessage } from "@kovari/utils";
 import { useUser } from "@clerk/nextjs";
 import { getSocket } from "@/lib/socket";
 
@@ -70,40 +69,7 @@ export const useDirectInbox = (
       const isMe = senderId === currentUserUuid;
       const partnerId = isMe ? receiverId : senderId;
 
-      // Decrypt message text for inbox preview
-      let messageText = incomingMsg.content || incomingMsg.plain_content || "";
-      if (!messageText && incomingMsg.isEncrypted) {
-        if (incomingMsg.encryptedContent && incomingMsg.iv && incomingMsg.salt) {
-          const myClerkId = user?.id;
-          const partnerClerkId = isMe ? incomingMsg.receiverClerkId : incomingMsg.senderClerkId;
-          
-          const uuidSecret = (currentUserUuid && partnerId)
-            ? (currentUserUuid < partnerId ? `${currentUserUuid}:${partnerId}` : `${partnerId}:${currentUserUuid}`)
-            : "";
-
-          const clerkSecret = (myClerkId && partnerClerkId)
-            ? (myClerkId < partnerClerkId ? `${myClerkId}:${partnerClerkId}` : `${partnerClerkId}:${myClerkId}`)
-            : "";
-
-          const encryptedPayload = {
-            encryptedContent: incomingMsg.encryptedContent,
-            iv: incomingMsg.iv,
-            salt: incomingMsg.salt,
-          };
-
-          try {
-            // Try UUID-based decryption first, fall back to Clerk ID-based decryption
-            messageText =
-              (uuidSecret ? decryptMessage(encryptedPayload, uuidSecret) : "") ||
-              (clerkSecret ? decryptMessage(encryptedPayload, clerkSecret) : "") ||
-              "[Encrypted message]";
-          } catch {
-            messageText = "[Encrypted message]";
-          }
-        } else {
-          messageText = "[Encrypted message]";
-        }
-      }
+      let messageText = (incomingMsg.text ?? incomingMsg.message_content ?? incomingMsg.messageContent) || "[Empty message]";
 
       // Emit delivery ack for messages from others
       if (!isMe && msgId) {
@@ -199,43 +165,14 @@ export const useDirectInbox = (
         // Track latest message per partner for inbox preview
         if (!latestMsgAt[partnerId] || msg.created_at > latestMsgAt[partnerId]) {
           latestMsgAt[partnerId] = msg.created_at;
-          const myClerkId = user?.id;
-          const partnerClerkId = msg.sender_id === currentUserUuid ? msg.receiver_clerk_id : msg.sender_clerk_id;
-
-          const uuidSecret = (currentUserUuid && partnerId)
-            ? (currentUserUuid < partnerId ? `${currentUserUuid}:${partnerId}` : `${partnerId}:${currentUserUuid}`)
-            : "";
-
-          const clerkSecret = (myClerkId && partnerClerkId)
-            ? (myClerkId < partnerClerkId ? `${myClerkId}:${partnerClerkId}` : `${partnerClerkId}:${myClerkId}`)
-            : "";
-
-          let lastMessage = "[Encrypted message]";
+          let lastMessage = "";
           let lastMediaType: "image" | "video" | "init" | undefined = undefined;
 
           if (msg.media_url && msg.media_type) {
             lastMessage = "";
             lastMediaType = msg.media_type;
-          } else if (
-            msg.is_encrypted &&
-            msg.encrypted_content &&
-            msg.encryption_iv &&
-            msg.encryption_salt
-          ) {
-            const encryptedPayload = {
-              encryptedContent: msg.encrypted_content,
-              iv: msg.encryption_iv,
-              salt: msg.encryption_salt,
-            };
-            try {
-              // Try UUID-based decryption first, fall back to Clerk ID-based decryption
-              lastMessage =
-                (uuidSecret ? decryptMessage(encryptedPayload, uuidSecret) : "") ||
-                (clerkSecret ? decryptMessage(encryptedPayload, clerkSecret) : "") ||
-                "[Encrypted message]";
-            } catch {
-              lastMessage = "[Failed to decrypt message]";
-            }
+          } else {
+            lastMessage = msg.message_content || "[Empty message]";
           }
 
           map.set(partnerId, {

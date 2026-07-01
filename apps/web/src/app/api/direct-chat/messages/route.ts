@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createAdminSupabaseClient } from "@kovari/api";
 import { getAuthenticatedUser } from "@/lib/auth/get-user";
 import { assertUUID } from "@/lib/validation/uuid";
+import { buildMessageInsertPayload } from "@/services/messaging/persistence";
 
 const DEFAULT_LIMIT = 30;
 const MAX_LIMIT = 100;
@@ -104,10 +105,6 @@ export async function GET(req: NextRequest) {
       senderId: msg.sender_id,
       receiverId: msg.receiver_id,
       createdAt: msg.created_at,
-      encryptedContent: msg.encrypted_content,
-      encryptionIv: msg.encryption_iv,
-      encryptionSalt: msg.encryption_salt,
-      isEncrypted: msg.is_encrypted,
       senderClerkId: msg.sender?.clerk_user_id,
       receiverClerkId: msg.receiver?.clerk_user_id,
     }));
@@ -160,22 +157,24 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    const textVal = typeof body?.text === "string" ? body.text : null;
+    const outgoingContract = {
+      messageContent: textVal,
+      mediaUrl: typeof body?.media_url === "string" ? body.media_url : null,
+      mediaType: body?.media_type === "image" || body?.media_type === "video" ? body.media_type : null,
+    };
+
+    const basePayload = buildMessageInsertPayload({
+      text: outgoingContract.messageContent,
+      mediaUrl: outgoingContract.mediaUrl,
+      mediaType: outgoingContract.mediaType,
+    });
+
     const insertPayload = {
+      ...basePayload,
       sender_id: currentUserId,
       receiver_id: partnerId,
-      encrypted_content:
-        typeof body?.encrypted_content === "string" ? body.encrypted_content : null,
-      encryption_iv:
-        typeof body?.encryption_iv === "string" ? body.encryption_iv : null,
-      encryption_salt:
-        typeof body?.encryption_salt === "string" ? body.encryption_salt : null,
-      is_encrypted: Boolean(body?.is_encrypted),
       client_id: clientId,
-      media_url: typeof body?.media_url === "string" ? body.media_url : null,
-      media_type:
-        body?.media_type === "image" || body?.media_type === "video"
-          ? body.media_type
-          : null,
     };
 
     const { data, error } = await supabase

@@ -49,6 +49,7 @@ interface AdminUsersTableProps {
   initialLimit: number;
   initialQuery?: string;
   initialStatus?: string;
+  initialSortOrder?: "asc" | "desc";
 }
 
 export function AdminUsersTable({
@@ -57,16 +58,23 @@ export function AdminUsersTable({
   initialLimit,
   initialQuery = "",
   initialStatus = "",
+  initialSortOrder = "desc",
 }: AdminUsersTableProps) {
   const router = useRouter();
   const [users, setUsers] = React.useState<User[]>(initialUsers);
   const [page, setPage] = React.useState(initialPage);
   const [query, setQuery] = React.useState(initialQuery);
   const [status, setStatus] = React.useState(initialStatus);
+  const [sortOrder, setSortOrder] = React.useState<"asc" | "desc">(initialSortOrder);
   const [isLoading, setIsLoading] = React.useState(false);
 
   const fetchUsers = React.useCallback(
-    async (newPage: number, searchQuery: string, statusFilter: string) => {
+    async (
+      newPage: number,
+      searchQuery: string,
+      statusFilter: string,
+      sortOrderFilter: "asc" | "desc"
+    ) => {
       setIsLoading(true);
       try {
         const params = new URLSearchParams({
@@ -75,6 +83,7 @@ export function AdminUsersTable({
         });
         if (searchQuery) params.append("query", searchQuery);
         if (statusFilter) params.append("status", statusFilter);
+        if (sortOrderFilter) params.append("sortOrder", sortOrderFilter);
 
         const res = await fetch(`/api/admin/users?${params}`);
         if (!res.ok) throw new Error("Failed to fetch users");
@@ -85,6 +94,7 @@ export function AdminUsersTable({
         const urlParams = new URLSearchParams({ page: newPage.toString() });
         if (searchQuery) urlParams.append("query", searchQuery);
         if (statusFilter) urlParams.append("status", statusFilter);
+        if (sortOrderFilter) urlParams.append("sortOrder", sortOrderFilter);
         router.push(`/users?${urlParams}`, { scroll: false });
       } catch (error) {
         console.error("Error fetching users:", error);
@@ -97,13 +107,18 @@ export function AdminUsersTable({
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
-    fetchUsers(page, query, status);
+    fetchUsers(page, query, status, sortOrder);
   };
 
   const handleStatusChange = (newStatus: string) => {
     const val = newStatus === "all" ? "" : newStatus;
     setStatus(val);
-    fetchUsers(1, query, val);
+    fetchUsers(1, query, val, sortOrder);
+  };
+
+  const handleSortOrderChange = (newSortOrder: "asc" | "desc") => {
+    setSortOrder(newSortOrder);
+    fetchUsers(1, query, status, newSortOrder);
   };
 
   return (
@@ -118,13 +133,13 @@ export function AdminUsersTable({
               onChange={(e) => setQuery(e.target.value)}
               onClear={() => {
                 setQuery("");
-                fetchUsers(1, "", status);
+                fetchUsers(1, "", status, sortOrder);
               }}
             />
             <button type="submit" className="hidden" />
           </form>
 
-          <div className="grid grid-cols-1 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="flex flex-col gap-2">
               <label className="text-xs font-semibold uppercase tracking-widest text-muted-foreground ml-1">Status</label>
               <Select value={status || "all"} onValueChange={handleStatusChange}>
@@ -140,6 +155,19 @@ export function AdminUsersTable({
                   <SelectItem value="invited">Invited (Beta)</SelectItem>
                   <SelectItem value="activated">Activated (Beta)</SelectItem>
                   <SelectItem value="not_invited">Non-Beta</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="flex flex-col gap-2">
+              <label className="text-xs font-semibold uppercase tracking-widest text-muted-foreground ml-1">Sort (Joining Date)</label>
+              <Select value={sortOrder} onValueChange={(val) => handleSortOrderChange(val as "asc" | "desc")}>
+                <SelectTrigger className="w-full !h-10 rounded-xl bg-card border-border shadow-none cursor-pointer font-medium">
+                  <SelectValue placeholder="Sort Order" />
+                </SelectTrigger>
+                <SelectContent className="rounded-xl">
+                  <SelectItem value="desc">Newest First</SelectItem>
+                  <SelectItem value="asc">Oldest First</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -216,21 +244,8 @@ export function AdminUsersTable({
                       )
                     }
                     label={user.name || "Unknown User"}
-                    secondary={user.email}
-                    trailing={
-                      <div className="flex items-center gap-3">
-                        {activityStatus && (
-                          <StatusBadge status={activityStatus} />
-                        )}
-                        {cohort && (
-                          <StatusBadge status={cohort} />
-                        )}
-                        {betaStatus !== "not_invited" && (
-                          <StatusBadge status={betaLabel} />
-                        )}
-                        <StatusBadge status={statusElements[0] || "Active"} />
-                      </div>
-                    }
+                    secondary={`${user.email} • Joined: ${new Date(user.created_at).toLocaleDateString()} ${user.users?.activation_date ? `• Active: ${new Date(user.users.activation_date).toLocaleDateString()}` : ""}`}
+                    trailing={<StatusBadge status={statusElements[0] || "Active"} />}
                     showChevron={false}
                   />
                 );
@@ -249,7 +264,7 @@ export function AdminUsersTable({
               <Button 
                 variant="outline" 
                 size="sm" 
-                onClick={() => fetchUsers(page - 1, query, status)} 
+                onClick={() => fetchUsers(page - 1, query, status, sortOrder)} 
                 disabled={page === 1}
                 className="h-9 px-5 rounded-xl border-border bg-card shadow-none font-semibold hover:bg-secondary transition-all disabled:opacity-50 cursor-pointer"
               >
@@ -258,7 +273,7 @@ export function AdminUsersTable({
               <Button 
                 variant="outline" 
                 size="sm" 
-                onClick={() => fetchUsers(page + 1, query, status)} 
+                onClick={() => fetchUsers(page + 1, query, status, sortOrder)} 
                 disabled={users.length < initialLimit}
                 className="h-9 px-5 rounded-xl border-border bg-card shadow-none font-semibold hover:bg-secondary transition-all disabled:opacity-50 cursor-pointer"
               >

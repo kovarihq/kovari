@@ -2,12 +2,7 @@ import { getUserUuidByClerkId , getGroupChatId } from "@kovari/api/client";
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useUser } from "@clerk/nextjs";
 import { getSocket } from "@/lib/socket";
-import {} from "@kovari/utils";
-import { useGroupEncryption } from "./useGroupEncryption";
-import {
-  decryptGroupMessage,
-  type EncryptedMessage,
-} from "@kovari/utils";
+import { buildOutgoingMessage, SocketMessageV2 } from "@kovari/types";
 
 export interface ChatMessage {
   id: string;
@@ -24,8 +19,6 @@ export interface ChatMessage {
   mediaType?: "image" | "video";
   status?: "sending" | "sent" | "delivered" | "seen";
   isEncrypted?: boolean;
-  encryptionIv?: string;
-  encryptionSalt?: string;
 }
 
 export interface GroupInfo {
@@ -85,24 +78,12 @@ export const useGroupChat = (groupId: string) => {
     }
   }, [user?.id, groupId]);
 
-  // Initialize encryption
-  const {
-    encryptMessage,
-    decryptMessage: decryptLocalMessage,
-    isEncryptionAvailable,
-    groupKey,
-  } = useGroupEncryption(groupId);
-
-  const groupKeyRef = useRef(groupKey);
   const seenIdsRef = useRef(new Set<string>());
   // Gap detection: track the highest conversation sequence seen
   const lastKnownSequenceRef = useRef<number>(0);
   // Typing throttle: only emit typing_start once per 3s window
   const lastTypingEmitRef = useRef<number>(0);
 
-  useEffect(() => {
-    groupKeyRef.current = groupKey;
-  }, [groupKey]);
 
   // Fetch initial messages
   const fetchMessages = useCallback(async (loadMore = false) => {
@@ -136,40 +117,16 @@ export const useGroupChat = (groupId: string) => {
 
       const mappedData = data.map((msg: any) => ({
         ...msg,
-        isEncrypted: msg.isEncrypted ?? msg.is_encrypted,
-        encryptedContent: msg.encryptedContent ?? msg.encrypted_content,
-        encryptionIv: msg.encryptionIv ?? msg.encryption_iv,
-        encryptionSalt: msg.encryptionSalt ?? msg.encryption_salt,
         mediaUrl: msg.mediaUrl ?? msg.media_url ?? undefined,
         mediaType: msg.mediaType ?? msg.media_type ?? undefined,
       }));
 
-      const decryptedMessages = await Promise.all(
-        mappedData.map(async (message: any) => {
-          if (message.isEncrypted && message.encryptedContent) {
-            try {
-              const encryptedMessage: EncryptedMessage = {
-                encryptedContent: message.encryptedContent,
-                iv: message.encryptionIv,
-                salt: message.encryptionSalt,
-              };
-              const currentGroupKey = groupKeyRef.current;
-              const decryptedContent = currentGroupKey
-                ? decryptGroupMessage(encryptedMessage, currentGroupKey)
-                : null;
-
-              return {
-                ...message,
-                content: decryptedContent || "[Encrypted message]",
-                isEncrypted: false,
-              };
-            } catch (err) {
-              return { ...message, content: "[Failed to decrypt message]", isEncrypted: false };
-            }
-          }
-          return message;
-        }),
-      );
+      const decryptedMessages = mappedData.map((message: any) => {
+        return {
+          ...message,
+          content: message.message_content || "",
+        };
+      });
 
       setMessages((prev) => {
         // Build a map of existing messages for quick lookup
@@ -178,7 +135,7 @@ export const useGroupChat = (groupId: string) => {
           prev.filter((m) => m.tempId).map((m) => [m.tempId!, m])
         );
 
-        const mergedMessages = decryptedMessages.map((msg) => {
+        const mergedMessages = decryptedMessages.map((msg: any) => {
           const existing = existingMessages.get(msg.id) || existingTempMessages.get(msg.id);
           
           let status = msg.status;
@@ -195,7 +152,7 @@ export const useGroupChat = (groupId: string) => {
 
         if (loadMore) {
           const newMessages = mergedMessages.filter(
-            (msg) => !existingMessages.has(msg.id)
+            (msg: any) => !existingMessages.has(msg.id)
           );
           
           const combined = [...newMessages, ...prev];
@@ -209,7 +166,7 @@ export const useGroupChat = (groupId: string) => {
             (m) =>
               m.tempId && // Is an optimistic message
               (m.status === "sending" || m.status === "sent" || m.status === "delivered") &&
-              !decryptedMessages.some((dm) => dm.id === m.id || dm.id === m.tempId)
+              !decryptedMessages.some((dm: any) => dm.id === m.id || dm.id === m.tempId)
           );
 
           const combined = [...mergedMessages, ...pendingMessages];
@@ -288,14 +245,12 @@ export const useGroupChat = (groupId: string) => {
         if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
         stopTyping();
 
-        let encryptedMessage = null;
-        if (isEncryptionAvailable && content.trim()) {
-          encryptedMessage = await encryptMessage(content.trim());
-          if (!encryptedMessage) {
-            setError("Encryption failed: No encryption key or error in encryption.");
-            return;
-          }
-        }
+        // build the outgoing message using buildOutgoingMessage
+        // In plaintext mode sharedSecret is ignored; groupKey is passed through
+        // for legacy/dual fallback if the mode is ever reverted.
+        const outgoing = await buildOutgoingMessage(
+          { text: content.trim(), mediaUrl, mediaType }
+        );
 
         // Socket.IO optimistic send
         if (user?.id && chatId) {
@@ -303,17 +258,13 @@ export const useGroupChat = (groupId: string) => {
           if (socket.connected) {
             const tempId = crypto.randomUUID();
 
-            const incomingMsg = {
+            const createdAt = new Date().toISOString();
+
+            const incomingMsg: SocketMessageV2 = {
+              ...outgoing,
               id: tempId,
               tempId,
               senderId: user.id,
-              encryptedContent: encryptedMessage?.encryptedContent || "",
-              iv: encryptedMessage?.iv || "",
-              salt: encryptedMessage?.salt || "",
-              mediaUrl: mediaUrl || undefined,
-              mediaType: mediaType || undefined,
-              createdAt: new Date().toISOString(),
-              isEncrypted: !!encryptedMessage,
               senderName: user.fullName || user.firstName || "Unknown User",
               senderUsername: user.username || undefined,
               avatar: currentUserAvatar || undefined,
@@ -324,16 +275,16 @@ export const useGroupChat = (groupId: string) => {
               id: tempId,
               tempId,
               content: content.trim(),
-              timestamp: new Date(incomingMsg.createdAt).toLocaleTimeString([], {
+              timestamp: new Date(createdAt).toLocaleTimeString([], {
                 hour: "2-digit",
                 minute: "2-digit",
                 timeZone: "Asia/Kolkata",
               }),
-              sender: incomingMsg.senderName,
-              senderUsername: incomingMsg.senderUsername,
-              avatar: incomingMsg.avatar,
+              sender: incomingMsg.senderName || "Unknown User",
+              senderUsername: incomingMsg.senderUsername ?? undefined,
+              avatar: incomingMsg.avatar ?? undefined,
               isCurrentUser: true,
-              createdAt: incomingMsg.createdAt,
+              createdAt,
               mediaUrl,
               mediaType,
               status: "sending",
@@ -364,12 +315,9 @@ export const useGroupChat = (groupId: string) => {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             content: content.trim(),
-            encryptedContent: encryptedMessage?.encryptedContent || null,
-            encryptionIv: encryptedMessage?.iv || null,
-            encryptionSalt: encryptedMessage?.salt || null,
-            isEncrypted: !!encryptedMessage,
             mediaUrl,
             mediaType,
+            text: content.trim() || null,
           }),
         });
 
@@ -408,7 +356,7 @@ export const useGroupChat = (groupId: string) => {
         setSending(false);
       }
     },
-    [groupId, user, encryptMessage, isEncryptionAvailable, chatId, stopTyping, currentUserAvatar],
+    [groupId, user, chatId, stopTyping, currentUserAvatar],
   );
 
   const notifyMessagesSeen = useCallback(
@@ -454,34 +402,23 @@ export const useGroupChat = (groupId: string) => {
             toSequence: toSeq,
           }, async (response: any) => {
             if (response?.status === "success" && Array.isArray(response.messages)) {
-              const currentGroupKey = groupKeyRef.current;
-              const decryptedGap = await Promise.all(
-                response.messages.map(async (m: any) => {
-                  let decryptedContent = m.text || m.content || "";
-                  if (m.isEncrypted && m.encryptedContent && currentGroupKey) {
-                    try {
-                      decryptedContent = decryptGroupMessage(
-                        { encryptedContent: m.encryptedContent, iv: m.iv, salt: m.salt },
-                        currentGroupKey
-                      ) || "[Encrypted message]";
-                    } catch (e) {}
-                  }
-                  return {
-                    id: m.id,
-                    content: decryptedContent,
-                    sender: m.senderName || "Unknown",
-                    senderUsername: m.senderUsername,
-                    avatar: m.avatar,
-                    isCurrentUser: m.senderId === user?.id,
-                    createdAt: m.createdAt || m.created_at || new Date().toISOString(),
-                    timestamp: new Date(m.createdAt || m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', timeZone: "Asia/Kolkata" }),
-                    status: "delivered" as const,
-                  };
-                })
-              );
+              const decryptedGap = response.messages.map((m: any) => {
+                const decryptedContent = (m.text ?? m.message_content ?? m.messageContent) || "";
+                return {
+                  id: m.id,
+                  content: decryptedContent,
+                  sender: m.senderName || "Unknown",
+                  senderUsername: m.senderUsername,
+                  avatar: m.avatar,
+                  isCurrentUser: m.senderId === user?.id,
+                  createdAt: m.createdAt || m.created_at || new Date().toISOString(),
+                  timestamp: new Date(m.createdAt || m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', timeZone: "Asia/Kolkata" }),
+                  status: "delivered" as const,
+                };
+              });
               setMessages((prev) => {
-                const existingIds = new Set(prev.map((m) => m.id));
-                const newGap = decryptedGap.filter((m) => !existingIds.has(m.id));
+                const existingIds = new Set(prev.map((m: ChatMessage) => m.id));
+                const newGap = decryptedGap.filter((m: ChatMessage) => !existingIds.has(m.id));
                 return [...prev, ...newGap].sort(
                   (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
                 );
@@ -507,21 +444,7 @@ export const useGroupChat = (groupId: string) => {
       );
       if (exists) return prev;
 
-      const currentGroupKey = groupKeyRef.current;
-      let decryptedContent = "[Encrypted message]";
-
-      if (incomingMsg.isEncrypted && incomingMsg.encryptedContent) {
-        try {
-          if (currentGroupKey) {
-            decryptedContent = decryptGroupMessage(
-              { encryptedContent: incomingMsg.encryptedContent, iv: incomingMsg.iv, salt: incomingMsg.salt },
-              currentGroupKey
-            ) || "[Encrypted message]";
-          }
-        } catch (e) {}
-      } else {
-        decryptedContent = incomingMsg.content || "";
-      }
+       const content = (incomingMsg.text ?? incomingMsg.message_content ?? incomingMsg.messageContent) || "";
 
       const isFromMe = incomingMsg.senderId === user?.id;
 
@@ -534,30 +457,27 @@ export const useGroupChat = (groupId: string) => {
       const newMessage: ChatMessage = { // Changed from GroupChatMessage to ChatMessage
         id: incomingMsg.id,
         tempId: incomingMsg.tempId,
-        content: decryptedContent,
+        content: content,
         senderId: incomingMsg.senderId,
         sender: incomingMsg.senderName || "Unknown",
         avatar: incomingMsg.avatar,
         status: isFromMe ? "sent" : "delivered",
-        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', timeZone: "Asia/Kolkata" }), // Added timeZone
+        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', timeZone: "Asia/Kolkata" }),
         createdAt: incomingMsg.createdAt || new Date().toISOString(),
         isCurrentUser: isFromMe,
-        isEncrypted: incomingMsg.isEncrypted,
         mediaUrl: incomingMsg.mediaUrl,
         mediaType: incomingMsg.mediaType,
-        senderUsername: incomingMsg.senderUsername, // Added senderUsername
-        encryptionIv: incomingMsg.iv || incomingMsg.encryptionIv || incomingMsg.encryption_iv,
-        encryptionSalt: incomingMsg.salt || incomingMsg.encryptionSalt || incomingMsg.encryption_salt,
+        senderUsername: incomingMsg.senderUsername,
       };
 
       const merged = [...prev, newMessage];
       return merged.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
     });
-  }, [user?.id, chatId, decryptGroupMessage, groupKeyRef, seenIdsRef, fetchMessages]); // Added decryptGroupMessage, groupKeyRef, seenIdsRef to deps
+  }, [user?.id, chatId, seenIdsRef, fetchMessages]);
 
   // Socket.IO Integration Setup
   useEffect(() => {
-    if (!user?.id || !chatId || !isEncryptionAvailable) return;
+    if (!user?.id || !chatId) return;
 
     const socket = getSocket(user.id);
     if (!socket.connected) socket.connect();
@@ -658,17 +578,14 @@ export const useGroupChat = (groupId: string) => {
       socket.off("user_online", handleUserOnline);
       socket.off("user_offline", handleUserOffline);
       socket.off("gap_found", handleGapFound);
-      socket.emit("leave_chat", { chatId });
     };
-  }, [groupId, user?.id, handleReceiveMessage, handleMessagesSeen, fetchMessages, chatId, isEncryptionAvailable]); // Added chatId, isEncryptionAvailable to deps
+  }, [groupId, user?.id, handleReceiveMessage, handleMessagesSeen, fetchMessages, chatId]);
 
   // Initial data fetch
   useEffect(() => {
-    if (isEncryptionAvailable) {
-      fetchMessages();
-      fetchGroupInfo();
-    }
-  }, [fetchMessages, fetchGroupInfo, isEncryptionAvailable]);
+    fetchMessages();
+    fetchGroupInfo();
+  }, [fetchMessages, fetchGroupInfo]);
 
   return {
     messages,

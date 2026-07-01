@@ -1,16 +1,12 @@
 import { useEffect, useState, useCallback } from "react";
 import { createClient } from "@kovari/api/client";
-import { decryptMessage } from "@kovari/utils";
 
 export interface DirectMessage {
   id: string;
   sender_id: string;
   receiver_id: string;
-  encrypted_content?: string;
-  encryption_iv?: string;
-  encryption_salt?: string;
-  is_encrypted?: boolean;
   created_at: string;
+  message_content?: string | null;
 }
 
 interface UseDirectMessagesResult {
@@ -27,12 +23,6 @@ export const useDirectMessages = (
   const [messages, setMessages] = useState<DirectMessage[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const supabase = createClient();
-
-  // For demo: derive a shared secret from both UUIDs (in production, use a secure key exchange)
-  const sharedSecret =
-    currentUserUuid < partnerUuid
-      ? `${currentUserUuid}:${partnerUuid}`
-      : `${partnerUuid}:${currentUserUuid}`;
 
   const fetchMessages = useCallback(async () => {
     if (!currentUserUuid || !partnerUuid) {
@@ -52,41 +42,14 @@ export const useDirectMessages = (
         console.error("[useDirectMessages] Supabase error:", error);
       }
       if (!error && data) {
-        const decrypted = data.map((msg: any) => {
-          let decryptedContent = "[Encrypted message]";
-          if (
-            msg.is_encrypted &&
-            msg.encrypted_content &&
-            msg.encryption_iv &&
-            msg.encryption_salt
-          ) {
-            try {
-              decryptedContent =
-                decryptMessage(
-                  {
-                    encryptedContent: msg.encrypted_content,
-                    iv: msg.encryption_iv,
-                    salt: msg.encryption_salt,
-                  },
-                  sharedSecret
-                ) || "[Encrypted message]";
-            } catch {
-              decryptedContent = "[Failed to decrypt message]";
-            }
-          }
-          return {
-            ...msg,
-            // No content field
-          };
-        });
-        setMessages(decrypted);
+        setMessages(data);
       }
     } catch (err) {
       console.error("[useDirectMessages] Exception during fetch:", err);
     } finally {
       setLoading(false);
     }
-  }, [currentUserUuid, partnerUuid, supabase, sharedSecret]);
+  }, [currentUserUuid, partnerUuid, supabase]);
 
   useEffect(() => {
     if (!currentUserUuid || !partnerUuid) return;

@@ -3,7 +3,7 @@ import * as Sentry from "@sentry/nextjs";
 import { cache } from "react";
 import { 
   AnalyticsFilter,
-  BetaAnalyticsOverviewResponse,
+  AnalyticsOverviewResponse,
   MessagingAnalyticsResponse,
   NotificationAnalyticsResponse,
   DestinationResponse,
@@ -26,13 +26,13 @@ import { incrementErrorCounter } from "../../../lib/incrementErrorCounter";
 
 /**
  * Service class acting as the single source of truth for fetching,
- * processing, and caching analytical queries for the Beta Analytics dashboard.
+ * processing, and caching analytical queries for the Analytics dashboard.
  * 
  * Bypasses direct user RLS policies via the service-role client (`supabaseAdmin`)
  * to allow cross-system reports, while containing Redis cache handling.
  */
 export class AnalyticsService {
-  private static CACHE_PREFIX = "cache:beta_analytics";
+  private static CACHE_PREFIX = "cache:analytics";
 
   /**
    * Helper function to fetch all admin email addresses.
@@ -60,11 +60,18 @@ export class AnalyticsService {
   private static getOrganicUsers = cache(async (): Promise<OrganicUser[]> => {
     try {
       const adminEmails = await this.getAdminEmailsSet();
+      const adminEmailsArr = Array.from(adminEmails);
 
-      const { data: users, error } = await supabaseAdmin
+      let query = supabaseAdmin
         .from('users')
         .select('id, email, beta_status, onboarding_completed, isDeleted, last_seen_at, activation_date, clerk_user_id, profiles(email, name, travel_intentions, created_at, username, profile_photo)')
         .eq('isDeleted', false);
+
+      if (adminEmailsArr.length > 0) {
+        query = query.not('email', 'in', `(${adminEmailsArr.map(e => `"${e}"`).join(',')})`);
+      }
+
+      const { data: users, error } = await query;
 
       if (error) {
         console.error("[Analytics Service] getOrganicUsers query failed:", error.message);
@@ -284,7 +291,7 @@ export class AnalyticsService {
     return this.fetchWithCache(cacheKey, 7200, async () => {
       try {
         const organicUsers = await this.getOrganicUsers();
-        const activatedOrganic = organicUsers.filter((u: OrganicUser) => u && u.beta_status === 'activated');
+        const activatedOrganic = organicUsers.filter((u: OrganicUser) => u && u.onboarding_completed);
 
         const destinationsMap: Record<string, number> = {};
         let totalIntentionsCount = 0;
@@ -342,11 +349,38 @@ export class AnalyticsService {
           .map(([date, count]) => ({ date, count }))
           .sort((a, b) => a.date.localeCompare(b.date));
 
+        // Group vs Solo stats
+        let groupTravelersCount = 0;
+        try {
+          const { data: memberRows } = await supabaseAdmin
+            .from("group_memberships")
+            .select("user_id")
+            .eq("status", "accepted");
+          
+          if (memberRows) {
+            const groupUserIds = new Set(memberRows.map((r: any) => r.user_id));
+            groupTravelersCount = organicUsers.filter((u: OrganicUser) => groupUserIds.has(u.id)).length;
+          }
+        } catch (e) {
+          console.error(e);
+        }
+
+        const totalUsersCount = organicUsers.length || 1;
+        const soloTravelersCount = Math.max(0, totalUsersCount - groupTravelersCount);
+
+        const soloPercentage = Math.round((soloTravelersCount / totalUsersCount) * 100);
+        const groupPercentage = Math.round((groupTravelersCount / totalUsersCount) * 100);
+
         return {
           rows,
           totalDestinations: rows.length,
           totalIntentionsCount,
-          intentionsGrowthTimeline
+          intentionsGrowthTimeline,
+          upcomingTripsCount: totalIntentionsCount, // default to all intentions count as upcoming
+          soloTravelersCount,
+          groupTravelersCount,
+          soloPercentage,
+          groupPercentage
         };
       } catch (e) {
         console.error("[Analytics Service] getTravelIntentionMetrics failed:", e);
@@ -367,138 +401,130 @@ export class AnalyticsService {
       try {
         const organicUsers = await this.getOrganicUsers();
         const organicUserIds = new Set(organicUsers.map((u: OrganicUser) => u.id));
-        const adminEmails = await this.getAdminEmailsSet();
+        const totalUsersCount = organicUsers.length;
 
-        // 1. Waitlist (Funnel Stage 1)
-        let invitedCount = 0;
+        // 1. Visitors count
+        let visitorsCount = 0;
         try {
-          const { data: waitlist, error: waitErr } = await supabaseAdmin.from('waitlist').select('email, status');
-          if (waitErr) {
-            console.warn("[Analytics Service] waitlist fetch failed, defaulting to 0:", waitErr.message);
-            Sentry.captureException(waitErr);
-          } else {
-            invitedCount = (waitlist || []).filter((w: any) => 
-              w?.email && ['beta_invited', 'beta_active'].includes(w.status) && !adminEmails.has(w.email.toLowerCase())
-            ).length;
-          }
+          const { count } = await supabaseAdmin
+            .from('analytics_events')
+            .select('*', { count: 'exact', head: true })
+            .eq('event_name', 'landing_view');
+          visitorsCount = count ?? 0;
         } catch (e) {
-          console.error("[Analytics Service] waitlist query crashed:", e);
-          Sentry.captureException(e);
+          console.error("[Analytics Service] Error fetching landing views:", e);
         }
 
-        // 2. Activated, Onboarded, and Intent Completes (Stages 2, 3, 4)
-        const activatedCount = organicUsers.filter((u: OrganicUser) => u && u.beta_status === 'activated').length;
-        const onboardedCount = organicUsers.filter((u: OrganicUser) => u && u.beta_status === 'activated' && u.onboarding_completed).length;
-        const travelIntentCount = organicUsers.filter((u: OrganicUser) => {
-          if (!u || u.beta_status !== 'activated') return false;
-          const profile = u.profiles && !Array.isArray(u.profiles) ? u.profiles : (Array.isArray(u.profiles) && u.profiles.length > 0 ? u.profiles[0] : null);
-          if (!profile || !profile.travel_intentions) return false;
-          return Array.isArray(profile.travel_intentions) && profile.travel_intentions.length > 0;
-        }).length;
+        // 2. Compute funnel counts for users
+        let onboardedCount = 0;
+        let photoAddedCount = 0;
+        let travelIntentCount = 0;
+        let fullyActivatedCount = 0;
 
-        // 3. Interactions (Stages 6, 7, 8, 9)
-        let organicInterests: any[] = [];
+        organicUsers.forEach((u: OrganicUser) => {
+          const profile = u.profiles && !Array.isArray(u.profiles) ? u.profiles : (Array.isArray(u.profiles) && u.profiles.length > 0 ? u.profiles[0] : null);
+          const hasPhoto = !!(profile && profile.profile_photo && profile.profile_photo.trim().length > 0);
+          
+          let intentions: any[] = [];
+          if (profile && profile.travel_intentions) {
+            if (typeof profile.travel_intentions === 'string') {
+              try {
+                intentions = JSON.parse(profile.travel_intentions);
+              } catch {}
+            } else if (Array.isArray(profile.travel_intentions)) {
+              intentions = profile.travel_intentions;
+            }
+          }
+          const hasIntentions = intentions.length > 0;
+
+          if (u.onboarding_completed) onboardedCount++;
+          if (hasPhoto) photoAddedCount++;
+          if (hasIntentions) travelIntentCount++;
+          if (u.onboarding_completed && hasPhoto && hasIntentions) fullyActivatedCount++;
+        });
+
+        // 3. Match Interests & Conversations
+        let interestsSent = 0;
+        let acceptedInterests = 0;
+        let pendingInterests = 0;
+        let decidedInterests = 0;
+
         try {
           const { data: interests, error: intErr } = await supabaseAdmin
             .from('match_interests')
             .select('from_user_id, to_user_id, status');
+          
           if (intErr) {
-            console.warn("[Analytics Service] match_interests fetch failed, defaulting to empty:", intErr.message);
-            Sentry.captureException(intErr);
-          } else {
-            organicInterests = (interests || []).filter(
+            console.warn("[Analytics Service] match_interests query failed:", intErr.message);
+          } else if (interests) {
+            const organicInterests = interests.filter(
               (m: any) => m && organicUserIds.has(m.from_user_id) && organicUserIds.has(m.to_user_id)
             );
+            interestsSent = organicInterests.length;
+            pendingInterests = organicInterests.filter((m: any) => m.status === 'pending').length;
+            acceptedInterests = organicInterests.filter((m: any) => m.status === 'accepted').length;
+            decidedInterests = organicInterests.filter((m: any) => ['accepted', 'rejected'].includes(m.status)).length;
           }
         } catch (e) {
-          console.error("[Analytics Service] match_interests query crashed:", e);
-          Sentry.captureException(e);
+          console.error(e);
         }
 
-        const interestsSent = organicInterests.filter((m: any) => m && organicUserIds.has(m.from_user_id)).length;
-        const pendingInterests = organicInterests.filter((m: any) => m && m.status === 'pending').length;
-        const acceptedInterests = organicInterests.filter((m: any) => m && m.status === 'accepted').length;
-        const decidedInterests = organicInterests.filter((m: any) => m && ['accepted', 'rejected'].includes(m.status)).length;
         const acceptanceRate = decidedInterests ? Number(((acceptedInterests / decidedInterests) * 100).toFixed(2)) : 0.0;
 
-        const uniqueSentIds = new Set(organicInterests.map((m: any) => m?.from_user_id).filter(Boolean));
-        const interestSentCount = uniqueSentIds.size;
-
-        const uniqueAcceptedUserIds = new Set<string>();
-        organicInterests.filter((m: any) => m && m.status === 'accepted').forEach((m: any) => {
-          uniqueAcceptedUserIds.add(m.from_user_id);
-          uniqueAcceptedUserIds.add(m.to_user_id);
-        });
-        const interestAcceptedUserCount = uniqueAcceptedUserIds.size;
-
-        // Conversations
-        let rawConversations: any[] = [];
+        // Conversations count
+        let conversationsCount = 0;
         try {
-          const { data: conversations, error: convErr } = await supabaseAdmin.from('conversations').select('user_a_id, user_b_id');
-          if (convErr) {
-            console.warn("[Analytics Service] conversations fetch failed, defaulting to 0:", convErr.message);
-            Sentry.captureException(convErr);
-          } else {
-            rawConversations = (conversations || []).filter((c: any) => 
-              c && organicUserIds.has(c.user_a_id) && organicUserIds.has(c.user_b_id)
-            );
+          const { data: convs } = await supabaseAdmin
+            .from('conversations')
+            .select('user_a_id, user_b_id');
+          if (convs) {
+            conversationsCount = convs.filter((c: any) => organicUserIds.has(c.user_a_id) && organicUserIds.has(c.user_b_id)).length;
           }
         } catch (e) {
-          console.error("[Analytics Service] conversations query crashed:", e);
-          Sentry.captureException(e);
+          console.error(e);
         }
 
-        const uniqueConversationUserIds = new Set<string>();
-        rawConversations.forEach((c: any) => {
-          uniqueConversationUserIds.add(c.user_a_id);
-          uniqueConversationUserIds.add(c.user_b_id);
-        });
-        const conversationUserCount = uniqueConversationUserIds.size;
-
-        // Direct Messages
-        let rawMessages: any[] = [];
+        // Messages count
+        let messagesSentCount = 0;
         try {
-          const { data: messages, error: msgErr } = await supabaseAdmin
+          const { data: messages } = await supabaseAdmin
             .from('direct_messages')
-            .select('sender_id, receiver_id, media_type')
+            .select('sender_id, receiver_id')
             .neq('media_type', 'init');
-          if (msgErr) {
-            console.warn("[Analytics Service] direct_messages fetch failed, defaulting to 0:", msgErr.message);
-            Sentry.captureException(msgErr);
-          } else {
-            rawMessages = (messages || []).filter((m: any) => 
-              m && organicUserIds.has(m.sender_id) && organicUserIds.has(m.receiver_id)
-            );
+          if (messages) {
+            messagesSentCount = messages.filter((m: any) => organicUserIds.has(m.sender_id) && organicUserIds.has(m.receiver_id)).length;
           }
         } catch (e) {
-          console.error("[Analytics Service] direct_messages query crashed:", e);
-          Sentry.captureException(e);
+          console.error(e);
         }
 
-        const uniqueMessageSenders = new Set<string>();
-        rawMessages.forEach((m: any) => {
-          uniqueMessageSenders.add(m.sender_id);
-        });
-        const messageSenderUserCount = uniqueMessageSenders.size;
-
-        // Construct 9-stage conversion funnel steps
-        const getPct = (val: number | null, base: number) => {
-          if (val === null || !base) return null;
+        // 4. Construct Public Growth Funnel
+        const getPct = (val: number, base: number) => {
+          if (!base) return 0;
           return Number(((val / base) * 100).toFixed(2));
         };
 
-        const base = invitedCount || 1;
+        const growthBase = visitorsCount || totalUsersCount || 1;
 
         const funnelSteps: FunnelStepItem[] = [
-          { stage: 'invited', label: 'Invited', count: invitedCount, pct: 100 },
-          { stage: 'activated', label: 'Activated', count: activatedCount, pct: getPct(activatedCount, base) },
-          { stage: 'onboarded', label: 'Onboarded', count: onboardedCount, pct: getPct(onboardedCount, base) },
-          { stage: 'travel_intent', label: 'Travel Intent Added', count: travelIntentCount, pct: getPct(travelIntentCount, base) },
-          { stage: 'explore_viewed', label: 'Explore Viewed', count: null, pct: null, warning: 'Requires client telemetry integration' },
-          { stage: 'interest_sent', label: 'Interest Sent', count: interestSentCount, pct: getPct(interestSentCount, base) },
-          { stage: 'interest_accepted', label: 'Interest Accepted', count: interestAcceptedUserCount, pct: getPct(interestAcceptedUserCount, base) },
-          { stage: 'conversation', label: 'Conversation Started', count: conversationUserCount, pct: getPct(conversationUserCount, base) },
-          { stage: 'message_sent', label: 'Messages Sent', count: messageSenderUserCount, pct: getPct(messageSenderUserCount, base) },
+          { stage: 'visitors', label: 'Visitors', count: visitorsCount, pct: 100 },
+          { stage: 'signups', label: 'Signups', count: totalUsersCount, pct: getPct(totalUsersCount, growthBase) },
+          { stage: 'activated_profiles', label: 'Activated Profiles', count: onboardedCount, pct: getPct(onboardedCount, growthBase) },
+          { stage: 'travel_intentions', label: 'Travel Intentions', count: travelIntentCount, pct: getPct(travelIntentCount, growthBase) },
+          { stage: 'interests_sent', label: 'Match Interests Sent', count: interestsSent, pct: getPct(interestsSent, growthBase) },
+          { stage: 'accepted_matches', label: 'Accepted Matches', count: acceptedInterests, pct: getPct(acceptedInterests, growthBase) },
+          { stage: 'conversations_started', label: 'Conversations Started', count: conversationsCount, pct: getPct(conversationsCount, growthBase) },
+          { stage: 'messages_exchanged', label: 'Messages Exchanged', count: messagesSentCount, pct: getPct(messagesSentCount, growthBase) },
+        ];
+
+        // 5. Construct User Activation Funnel
+        const activationBase = totalUsersCount || 1;
+        const activationFunnelSteps: FunnelStepItem[] = [
+          { stage: 'signup', label: 'Signup', count: totalUsersCount, pct: 100 },
+          { stage: 'completed_profile', label: 'Completed Profile', count: onboardedCount, pct: getPct(onboardedCount, activationBase) },
+          { stage: 'added_photo', label: 'Added Photo', count: photoAddedCount, pct: getPct(photoAddedCount, activationBase) },
+          { stage: 'added_travel_intention', label: 'Added Travel Intention', count: travelIntentCount, pct: getPct(travelIntentCount, activationBase) },
+          { stage: 'activated_user', label: 'Activated User', count: fullyActivatedCount, pct: getPct(fullyActivatedCount, activationBase) },
         ];
 
         return {
@@ -506,7 +532,8 @@ export class AnalyticsService {
           acceptedInterests,
           pendingInterests,
           acceptanceRate,
-          funnelSteps
+          funnelSteps,
+          activationFunnelSteps,
         };
       } catch (e) {
         console.error("[Analytics Service] getInterestMetrics failed:", e);
@@ -642,27 +669,218 @@ export class AnalyticsService {
    * 
    * @param filters - Active page selectors
    */
-  public static getOverviewMetrics = cache(async (filters: AnalyticsFilter): Promise<BetaAnalyticsOverviewResponse> => {
+  public static getOverviewMetrics = cache(async (filters: AnalyticsFilter): Promise<AnalyticsOverviewResponse> => {
     const { dateRange, batchId } = this.validateFilters(filters);
     const cacheKey = this.getCacheKey("overview", { dateRange, batchId });
 
     return this.fetchWithCache(cacheKey, 900, async () => {
       try {
-        const totalUsersVal = await this.getTotalUsers();
-        const activatedUsersVal = await this.getActivatedUsers();
+        const organicUsers = await this.getOrganicUsers();
+        const totalUsersVal = organicUsers.length;
+        const activatedUsersVal = organicUsers.filter((u: OrganicUser) => u && u.onboarding_completed).length;
         const returnedUsersVal = await this.getReturnedUsers();
 
         const interestMetrics = await this.getInterestMetrics(filters);
         const conversationMetrics = await this.getConversationMetrics(filters);
 
+        // --- Time ranges for signup / growth deltas ---
+        const now = new Date();
+        const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+        const startOfYesterday = new Date(startOfToday.getTime() - 24 * 60 * 60 * 1000);
+        const startOf7d = new Date(startOfToday.getTime() - 7 * 24 * 60 * 60 * 1000);
+        const startOf30d = new Date(startOfToday.getTime() - 30 * 24 * 60 * 60 * 1000);
+
+        let signupsToday = 0;
+        let signupsYesterday = 0;
+        let signups7d = 0;
+        let signups30d = 0;
+
+        let missingPhotoCount = 0;
+        let missingIntentionsCount = 0;
+        let fullyActivatedCount = 0;
+
+        organicUsers.forEach(u => {
+          const profile = u.profiles && !Array.isArray(u.profiles) ? u.profiles : (Array.isArray(u.profiles) && u.profiles.length > 0 ? u.profiles[0] : null);
+          
+          // Growth
+          if (profile && profile.created_at) {
+            const created = new Date(profile.created_at);
+            if (created >= startOfToday) {
+              signupsToday++;
+            } else if (created >= startOfYesterday && created < startOfToday) {
+              signupsYesterday++;
+            }
+            if (created >= startOf7d) {
+              signups7d++;
+            }
+            if (created >= startOf30d) {
+              signups30d++;
+            }
+          }
+
+          // Activation
+          const hasPhoto = !!(profile && profile.profile_photo && profile.profile_photo.trim().length > 0);
+          
+          let intentions: any[] = [];
+          if (profile && profile.travel_intentions) {
+            if (typeof profile.travel_intentions === 'string') {
+              try {
+                intentions = JSON.parse(profile.travel_intentions);
+              } catch {}
+            } else if (Array.isArray(profile.travel_intentions)) {
+              intentions = profile.travel_intentions;
+            }
+          }
+          const hasIntentions = intentions.length > 0;
+
+          if (!hasPhoto) missingPhotoCount++;
+          if (!hasIntentions) missingIntentionsCount++;
+          if (u.onboarding_completed && hasPhoto && hasIntentions) {
+            fullyActivatedCount++;
+          }
+        });
+
+        const totalCount = organicUsers.length || 1;
+        const profileCompletionRate = Math.round((activatedUsersVal / totalCount) * 100);
+        const travelIntentionCompletionRate = Math.round(((totalCount - missingIntentionsCount) / totalCount) * 100);
+        const activationCompletionRate = Math.round((fullyActivatedCount / totalCount) * 100);
+
+        const missingPhotoPct = Math.round((missingPhotoCount / totalCount) * 100);
+        const missingIntentionsPct = Math.round((missingIntentionsCount / totalCount) * 100);
+
+        // --- Stranger conversations growth deltas ---
+        let strangerConversationsToday = 0;
+        let strangerConversations7d = 0;
+        const strangerConversationsTotal = conversationMetrics.totalConversations;
+
+        // Fetch conversations to calculate stranger growth deltas
+        const { data: convs } = await supabaseAdmin
+          .from('conversations')
+          .select('created_at, user_a_id, user_b_id');
+        
+        if (convs) {
+          const organicUserIds = new Set(organicUsers.map((u: OrganicUser) => u.id));
+          const organicConvs = convs.filter((c: any) => organicUserIds.has(c.user_a_id) && organicUserIds.has(c.user_b_id));
+          organicConvs.forEach((c: any) => {
+            if (c.created_at) {
+              const created = new Date(c.created_at);
+              if (created >= startOfToday) {
+                strangerConversationsToday++;
+              }
+              if (created >= startOf7d) {
+                strangerConversations7d++;
+              }
+            }
+          });
+        }
+
+        // --- Core delta counts (+X today, +Y this week) for core metrics ---
+        let usersToday = 0;
+        let users7d = 0;
+        organicUsers.forEach(u => {
+          const profile = u.profiles && !Array.isArray(u.profiles) ? u.profiles : (Array.isArray(u.profiles) && u.profiles.length > 0 ? u.profiles[0] : null);
+          if (profile && profile.created_at) {
+            const created = new Date(profile.created_at);
+            if (created >= startOfToday) usersToday++;
+            if (created >= startOf7d) users7d++;
+          }
+        });
+
+        let activatedToday = 0;
+        let activated7d = 0;
+        organicUsers.forEach(u => {
+          if (u.onboarding_completed && u.activation_date) {
+            const act = new Date(u.activation_date);
+            if (act >= startOfToday) activatedToday++;
+            if (act >= startOf7d) activated7d++;
+          }
+        });
+
+        // Match interests sent deltas
+        let matchesSentToday = 0;
+        let matchesSent7d = 0;
+        let matchesAcceptedToday = 0;
+        let matchesAccepted7d = 0;
+
+        // Fetch interest creations
+        const { data: matchesRaw } = await supabaseAdmin
+          .from('match_interests')
+          .select('created_at, status, from_user_id, to_user_id');
+
+        if (matchesRaw) {
+          const organicUserIds = new Set(organicUsers.map((u: OrganicUser) => u.id));
+          const organicMatches = matchesRaw.filter((m: any) => organicUserIds.has(m.from_user_id) && organicUserIds.has(m.to_user_id));
+          organicMatches.forEach((m: any) => {
+            if (m.created_at) {
+              const created = new Date(m.created_at);
+              if (created >= startOfToday) matchesSentToday++;
+              if (created >= startOf7d) matchesSent7d++;
+              if (m.status === 'accepted') {
+                if (created >= startOfToday) matchesAcceptedToday++;
+                if (created >= startOf7d) matchesAccepted7d++;
+              }
+            }
+          });
+        }
+
+        // Messages Today / 7 Days
+        let messagesToday = 0;
+        let messages7d = 0;
+        const { data: messagesRawList } = await supabaseAdmin
+          .from('direct_messages')
+          .select('created_at, sender_id, receiver_id')
+          .neq('media_type', 'init');
+
+        if (messagesRawList) {
+          const organicUserIds = new Set(organicUsers.map((u: OrganicUser) => u.id));
+          const organicMsgs = messagesRawList.filter((m: any) => organicUserIds.has(m.sender_id) && organicUserIds.has(m.receiver_id));
+          organicMsgs.forEach((m: any) => {
+            if (m.created_at) {
+              const created = new Date(m.created_at);
+              if (created >= startOfToday) messagesToday++;
+              if (created >= startOf7d) messages7d++;
+            }
+          });
+        }
+
         return {
-          totalUsers: { value: totalUsersVal, change: 0.0, trend: 'neutral' },
-          activatedUsers: { value: activatedUsersVal, change: 0.0, trend: 'neutral' },
+          totalUsers: { value: totalUsersVal, change: 0.0, trend: 'neutral', today: usersToday, thisWeek: users7d },
+          activatedUsers: { value: activatedUsersVal, change: 0.0, trend: 'neutral', today: activatedToday, thisWeek: activated7d },
           returnedUsers: { value: returnedUsersVal, change: 0.0, trend: 'neutral' },
           retentionRate: { value: 0.0, change: 0.0, trend: 'neutral' },
-          interestsSent: { value: interestMetrics.interestsSent, change: 0.0, trend: 'neutral' },
-          conversationsCreated: { value: conversationMetrics.totalConversations, change: 0.0, trend: 'neutral' },
+          interestsSent: { value: interestMetrics.interestsSent, change: 0.0, trend: 'neutral', today: matchesSentToday, thisWeek: matchesSent7d },
+          conversationsCreated: { value: conversationMetrics.totalConversations, change: 0.0, trend: 'neutral', today: strangerConversationsToday, thisWeek: strangerConversations7d },
           interestAcceptanceRate: { value: interestMetrics.acceptanceRate, change: 0.0, trend: 'neutral' },
+          messagesSent: { value: conversationMetrics.totalMessagesSent, change: 0.0, trend: 'neutral', today: messagesToday, thisWeek: messages7d },
+          
+          // Signups Launch KPI
+          signupsToday,
+          signupsYesterday,
+          signups7d,
+          signups30d,
+
+          // First stranger conversations
+          firstStrangerConversationsToday: strangerConversationsToday,
+          firstStrangerConversations7d: strangerConversations7d,
+          firstStrangerConversationsTotal: strangerConversationsTotal,
+
+          // Activation stats
+          profileCompletionRate,
+          travelIntentionCompletionRate,
+          missingProfilePictureCount: missingPhotoCount,
+          missingProfilePicturePct: missingPhotoPct,
+          missingTravelIntentionsCount: missingIntentionsCount,
+          missingTravelIntentionsPct: missingIntentionsPct,
+          fullyActivatedCount,
+          fullyActivatedPct: activationCompletionRate,
+
+          // Placeholders
+          travelCirclesPlaceholder: 0,
+          emailSentPlaceholder: 0,
+          emailDeliveredPlaceholder: 0,
+          emailOpenedPlaceholder: 0,
+          emailClickedPlaceholder: 0,
+          emailBouncePlaceholder: 0,
         };
       } catch (e) {
         console.error("[Analytics Service] getOverviewMetrics failed:", e);
@@ -671,6 +889,7 @@ export class AnalyticsService {
       }
     });
   });
+
 
   /**
    * Fetch aggregated daily messaging timelines.

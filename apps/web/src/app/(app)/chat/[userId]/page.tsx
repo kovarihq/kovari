@@ -33,14 +33,7 @@ import { PiPaperclip } from "react-icons/pi";
 import { BiCheckDouble, BiCheck, BiTime } from "react-icons/bi";
 import { HiPlay } from "react-icons/hi";
 import { getUserUuidByClerkId, isUserBlocked, blockUser, unblockUser, checkBlockStatus } from "@kovari/api/client";
-import { 
-  decryptMessage, 
-  formatMessageDate, 
-  isSameDay, 
-  linkifyMessage,
-  getFullImageUrl,
-  decryptFileBytes
-} from "@kovari/utils";
+import { formatMessageDate, isSameDay, linkifyMessage, getFullImageUrl } from "@kovari/utils";
 import Link from "next/link";
 import { useToast } from "@/shared/hooks/use-toast";
 import Picker from "@emoji-mart/react";
@@ -77,103 +70,32 @@ const MessageSkeleton = () => (
   </div>
 );
 
-// MediaWithSkeleton component (copied from group chat)
 const MediaWithSkeleton = ({
   url,
   timestamp,
-  iv,
-  salt,
-  decryptionKey,
   onDecrypted,
 }: {
   url: string;
   timestamp: string;
-  iv?: string;
-  salt?: string;
-  decryptionKey?: string;
   onDecrypted?: (blobUrl: string) => void;
 }) => {
   const [loaded, setLoaded] = useState(false);
-  const [decryptedUrl, setDecryptedUrl] = useState<string | null>(null);
+  const fullUrl = getFullImageUrl(url);
 
   useEffect(() => {
-    let active = true;
-    if (!url) return;
-
-    if (!iv || !salt || !decryptionKey) {
-      const fullUrl = getFullImageUrl(url);
-      setDecryptedUrl(fullUrl);
-      setLoaded(true);
-      if (onDecrypted) onDecrypted(fullUrl);
-      return;
+    if (fullUrl && onDecrypted) {
+      onDecrypted(fullUrl);
     }
-
-    const loadAndDecrypt = async () => {
-      try {
-        const proxyUrl = `/api/proxy/media?url=${encodeURIComponent(getFullImageUrl(url))}`;
-        const res = await fetch(proxyUrl);
-        if (!res.ok) throw new Error("Failed to fetch encrypted media");
-        const arrayBuffer = await res.arrayBuffer();
-        const encryptedBytes = new Uint8Array(arrayBuffer);
-
-        // Check if raw bytes are unencrypted (magic bytes check)
-        let isUnencrypted = false;
-        const rawBytes = encryptedBytes;
-        if (rawBytes.length % 16 !== 0) {
-          isUnencrypted = true;
-        } else if (rawBytes.length >= 4) {
-          if (
-            (rawBytes[0] === 137 && rawBytes[1] === 80 && rawBytes[2] === 78 && rawBytes[3] === 71) || // PNG
-            (rawBytes[0] === 255 && rawBytes[1] === 216 && rawBytes[2] === 255) || // JPEG
-            (rawBytes[0] === 71 && rawBytes[1] === 73 && rawBytes[2] === 70 && rawBytes[3] === 56) || // GIF
-            (rawBytes[0] === 82 && rawBytes[1] === 73 && rawBytes[2] === 70 && rawBytes[3] === 70) // RIFF/WebP
-          ) {
-            isUnencrypted = true;
-          }
-        }
-
-        let decryptedBytes: Uint8Array;
-        if (isUnencrypted) {
-          decryptedBytes = encryptedBytes;
-        } else {
-          decryptedBytes = decryptFileBytes(encryptedBytes, iv, salt, decryptionKey);
-        }
-
-        const blob = new Blob([decryptedBytes as any], { type: "image/jpeg" });
-        const blobUrl = URL.createObjectURL(blob);
-        if (active) {
-          setDecryptedUrl(blobUrl);
-          setLoaded(true);
-          if (onDecrypted) onDecrypted(blobUrl);
-        }
-      } catch (err) {
-        console.error("Error decrypting media:", err);
-        if (active) {
-          const fullUrl = getFullImageUrl(url);
-          setDecryptedUrl(fullUrl);
-          setLoaded(true);
-          if (onDecrypted) onDecrypted(fullUrl);
-        }
-      }
-    };
-
-    loadAndDecrypt();
-    return () => {
-      active = false;
-      if (decryptedUrl && decryptedUrl.startsWith("blob:")) {
-        URL.revokeObjectURL(decryptedUrl);
-      }
-    };
-  }, [url, iv, salt, decryptionKey]);
+  }, [fullUrl, onDecrypted]);
 
   return (
     <div className="relative w-40 h-32 md:w-60 md:h-44 lg:w-80 lg:h-60 max-w-full">
       {!loaded && (
         <Skeleton className="absolute inset-0 w-full h-full rounded-2xl" />
       )}
-      {decryptedUrl && (
+      {fullUrl && (
         <img
-          src={decryptedUrl}
+          src={fullUrl}
           alt="sent media"
           className={`w-full h-full object-cover rounded-2xl ${loaded ? "" : "invisible"}`}
           onLoad={() => setLoaded(true)}
@@ -186,98 +108,31 @@ const MediaWithSkeleton = ({
   );
 };
 
-// VideoWithSkeleton component (copied from group chat)
 const VideoWithSkeleton = ({
   url,
   timestamp,
-  iv,
-  salt,
-  decryptionKey,
   onDecrypted,
 }: {
   url: string;
   timestamp: string;
-  iv?: string;
-  salt?: string;
-  decryptionKey?: string;
   onDecrypted?: (blobUrl: string) => void;
 }) => {
   const [loaded, setLoaded] = useState(false);
-  const [decryptedUrl, setDecryptedUrl] = useState<string | null>(null);
 
   useEffect(() => {
-    let active = true;
-    if (!url) return;
-
-    if (!iv || !salt || !decryptionKey) {
-      setDecryptedUrl(url);
-      setLoaded(true);
-      if (onDecrypted) onDecrypted(url);
-      return;
+    if (url && onDecrypted) {
+      onDecrypted(url);
     }
-
-    const loadAndDecrypt = async () => {
-      try {
-        const proxyUrl = `/api/proxy/media?url=${encodeURIComponent(url)}`;
-        const res = await fetch(proxyUrl);
-        if (!res.ok) throw new Error("Failed to fetch encrypted video");
-        const arrayBuffer = await res.arrayBuffer();
-        const encryptedBytes = new Uint8Array(arrayBuffer);
-
-        let isUnencrypted = false;
-        const rawBytes = encryptedBytes;
-        if (rawBytes.length % 16 !== 0) {
-          isUnencrypted = true;
-        } else if (rawBytes.length >= 4) {
-          if (
-            (rawBytes[0] === 26 && rawBytes[1] === 69 && rawBytes[2] === 223 && rawBytes[3] === 163) || // MKV/WebM
-            (rawBytes.length >= 8 && rawBytes[4] === 102 && rawBytes[5] === 116 && rawBytes[6] === 121 && rawBytes[7] === 112) // MP4
-          ) {
-            isUnencrypted = true;
-          }
-        }
-
-        let decryptedBytes: Uint8Array;
-        if (isUnencrypted) {
-          decryptedBytes = encryptedBytes;
-        } else {
-          decryptedBytes = decryptFileBytes(encryptedBytes, iv, salt, decryptionKey);
-        }
-
-        const blob = new Blob([decryptedBytes as any], { type: "video/mp4" });
-        const blobUrl = URL.createObjectURL(blob);
-        if (active) {
-          setDecryptedUrl(blobUrl);
-          setLoaded(true);
-          if (onDecrypted) onDecrypted(blobUrl);
-        }
-      } catch (err) {
-        console.error("Error decrypting video:", err);
-        if (active) {
-          setDecryptedUrl(url);
-          setLoaded(true);
-          if (onDecrypted) onDecrypted(url);
-        }
-      }
-    };
-
-    loadAndDecrypt();
-    return () => {
-      active = false;
-      if (decryptedUrl && decryptedUrl.startsWith("blob:")) {
-        URL.revokeObjectURL(decryptedUrl);
-      }
-    };
-  }, [url, iv, salt, decryptionKey]);
+  }, [url, onDecrypted]);
 
   return (
     <div className="relative w-40 h-32 md:w-60 md:h-44 lg:w-80 lg:h-60 max-w-full">
       {!loaded && (
         <Skeleton className="absolute inset-0 w-full h-full rounded-2xl" />
       )}
-      {decryptedUrl && (
+      {url && (
         <video
-          src={decryptedUrl}
+          src={url}
           controls={false}
           className={`w-full h-full object-cover rounded-2xl ${loaded ? "" : "invisible"}`}
           onLoadedData={() => setLoaded(true)}
@@ -354,9 +209,6 @@ const MessageRow = React.memo(
             <MediaWithSkeleton
               url={msg.mediaUrl}
               timestamp={timeString}
-              iv={msg.encryption_iv}
-              salt={msg.encryption_salt}
-              decryptionKey={sharedSecret}
               onDecrypted={(blobUrl) => {
                 if (decryptedUrls[msg.id] !== blobUrl) {
                   setDecryptedUrls((prev) => ({ ...prev, [msg.id]: blobUrl }));
@@ -386,9 +238,6 @@ const MessageRow = React.memo(
             <VideoWithSkeleton
               url={msg.mediaUrl}
               timestamp={timeString}
-              iv={msg.encryption_iv}
-              salt={msg.encryption_salt}
-              decryptionKey={sharedSecret}
               onDecrypted={(blobUrl) => {
                 if (decryptedUrls[msg.id] !== blobUrl) {
                   setDecryptedUrls((prev) => ({ ...prev, [msg.id]: blobUrl }));
@@ -562,43 +411,13 @@ const MessageList = ({
 
           const msg = item.data;
           const isSent = msg.sender_id === currentUserUuid;
-          let content: string = "";
-          let showSpinner = false;
-          let showError = false;
 
           // Check if sender is deleted
           const isSenderDeleted = msg.sender_profile?.deleted === true;
 
-          if (msg.status === "sending" || msg.status === "failed") {
-            content = msg.plain_content || "";
-            showSpinner = msg.status === "sending";
-            showError = msg.status === "failed";
-          } else {
-            let decryptedContent = "[Encrypted message]";
-            if (msg.plain_content) {
-              decryptedContent = msg.plain_content;
-            } else if (
-              msg.is_encrypted &&
-              msg.encrypted_content &&
-              msg.encryption_iv &&
-              msg.encryption_salt
-            ) {
-              try {
-                decryptedContent =
-                  decryptMessage(
-                    {
-                      encryptedContent: msg.encrypted_content,
-                      iv: msg.encryption_iv,
-                      salt: msg.encryption_salt,
-                    },
-                    sharedSecret,
-                  ) || "[Encrypted message]";
-              } catch {
-                decryptedContent = "[Failed to decrypt message]";
-              }
-            }
-            content = decryptedContent;
-          }
+          const content = msg.message_content || "";
+          const showSpinner = msg.status === "sending";
+          const showError = msg.status === "failed";
           return (
             <div role="listitem" key={msg.tempId || msg.id}>
               <MessageRow
@@ -1142,8 +961,8 @@ const DirectChatPage = () => {
   // Retry handler for failed messages
   const handleRetry = useCallback(
     (msg: any) => {
-      if (msg.plain_content) {
-        sendMessage(msg.plain_content, msg.mediaUrl, msg.mediaType);
+      if (msg.message_content) {
+        sendMessage(msg.message_content, msg.mediaUrl, msg.mediaType);
       }
     },
     [sendMessage],
@@ -1153,34 +972,7 @@ const DirectChatPage = () => {
   const getDisplayableContent = (msg: any) => {
     // If media, do not try to decrypt or show text
     if (msg.mediaUrl) return "";
-    if (msg.status === "sending" || msg.status === "failed") {
-      return msg.plain_content || "";
-    } else {
-      let decryptedContent = "[Encrypted message]";
-      if (msg.plain_content) {
-        decryptedContent = msg.plain_content;
-      } else if (
-        msg.is_encrypted &&
-        msg.encrypted_content &&
-        msg.encryption_iv &&
-        msg.encryption_salt
-      ) {
-        try {
-          decryptedContent =
-            decryptMessage(
-              {
-                encryptedContent: msg.encrypted_content,
-                iv: msg.encryption_iv,
-                salt: msg.encryption_salt,
-              },
-              sharedSecret,
-            ) || "[Encrypted message]";
-        } catch {
-          decryptedContent = "[Failed to decrypt message]";
-        }
-      }
-      return decryptedContent;
-    }
+    return msg.message_content || "";
   };
 
   // Dispatch event after sending or receiving a message
@@ -1323,9 +1115,6 @@ const DirectChatPage = () => {
                 <MediaWithSkeleton
                   url={msg.mediaUrl}
                   timestamp={timeString}
-                  iv={msg.encryption_iv}
-                  salt={msg.encryption_salt}
-                  decryptionKey={sharedSecret}
                   onDecrypted={(blobUrl) => {
                     if (decryptedUrls[msg.id] !== blobUrl) {
                       setDecryptedUrls((prev) => ({ ...prev, [msg.id]: blobUrl }));
@@ -1366,9 +1155,6 @@ const DirectChatPage = () => {
                 <VideoWithSkeleton
                   url={msg.mediaUrl}
                   timestamp={timeString}
-                  iv={msg.encryption_iv}
-                  salt={msg.encryption_salt}
-                  decryptionKey={sharedSecret}
                   onDecrypted={(blobUrl) => {
                     if (decryptedUrls[msg.id] !== blobUrl) {
                       setDecryptedUrls((prev) => ({ ...prev, [msg.id]: blobUrl }));
@@ -1435,40 +1221,9 @@ const DirectChatPage = () => {
 
           const isSent = msg.sender_id === currentUserUuid;
           const isSenderDeleted = msg.sender_profile?.deleted === true;
-          let content = "";
-          let showSpinner = false;
-          let showError = false;
-
-          if (msg.status === "sending" || msg.status === "failed") {
-            content = msg.plain_content || "";
-            showSpinner = msg.status === "sending";
-            showError = msg.status === "failed";
-          } else {
-            let decryptedContent = "[Encrypted message]";
-            if (msg.plain_content) {
-              decryptedContent = msg.plain_content;
-            } else if (
-              msg.is_encrypted &&
-              msg.encrypted_content &&
-              msg.encryption_iv &&
-              msg.encryption_salt
-            ) {
-              try {
-                decryptedContent =
-                  decryptMessage(
-                    {
-                      encryptedContent: msg.encrypted_content,
-                      iv: msg.encryption_iv,
-                      salt: msg.encryption_salt,
-                    },
-                    sharedSecret,
-                  ) || "[Encrypted message]";
-              } catch {
-                decryptedContent = "[Failed to decrypt message]";
-              }
-            }
-            content = decryptedContent;
-          }
+          const content = msg.message_content || "";
+          const showSpinner = msg.status === "sending";
+          const showError = msg.status === "failed";
 
           result.push({
             type: "message",

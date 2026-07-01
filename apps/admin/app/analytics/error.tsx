@@ -5,7 +5,7 @@ import * as Sentry from "@sentry/nextjs";
 import { AlertCircle, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
-export default function BetaAnalyticsError({
+export default function AnalyticsError({
   error,
   reset,
 }: {
@@ -14,10 +14,10 @@ export default function BetaAnalyticsError({
 }) {
   useEffect(() => {
     // Log the error details to Sentry and the console for auditing
-    console.error("Beta Analytics dashboard boundary error caught:", error);
+    console.error("Analytics dashboard boundary error caught:", error);
     Sentry.captureException(error, {
       tags: {
-        boundary: "beta-analytics-error",
+        boundary: "analytics-error",
       },
     });
   }, [error]);

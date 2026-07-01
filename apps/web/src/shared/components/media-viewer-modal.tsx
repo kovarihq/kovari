@@ -1,4 +1,5 @@
-import { useEffect, useRef, useMemo } from "react";
+import { useEffect, useRef, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import { XIcon, ChevronLeft, ChevronRight } from "lucide-react";
 
 export interface MediaViewerItem {
@@ -59,6 +60,11 @@ export const MediaViewerModal = ({
 }: MediaViewerModalProps) => {
   const overlayRef = useRef<HTMLDivElement>(null);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   const hasNavigation =
     Array.isArray(mediaItems) &&
@@ -138,12 +144,12 @@ export const MediaViewerModal = ({
     }
   }, [open]);
 
-  if (!open) return null;
+  if (!open || !mounted) return null;
 
-  return (
+  return createPortal(
     <div
       ref={overlayRef}
-      className="fixed inset-0 z-[110] flex items-center justify-center bg-black/80 backdrop-blur-md transition-all p-0 sm:p-2 md:p-4"
+      className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/80 backdrop-blur-md transition-all p-0 sm:p-2 md:p-4"
       aria-modal="true"
       role="dialog"
       aria-label={
@@ -201,24 +207,26 @@ export const MediaViewerModal = ({
 
         {/* Media + caption area - responsive sizing */}
         <div className="flex flex-col items-center justify-center w-full h-full px-2 py-14 pb-20 sm:py-16 sm:pb-24 sm:px-4 md:px-8 max-w-5xl mx-auto">
-          {effective.type === "image" ? (
-            <img
-              src={effective.url}
-              alt=""
-              className="w-full h-auto max-h-[75dvh] sm:max-h-[78vh] md:max-h-[80vh] object-contain rounded-xl sm:rounded-2xl select-none"
-              draggable={false}
-            />
-          ) : (
-            <video
-              key={effective.url}
-              src={effective.url}
-              controls
-              autoPlay
-              playsInline
-              className="w-full h-auto max-h-[75dvh] sm:max-h-[78vh] md:max-h-[80vh] object-contain rounded-xl sm:rounded-2xl shadow-2xl bg-black"
-            />
-          )}
-          <div className="flex flex-row items-center justify-between w-full mt-3 sm:mt-4 px-1 sm:px-2 gap-2 min-w-0">
+          <div className="flex flex-col items-center max-w-full max-h-[80vh] justify-center flex-1 min-h-0">
+            {effective.type === "image" ? (
+              <img
+                src={effective.url}
+                alt=""
+                className="max-w-full h-auto max-h-[68dvh] sm:max-h-[70vh] md:max-h-[72vh] object-contain rounded-xl sm:rounded-2xl select-none shadow-2xl"
+                draggable={false}
+              />
+            ) : (
+              <video
+                key={effective.url}
+                src={effective.url}
+                controls
+                autoPlay
+                playsInline
+                className="max-w-full h-auto max-h-[68dvh] sm:max-h-[70vh] md:max-h-[72vh] object-contain rounded-xl sm:rounded-2xl shadow-2xl bg-black"
+              />
+            )}
+          </div>
+          <div className="flex flex-row items-center justify-between w-full mt-3 sm:mt-4 px-1 sm:px-2 gap-2 min-w-0 shrink-0">
             {effective.sender && (
               <span
                 className="text-xs sm:text-sm text-white/90 font-medium truncate max-w-[50vw] sm:max-w-xs"
@@ -237,13 +245,14 @@ export const MediaViewerModal = ({
             )}
           </div>
           {hasNavigation && (
-            <p className="text-xs text-white/60 mt-1 sm:mt-2" aria-live="polite">
+            <p className="text-xs text-white/60 mt-1 sm:mt-2 shrink-0" aria-live="polite">
               {currentIndex + 1} / {mediaItems!.length}
             </p>
           )}
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 };
 

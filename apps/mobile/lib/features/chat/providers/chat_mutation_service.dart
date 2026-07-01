@@ -1,16 +1,18 @@
+import 'dart:math';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mobile/core/providers/auth_provider.dart';
 import 'package:mobile/core/realtime/realtime_coordinator.dart';
 import 'package:mobile/core/realtime/socket_service.dart';
 import 'package:mobile/core/realtime/socket_state.dart';
 import 'package:mobile/core/runtime/mutation_journal.dart';
-import 'package:mobile/core/security/encryption_service.dart';
-import 'package:mobile/core/security/group_encryption_service.dart';
+
 import 'package:mobile/core/utils/app_logger.dart';
 import 'package:mobile/features/chat/models/message_entity.dart';
+import 'package:mobile/features/chat/providers/chat_mutation_service.dart';
 import 'package:mobile/features/chat/providers/conversation_runtime_store.dart';
-import 'package:mobile/features/chat/providers/conversation_store.dart';
 import 'package:mobile/features/chat/providers/message_store.dart';
+import 'package:mobile/features/chat/providers/chat_media_service.dart';
 import 'package:uuid/uuid.dart';
 
 /// Typed payload stored in the MutationJournal for message sends.
@@ -87,6 +89,7 @@ class SendMessagePayload {
   Map<String, dynamic> toSocketPayload() => <String, dynamic>{
     'tempId': clientMessageId,
     'text': text,
+    'messageContent': text,
     'encryptedContent': encryptedContent,
     'iv': encryptionIv,
     'salt': encryptionSalt,
@@ -159,11 +162,6 @@ class ChatMutationService {
       mediaType: mediaType,
     );
 
-    // 💎 Instagram-Pro: Update Inbox immediately with optimistic message
-    _ref
-        .read(conversationStoreProvider.notifier)
-        .updateLastMessage(chatId, optimistic);
-
     return clientMessageId;
   }
 
@@ -194,28 +192,62 @@ class ChatMutationService {
       id: 'pending_$clientMessageId',
       chatId: chatId,
       senderId: payload.senderId,
-      senderClerkId: payload.senderClerkId,
-      receiverClerkId: payload.receiverClerkId,
       clientMessageId: clientMessageId,
       createdAt: DateTime.now(),
       text: payload.mediaType == 'image' ? '📷 Photo' : '🎥 Video',
       mediaUrl: payload.mediaUrl,
       mediaType: payload.mediaType,
-      encryptionIv: payload.encryptionIv,
-      encryptionSalt: payload.encryptionSalt,
       deliveryStatus: MessageDeliveryStatus.pending,
     );
 
-    _ref
-        .read(conversationStoreProvider.notifier)
-        .updateLastMessage(chatId, message);
-
-    _ref
-        .read(messageStoreProvider(chatId).notifier)
-        .addOptimistic(message);
+    _ref.read(messageStoreProvider(chatId).notifier).addOptimistic(message);
 
     // 3. Emit via socket (respecting connectivity)
     _emitOrDefer(chatId, clientMessageId, payload);
+  }
+
+  /// Builds and sends a media message payload after Cloudinary upload succeeds.
+  Future<void> sendMediaMessage({
+    required String chatId,
+    required String clientMessageId,
+    required UploadResult uploadResult,
+    required String mediaType,
+  }) async {
+    final authUser = _ref.read(authProvider).user;
+    if (authUser == null) return;
+
+    final myUserId = authUser.resolvedUuid;
+    if (myUserId == null) return;
+
+    final partnerClerkId = _ref
+        .read(messageStoreProvider(chatId).notifier)
+        .getPartnerClerkId();
+    final ids = chatId.split('_');
+    final partnerId = ids.length == 2
+        ? (ids[0] == myUserId ? ids[1] : ids[0])
+        : null;
+
+    // E2EE fully decommissioned — always send plaintext, never set encryptedContent.
+    final payload = SendMessagePayload(
+      chatId: chatId,
+      clientMessageId: clientMessageId,
+      senderId: myUserId,
+      encryptedContent: null,
+      mediaUrl: uploadResult.secureUrl,
+      mediaType: mediaType,
+      receiverId: partnerId,
+      encryptionIv: null,
+      encryptionSalt: null,
+      isEncrypted: false,
+      senderClerkId: authUser.id,
+      receiverClerkId: partnerClerkId,
+    );
+
+    await sendProcessedMessage(
+      chatId: chatId,
+      clientMessageId: clientMessageId,
+      payload: payload,
+    );
   }
 
   Future<void> _performSecureSend({
@@ -234,49 +266,14 @@ class ChatMutationService {
     String? salt;
     bool isEncrypted = false;
     String? myClerkId = senderClerkId ?? senderId;
-    String? partnerClerkId = receiverClerkId ?? receiverId;
-
-    // Apply encryption for direct chats (Phase 2 security parity)
-    if (text != null && text.isNotEmpty && receiverId != null) {
-      try {
-        // Identity Strategy: UUID:UUID for cross-platform parity with Web
-        // Since direct chatIds are already sorted(UUID1_UUID2), we just replace '_' with ':'
-        final sharedSecret = chatId.replaceAll('_', ':');
-
-        final result = await EncryptionService().encryptMessage(
-          text,
-          sharedSecret,
-        );
-        encryptedContent = result['encryptedContent'];
-        iv = result['encryption_iv'];
-        salt = result['encryption_salt'];
-        isEncrypted = true;
-      } catch (e) {
-        AppLogger.e('[ChatMutationService] Encryption failed.', error: e);
-      }
-    }
-
-    // Apply encryption for group chats (Workstream 8 — Group E2EE parity)
-    if (text != null && text.isNotEmpty && receiverId == null) {
-      // No receiverId means this is a group chat send.
-      // Use the GroupEncryptionService to fetch/cache the shared group key.
-      try {
-        final groupSvc = _ref.read(groupEncryptionServiceProvider);
-        final encrypted = await groupSvc.encryptMessage(chatId, text);
-        if (encrypted != null) {
-          encryptedContent = encrypted['encryptedContent'];
-          iv = encrypted['encryption_iv'];
-          salt = encrypted['encryption_salt'];
-          isEncrypted = true;
-          AppLogger.d('[ChatMutationService] Group message encrypted for $chatId');
-        }
-      } catch (e) {
-        AppLogger.e('[ChatMutationService] Group encryption failed.', error: e);
-      }
-    }
+    // Phase 8A: E2EE fully decommissioned. Always send plaintext.
+    isEncrypted = false;
+    AppLogger.d('[ChatMutationService] Plaintext write mode. E2EE removed.');
 
     if (!_ref.mounted) {
-      AppLogger.w('[ChatMutationService] Ref is no longer mounted; discarding secure send completion.');
+      AppLogger.w(
+        '[ChatMutationService] Ref is no longer mounted; discarding secure send completion.',
+      );
       return;
     }
 
@@ -291,7 +288,7 @@ class ChatMutationService {
       isEncrypted: isEncrypted,
       receiverId: receiverId,
       senderClerkId: myClerkId,
-      receiverClerkId: partnerClerkId,
+      receiverClerkId: receiverClerkId,
       mediaUrl: mediaUrl,
       mediaType: mediaType,
     );
@@ -390,6 +387,7 @@ class ChatMutationService {
   void replayPendingMessages(String chatId) {
     final journal = _ref.read(mutationJournalProvider);
     final pending = journal.getPendingFor(chatId);
+    final store = _ref.read(messageStoreProvider(chatId));
 
     for (final entry in pending) {
       // 💎 Instagram-Pro: Skip if already in flight to prevent redundant re-sends
@@ -397,6 +395,18 @@ class ChatMutationService {
         AppLogger.d(
           '[ChatMutationService] Skipping replay for $chatId/${entry.id}: already SENDING',
         );
+        continue;
+      }
+
+      // If the message has already been reconciled (exists in store as non-pending),
+      // mark it success in journal and skip.
+      final hasAuthoritative = store.messages.values.any((m) =>
+          m.clientMessageId == entry.id && !m.id.startsWith('pending_'));
+      if (hasAuthoritative) {
+        AppLogger.i(
+          '[ChatMutationService] Skipping replay for $chatId/${entry.id}: already reconciled in store',
+        );
+        journal.resolve(chatId, entry.id, MutationStatus.success);
         continue;
       }
 
@@ -426,31 +436,37 @@ class ChatMutationService {
     AppLogger.d('🚀 [ChatMutationService] Retrying message: $clientMessageId');
     final journal = _ref.read(mutationJournalProvider);
     final entries = journal.getPendingFor(chatId);
-    
+
     // Find the corresponding journal entry
     final entryIndex = entries.indexWhere((e) => e.id == clientMessageId);
     if (entryIndex == -1) {
-      AppLogger.w('[ChatMutationService] No pending entry found for retry: $clientMessageId');
+      AppLogger.w(
+        '[ChatMutationService] No pending entry found for retry: $clientMessageId',
+      );
       return;
     }
     final entry = entries[entryIndex];
-    
+
     // Update journal status to pending
     journal.resolve(chatId, clientMessageId, MutationStatus.pending);
-    
+
     // Reset UI state to pending
-    _ref.read(messageStoreProvider(chatId).notifier).updateDeliveryStatus(
-      'pending_$clientMessageId',
-      MessageDeliveryStatus.pending,
-    );
-    
+    _ref
+        .read(messageStoreProvider(chatId).notifier)
+        .updateDeliveryStatus(
+          'pending_$clientMessageId',
+          MessageDeliveryStatus.pending,
+        );
+
     final SendMessagePayload payload;
     if (entry.payload is SendMessagePayload) {
       payload = entry.payload as SendMessagePayload;
     } else {
-      payload = SendMessagePayload.fromJson(Map<String, dynamic>.from(entry.payload as Map));
+      payload = SendMessagePayload.fromJson(
+        Map<String, dynamic>.from(entry.payload as Map),
+      );
     }
-    
+
     _emit(chatId, clientMessageId, payload);
   }
 

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
 import { createAdminSupabaseClient } from "@kovari/api";
+import { buildMessageInsertPayload } from "@/services/messaging/persistence";
 
 export async function GET(
   req: NextRequest,
@@ -72,10 +73,8 @@ export async function GET(
       .select(
         `
         id,
-        encrypted_content,
-        encryption_iv,
-        encryption_salt,
-        is_encrypted,
+        message_content,
+        migration_version,
         created_at,
         user_id,
         media_url,
@@ -120,10 +119,8 @@ export async function GET(
 
         return {
           id: message.id,
-          encrypted_content: message.encrypted_content,
-          encryption_iv: message.encryption_iv,
-          encryption_salt: message.encryption_salt,
-          is_encrypted: message.is_encrypted,
+          message_content: message.message_content,
+          migration_version: message.migration_version,
           timestamp: new Date(message.created_at).toLocaleTimeString([], {
             hour: "2-digit",
             minute: "2-digit",
@@ -165,12 +162,9 @@ export async function POST(
     // Read the request body once
     const body = await req.json();
     const {
-      encryptedContent,
-      encryptionIv,
-      encryptionSalt,
-      isEncrypted,
       mediaUrl,
       mediaType,
+      text,
     } = body;
 
     const supabase = createAdminSupabaseClient();
@@ -229,35 +223,38 @@ export async function POST(
       }
     }
 
-    // Allow: (A) encrypted text message, (B) media-only message, (C) both
-    if (
-      (isEncrypted && encryptedContent && encryptionIv && encryptionSalt) ||
-      (mediaUrl && mediaType)
-    ) {
-      const messageData: any = {
+    if (text || (mediaUrl && mediaType)) {
+      const textVal = typeof text === "string" ? text : null;
+      const outgoingContract = {
+        messageContent: textVal,
+        encryptedContent: null,
+        iv: null,
+        salt: null,
+        isEncrypted: false,
+        mediaUrl: typeof mediaUrl === "string" ? mediaUrl : null,
+        mediaType: mediaType === "image" || mediaType === "video" ? mediaType : null,
+      };
+
+      const basePayload = buildMessageInsertPayload({
+        text: outgoingContract.messageContent,
+        mediaUrl: outgoingContract.mediaUrl,
+        mediaType: outgoingContract.mediaType,
+      });
+
+      const messageData = {
+        ...basePayload,
         group_id: groupId,
         user_id: userRow.id,
-        is_encrypted: !!isEncrypted,
       };
-      if (isEncrypted) {
-        messageData.encrypted_content = encryptedContent;
-        messageData.encryption_iv = encryptionIv;
-        messageData.encryption_salt = encryptionSalt;
-      }
-      if (mediaUrl && mediaType) {
-        messageData.media_url = mediaUrl;
-        messageData.media_type = mediaType;
-      }
+
       const { data: inserted, error: insertError } = await supabase
         .from("group_messages")
         .insert([messageData])
         .select(
           `
           id,
-          encrypted_content,
-          encryption_iv,
-          encryption_salt,
-          is_encrypted,
+          message_content,
+          migration_version,
           created_at,
           user_id,
           media_url,
@@ -282,13 +279,9 @@ export async function POST(
       }
       const profile = (inserted as any).users?.profiles;
       const isDeleted = profile?.deleted === true;
-      // Return the inserted message (with encrypted and media fields)
+      // Return the inserted message
       return NextResponse.json({
         id: inserted.id,
-        encryptedContent: inserted.encrypted_content,
-        encryptionIv: inserted.encryption_iv,
-        encryptionSalt: inserted.encryption_salt,
-        isEncrypted: inserted.is_encrypted,
         createdAt: inserted.created_at,
         sender: isDeleted ? "Deleted User" : profile?.name || "Unknown User",
         senderUsername: isDeleted ? undefined : profile?.username,

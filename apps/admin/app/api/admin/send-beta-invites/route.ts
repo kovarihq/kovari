@@ -1,36 +1,19 @@
-import { auth } from "@clerk/nextjs/server";
+import { requireAdmin } from "@/admin-lib/adminAuth";
+import { logAdminAction } from "@/admin-lib/logAdminAction";
 import { createClient } from "@supabase/supabase-js";
 import { NextRequest, NextResponse } from "next/server";
 import { sendBetaInviteEmail } from "@kovari/api";
 
-async function isAdmin(userId: string, supabase: any): Promise<boolean> {
-  try {
-    const { clerkClient } = await import("@clerk/nextjs/server");
-    const clerk = await clerkClient();
-    const clerkUser = await clerk.users.getUser(userId);
-    const email =
-      clerkUser.primaryEmailAddress?.emailAddress ||
-      clerkUser.emailAddresses[0]?.emailAddress;
-
-    if (!email) return false;
-
-    const { data } = await supabase
-      .from("admins")
-      .select("id")
-      .eq("email", email.toLowerCase().trim())
-      .maybeSingle();
-
-    return !!data;
-  } catch {
-    return false;
-  }
-}
-
 export async function POST(req: NextRequest) {
-  // 1. Auth — only admins
-  const { userId } = await auth();
-  if (!userId) {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  let adminId: string;
+  try {
+    const admin = await requireAdmin();
+    adminId = admin.adminId;
+  } catch (error) {
+    if (error instanceof NextResponse) {
+      return error;
+    }
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   const supabase = createClient(
@@ -38,10 +21,6 @@ export async function POST(req: NextRequest) {
     process.env.SUPABASE_SERVICE_ROLE_KEY!,
     { auth: { persistSession: false } }
   );
-
-  if (!(await isAdmin(userId, supabase))) {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-  }
 
   const body = await req.json();
 
@@ -165,6 +144,19 @@ export async function POST(req: NextRequest) {
       results.failed.push(`${email} (email send failed)`);
     }
   }
+  await logAdminAction({
+    adminId,
+    targetType: "waitlist",
+    action: "send_beta_invites",
+    reason: `Sent invites to ${results.sent} users. Failed: ${results.failed.length}. Already invited: ${results.already_invited.length}.`,
+    metadata: {
+      sent_count: results.sent,
+      failed_count: results.failed.length,
+      already_invited_count: results.already_invited.length,
+      emails_processed: targetEmails,
+      beta_batch: beta_batch || null,
+    },
+  });
 
   return NextResponse.json({
     success: true,

@@ -136,6 +136,55 @@ class CloudinaryService {
       rethrow;
     }
   }
+
+  /// Uploads a video file to Cloudinary using a signed request
+  Future<Map<String, dynamic>> uploadVideo(
+    File file, {
+    String folder = 'kovari-chat-media',
+    void Function(int sent, int total)? onProgress,
+    CancelToken? cancelToken,
+  }) async {
+    try {
+      final signData = await _getSignature(folder, cancelToken: cancelToken);
+      
+      final String signature = signData['signature']?.toString() ?? '';
+      final int timestamp = signData['timestamp'] is int
+          ? signData['timestamp'] as int
+          : int.tryParse(signData['timestamp']?.toString() ?? '') ?? 0;
+      final String apiKey = signData['api_key']?.toString() ?? '';
+      final String cloudName = signData['cloud_name']?.toString() ?? '';
+      final String targetFolder = signData['folder']?.toString() ?? '';
+
+      final fileName = file.path.split('/').last;
+      final formData = FormData.fromMap({
+        'file': await MultipartFile.fromFile(file.path, filename: fileName),
+        'api_key': apiKey,
+        'timestamp': timestamp.toString(),
+        'signature': signature,
+        'folder': targetFolder,
+      });
+
+      final uploadUrl = 'https://api.cloudinary.com/v1_1/$cloudName/video/upload';
+      final response = await _cloudinaryDio.post(
+        uploadUrl,
+        data: formData,
+        cancelToken: cancelToken,
+        onSendProgress: onProgress,
+      );
+
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        return response.data as Map<String, dynamic>;
+      }
+      
+      throw Exception('Cloudinary video upload failed with status ${response.statusCode}');
+    } catch (e) {
+      if (e is DioException) {
+        final errorMsg = e.response?.data?['error']?['message'] ?? e.message;
+        throw Exception('Cloudinary Video Upload Error: $errorMsg');
+      }
+      rethrow;
+    }
+  }
 }
 
 final cloudinaryServiceProvider = Provider<CloudinaryService>((ref) {
