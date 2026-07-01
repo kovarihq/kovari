@@ -210,7 +210,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     _inputController.clear();
 
     // Asynchronously send the message (includes encryption)
-    final conversation = ref.read(conversationRuntimeProvider(_chatId))?.metadata;
+    final conversation = ref
+        .read(conversationRuntimeProvider(_chatId))
+        ?.metadata;
     ref
         .read(chatMutationServiceProvider)
         .sendMessage(
@@ -288,7 +290,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       messageStoreProvider(_chatId).select((s) => s.highestKnownSequence),
       (prev, next) {
         if (next != null && next > 0) {
-          final conv = ref.read(conversationRuntimeStoreProvider)[_chatId]?.metadata;
+          final conv = ref
+              .read(conversationRuntimeStoreProvider)[_chatId]
+              ?.metadata;
           final currentSeen = conv?.lastSeenSequence ?? 0;
           if (next > currentSeen) {
             ref
@@ -1109,7 +1113,8 @@ class _MessageBubble extends ConsumerWidget {
           return idx != -1 ? list[idx] : null;
         }),
       );
-      member = selectedMember ??
+      member =
+          selectedMember ??
           GroupMember(
             id: message.senderId,
             name: 'User',
@@ -1149,178 +1154,185 @@ class _MessageBubble extends ConsumerWidget {
         child: Align(
           alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
           child: GestureDetector(
-          onTap: () {
-            // Unfocus any active text field to prevent keyboard auto-opening on route dismissal
-            FocusManager.instance.primaryFocus?.unfocus();
-            Navigator.push(
-              context,
-              PageRouteBuilder<void>(
-                opaque: false,
-                barrierColor: Colors.black.withValues(alpha: 0.7),
-                pageBuilder: (context, _, __) => _FullscreenMediaViewer(
-                  initialMessage: message,
-                  mediaMessages: mediaMessages,
-                ),
-                transitionsBuilder:
-                    (context, animation, secondaryAnimation, child) {
-                      return FadeTransition(
-                        opacity: animation,
-                        child: ScaleTransition(
-                          scale: Tween<double>(begin: 0.9, end: 1.0).animate(
-                            CurvedAnimation(
-                              parent: animation,
-                              curve: Curves.easeOutBack,
-                            ),
-                          ),
-                          child: child,
-                        ),
-                      );
-                    },
-              ),
-            );
-          },
-          child: Container(
-            decoration: BoxDecoration(
-              border: Border.all(color: AppColors.borderColor(context)),
-              borderRadius: BorderRadius.circular(20 * scale),
-            ),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(20 * scale),
-              child: Stack(
-                alignment: Alignment.bottomRight,
-                children: [
-                  // 🖼️ Media Content
-                  RepaintBoundary(
-                    child: SizedBox(
-                      height: 200 * scale,
-                      width: double.infinity,
-                      child: message.mediaType == 'image'
-                          ? (message.localFilePath != null
-                                ? Image.file(
-                                    File(message.localFilePath!),
-                                    fit: BoxFit.cover,
-                                  )
-                                : CachedNetworkImage(
-                                    imageUrl: message.mediaUrl!,
-                                    fit: BoxFit.cover,
-                                    fadeInDuration: const Duration(
-                                      milliseconds: 200,
-                                    ),
-                                    fadeOutDuration: const Duration(
-                                      milliseconds: 100,
-                                    ),
-                                    placeholderFadeInDuration: Duration.zero,
-                                    placeholder: (context, url) =>
-                                        _ShimmerPlaceholder(height: 200 * scale),
-                                    errorWidget: (context, url, error) =>
-                                        Container(
-                                          height: 200 * scale,
-                                          color: AppColors.surface(
-                                            context,
-                                            level: 2,
-                                          ),
-                                          child: const Center(
-                                            child: Icon(
-                                              Icons.broken_image,
-                                              color: Colors.grey,
-                                            ),
-                                          ),
-                                        ),
-                                  ))
-                          : Container(
-                              height: 200 * scale,
-                              color: AppColors.surface(context, level: 2),
-                              child: Center(
-                                child: Icon(LucideIcons.video, size: 40 * scale),
+            onTap: () {
+              // Unfocus any active text field to prevent keyboard auto-opening on route dismissal
+              FocusManager.instance.primaryFocus?.unfocus();
+              Navigator.push(
+                context,
+                PageRouteBuilder<void>(
+                  opaque: false,
+                  barrierColor: Colors.black.withValues(alpha: 0.7),
+                  pageBuilder: (context, _, __) => _FullscreenMediaViewer(
+                    initialMessage: message,
+                    mediaMessages: mediaMessages,
+                  ),
+                  transitionsBuilder:
+                      (context, animation, secondaryAnimation, child) {
+                        return FadeTransition(
+                          opacity: animation,
+                          child: ScaleTransition(
+                            scale: Tween<double>(begin: 0.9, end: 1.0).animate(
+                              CurvedAnimation(
+                                parent: animation,
+                                curve: Curves.easeOutBack,
                               ),
                             ),
+                            child: child,
+                          ),
+                        );
+                      },
+                ),
+              );
+            },
+            child: Container(
+              decoration: BoxDecoration(
+                border: Border.all(color: AppColors.borderColor(context)),
+                borderRadius: BorderRadius.circular(20 * scale),
+              ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(20 * scale),
+                child: Stack(
+                  alignment: Alignment.bottomRight,
+                  children: [
+                    // 🖼️ Media Content
+                    RepaintBoundary(
+                      child: SizedBox(
+                        height: 200 * scale,
+                        width: double.infinity,
+                        child: message.mediaType == 'image'
+                            ? (message.localFilePath != null
+                                  ? Image.file(
+                                      File(message.localFilePath!),
+                                      fit: BoxFit.cover,
+                                    )
+                                  : CachedNetworkImage(
+                                      imageUrl: message.mediaUrl!,
+                                      fit: BoxFit.cover,
+                                      fadeInDuration: const Duration(
+                                        milliseconds: 200,
+                                      ),
+                                      fadeOutDuration: const Duration(
+                                        milliseconds: 100,
+                                      ),
+                                      placeholderFadeInDuration: Duration.zero,
+                                      placeholder: (context, url) =>
+                                          _ShimmerPlaceholder(
+                                            height: 200 * scale,
+                                          ),
+                                      errorWidget: (context, url, error) =>
+                                          Container(
+                                            height: 200 * scale,
+                                            color: AppColors.surface(
+                                              context,
+                                              level: 2,
+                                            ),
+                                            child: const Center(
+                                              child: Icon(
+                                                Icons.broken_image,
+                                                color: Colors.grey,
+                                              ),
+                                            ),
+                                          ),
+                                    ))
+                            : Container(
+                                height: 200 * scale,
+                                color: AppColors.surface(context, level: 2),
+                                child: Center(
+                                  child: Icon(
+                                    LucideIcons.video,
+                                    size: 40 * scale,
+                                  ),
+                                ),
+                              ),
+                      ),
                     ),
-                  ),
 
-                  // 💎 Instagram-Pro: Upload Progress Overlay
-                  if (message.mediaUploadState == MediaUploadState.uploading)
-                    Positioned.fill(
-                      child: Container(
-                        color: Colors.black.withValues(alpha: 0.4),
-                        child: Center(
-                          child: SizedBox(
-                            width: 20,
-                            height: 20,
-                            child: CircularProgressIndicator(
-                              value: message.uploadProgress > 0
-                                  ? message.uploadProgress
-                                  : null,
-                              color: Colors.white,
-                              strokeWidth: 3,
+                    // 💎 Instagram-Pro: Upload Progress Overlay
+                    if (message.mediaUploadState == MediaUploadState.uploading)
+                      Positioned.fill(
+                        child: Container(
+                          color: Colors.black.withValues(alpha: 0.4),
+                          child: Center(
+                            child: SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(
+                                value: message.uploadProgress > 0
+                                    ? message.uploadProgress
+                                    : null,
+                                color: Colors.white,
+                                strokeWidth: 3,
+                              ),
                             ),
                           ),
                         ),
                       ),
-                    ),
 
-                  // 🕒 Timestamp & Status Overlay
-                  GestureDetector(
-                    behavior: HitTestBehavior.opaque,
-                    onTap:
-                        (message.deliveryStatus ==
-                                MessageDeliveryStatus.failed &&
-                            isMe)
-                        ? () {
-                            print(
-                              'DEBUG: Overlay Tap to retry clicked for message: ${message.id}',
-                            );
-                            final clientMessageId =
-                                message.clientMessageId ??
-                                message.id.replaceFirst('pending_', '');
-                            ref
-                                .read(chatMediaServiceProvider)
-                                .resumeUpload(
-                                  message.chatId,
-                                  clientMessageId,
-                                  message.localFilePath!,
-                                  message.mediaType ?? 'image',
-                                );
-                          }
-                        : null,
-                    child: Container(
-                      margin: EdgeInsets.all(8 * scale),
-                      padding: EdgeInsets.symmetric(
-                        horizontal: 8 * scale,
-                        vertical: 4 * scale,
-                      ),
-                      decoration: BoxDecoration(
-                        color: Colors.black.withValues(alpha: 0.5),
-                        borderRadius: BorderRadius.circular(12 * scale),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text(
-                            timeString,
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 10 * scale,
-                              fontWeight: FontWeight.w500,
+                    // 🕒 Timestamp & Status Overlay
+                    GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onTap:
+                          (message.deliveryStatus ==
+                                  MessageDeliveryStatus.failed &&
+                              isMe)
+                          ? () {
+                              print(
+                                'DEBUG: Overlay Tap to retry clicked for message: ${message.id}',
+                              );
+                              final clientMessageId =
+                                  message.clientMessageId ??
+                                  message.id.replaceFirst('pending_', '');
+                              ref
+                                  .read(chatMediaServiceProvider)
+                                  .resumeUpload(
+                                    message.chatId,
+                                    clientMessageId,
+                                    message.localFilePath!,
+                                    message.mediaType ?? 'image',
+                                  );
+                            }
+                          : null,
+                      child: Container(
+                        margin: EdgeInsets.all(8 * scale),
+                        padding: EdgeInsets.symmetric(
+                          horizontal: 8 * scale,
+                          vertical: 4 * scale,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.black.withValues(alpha: 0.5),
+                          borderRadius: BorderRadius.circular(12 * scale),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              timeString,
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 10 * scale,
+                                fontWeight: FontWeight.w500,
+                              ),
                             ),
-                          ),
-                          if (isMe) ...[
-                            const SizedBox(width: 4),
-                            _DeliveryIcon(
-                              message: message,
-                              isMe: true,
-                              isCompact: isCompact,
-                            ),
+                            if (isMe) ...[
+                              const SizedBox(width: 4),
+                              _DeliveryIcon(
+                                messageId: message.id,
+                                chatId: message.chatId,
+                                isMe: true,
+                                isCompact: isCompact,
+                              ),
+                            ],
                           ],
-                        ],
+                        ),
                       ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
           ),
         ),
-      ),);
+      );
     } else {
       bubbleContent = Container(
         padding: EdgeInsets.symmetric(
@@ -1375,7 +1387,8 @@ class _MessageBubble extends ConsumerWidget {
                     if (isMe) ...[
                       const SizedBox(width: 4),
                       _DeliveryIcon(
-                        message: message,
+                        messageId: message.id,
+                        chatId: message.chatId,
                         isMe: isMe,
                         isCompact: isCompact,
                       ),
@@ -1441,20 +1454,30 @@ class _MessageBubble extends ConsumerWidget {
 
 class _DeliveryIcon extends ConsumerWidget {
   const _DeliveryIcon({
-    required this.message,
+    required this.messageId,
+    required this.chatId,
     required this.isMe,
     this.isCompact = false,
   });
 
-  final MessageEntity message;
+  final String messageId;
+  final String chatId;
   final bool isMe;
   final bool isCompact;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final status = message.deliveryStatus;
-    final clientMessageId =
-        message.clientMessageId ?? message.id.replaceFirst('pending_', '');
+    final (status, localFilePath, mediaType, clientMessageId) = ref.watch(
+      messageStoreProvider(chatId).select((s) {
+        final msg = s.messages[messageId];
+        return (
+          msg?.deliveryStatus ?? MessageDeliveryStatus.sent,
+          msg?.localFilePath,
+          msg?.mediaType,
+          msg?.clientMessageId ?? messageId.replaceFirst('pending_', ''),
+        );
+      }),
+    );
 
     final (icon, color) = switch (status) {
       MessageDeliveryStatus.pending => (
@@ -1480,22 +1503,22 @@ class _DeliveryIcon extends ConsumerWidget {
       return GestureDetector(
         onTap: () {
           print(
-            'DEBUG: Tap to retry clicked for message: ${message.id}, localFilePath: ${message.localFilePath}',
+            'DEBUG: Tap to retry clicked for message: $messageId, localFilePath: $localFilePath',
           );
           try {
-            if (message.localFilePath != null && message.mediaUrl == null) {
+            if (localFilePath != null) {
               ref
                   .read(chatMediaServiceProvider)
                   .resumeUpload(
-                    message.chatId,
+                    chatId,
                     clientMessageId,
-                    message.localFilePath!,
-                    message.mediaType ?? 'image',
+                    localFilePath,
+                    mediaType ?? 'image',
                   );
             } else {
               ref
                   .read(chatMutationServiceProvider)
-                  .retryMessage(message.chatId, clientMessageId);
+                  .retryMessage(chatId, clientMessageId);
             }
           } catch (e, s) {
             print('DEBUG: Error in Tap to retry onTap: $e\n$s');

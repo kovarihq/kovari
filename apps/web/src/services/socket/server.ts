@@ -12,12 +12,13 @@ import {
   ServerToClientEvents
 } from "@kovari/types";
 import dotenv from "dotenv";
+import path from "path";
 import { verifyToken } from "@clerk/backend";
 import { verifyAccessToken } from "../../lib/auth/jwt";
 
 // Load environment variables since this is a standalone Node process
-dotenv.config({ path: ".env.local" });
-dotenv.config();
+dotenv.config({ path: path.resolve(__dirname, "../../../.env.local") });
+dotenv.config({ path: path.resolve(__dirname, "../../../.env") });
 
 const PORT = process.env.PORT || 3005;
 

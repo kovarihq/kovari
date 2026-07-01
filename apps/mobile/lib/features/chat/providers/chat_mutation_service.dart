@@ -89,6 +89,7 @@ class SendMessagePayload {
   Map<String, dynamic> toSocketPayload() => <String, dynamic>{
     'tempId': clientMessageId,
     'text': text,
+    'messageContent': text,
     'encryptedContent': encryptedContent,
     'iv': encryptionIv,
     'salt': encryptionSalt,
