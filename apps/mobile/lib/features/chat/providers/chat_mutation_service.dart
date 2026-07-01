@@ -11,7 +11,6 @@ import 'package:mobile/core/utils/app_logger.dart';
 import 'package:mobile/features/chat/models/message_entity.dart';
 import 'package:mobile/features/chat/providers/chat_mutation_service.dart';
 import 'package:mobile/features/chat/providers/conversation_runtime_store.dart';
-import 'package:mobile/features/chat/providers/conversation_store.dart';
 import 'package:mobile/features/chat/providers/message_store.dart';
 import 'package:mobile/features/chat/providers/chat_media_service.dart';
 import 'package:uuid/uuid.dart';
@@ -162,11 +161,6 @@ class ChatMutationService {
       mediaType: mediaType,
     );
 
-    // 💎 Instagram-Pro: Update Inbox immediately with optimistic message
-    _ref
-        .read(conversationStoreProvider.notifier)
-        .updateLastMessage(chatId, optimistic);
-
     return clientMessageId;
   }
 
@@ -204,10 +198,6 @@ class ChatMutationService {
       mediaType: payload.mediaType,
       deliveryStatus: MessageDeliveryStatus.pending,
     );
-
-    _ref
-        .read(conversationStoreProvider.notifier)
-        .updateLastMessage(chatId, message);
 
     _ref.read(messageStoreProvider(chatId).notifier).addOptimistic(message);
 

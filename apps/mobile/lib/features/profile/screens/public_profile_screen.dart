@@ -11,7 +11,7 @@ import 'package:mobile/core/theme/app_spacing.dart';
 import 'package:mobile/core/theme/app_text_styles.dart';
 import 'package:mobile/core/widgets/skeletons/kovari_skeletons.dart';
 import 'package:mobile/features/chat/models/conversation_entity.dart';
-import 'package:mobile/features/chat/providers/conversation_store.dart';
+import 'package:mobile/features/chat/providers/conversation_runtime_store.dart';
 import 'package:mobile/features/chat/screens/chat_screen.dart';
 import 'package:mobile/features/chat/utils/direct_chat_id.dart';
 import 'package:mobile/features/onboarding/data/profile_service.dart';
@@ -115,15 +115,19 @@ class _PublicProfileScreenState extends ConsumerState<PublicProfileScreen> {
     final avatar = UrlUtils.getFullImageUrl(profile.profileImage);
 
     ref
-        .read(conversationStoreProvider.notifier)
-        .upsertConversation(
-          ConversationEntity(
+        .read(conversationRuntimeStoreProvider.notifier)
+        .upsert(
+          ConversationRuntimeState(
             chatId: chatId,
-            participantIds: [myId, partnerId],
-            partnerName: profile.name,
-            partnerAvatar: avatar,
-            partnerUserId: partnerId,
-            partnerClerkId: partnerId,
+            conversationType: ConversationType.direct,
+            metadata: ConversationEntity(
+              chatId: chatId,
+              participantIds: [myId, partnerId],
+              partnerName: profile.name,
+              partnerAvatar: avatar,
+              partnerUserId: partnerId,
+              partnerClerkId: partnerId,
+            ),
           ),
         );
 

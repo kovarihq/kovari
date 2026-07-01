@@ -5,7 +5,6 @@ import 'package:mobile/core/realtime/socket_state.dart';
 import 'package:mobile/core/utils/app_logger.dart';
 import 'package:mobile/features/chat/providers/chat_mutation_service.dart';
 import 'package:mobile/features/chat/providers/conversation_runtime_store.dart';
-import 'package:mobile/features/chat/providers/conversation_store.dart';
 import 'package:mobile/features/chat/providers/message_store.dart';
 import 'package:mobile/features/chat/utils/direct_chat_id.dart';
 
@@ -45,7 +44,7 @@ class RealtimeCoordinator extends Notifier<void> {
   void joinChat(String chatId, {int lastKnownSequence = 0}) {
     _activeChatLastKnownSeq[chatId] = lastKnownSequence;
 
-    final conv = ref.read(conversationStoreProvider)[chatId];
+    final conv = ref.read(conversationRuntimeStoreProvider)[chatId]?.metadata;
     if (conv != null) {
       ref
           .read(conversationRuntimeStoreProvider.notifier)
@@ -76,7 +75,7 @@ class RealtimeCoordinator extends Notifier<void> {
 
   /// Fetches partner presence via socket ack (parity with web `get_last_seen`).
   void _fetchPartnerLastSeen(String chatId) {
-    final conv = ref.read(conversationStoreProvider)[chatId];
+    final conv = ref.read(conversationRuntimeStoreProvider)[chatId]?.metadata;
     var partnerId = conv?.partnerUserId;
 
     if (partnerId == null) {
@@ -110,7 +109,7 @@ class RealtimeCoordinator extends Notifier<void> {
   void _applyLastSeenAck(String chatId, dynamic ack) {
     if (ack == null) return;
 
-    final conv = ref.read(conversationStoreProvider)[chatId];
+    final conv = ref.read(conversationRuntimeStoreProvider)[chatId]?.metadata;
     if (conv != null) {
       ref
           .read(conversationRuntimeStoreProvider.notifier)
@@ -118,9 +117,6 @@ class RealtimeCoordinator extends Notifier<void> {
     }
 
     if (ack is String && ack.toLowerCase() == 'online') {
-      ref
-          .read(conversationStoreProvider.notifier)
-          .setPartnerOnline(chatId, isOnline: true);
       ref.read(conversationRuntimeStoreProvider.notifier).setPresence(
             chatId,
             isOnline: true,
@@ -131,11 +127,6 @@ class RealtimeCoordinator extends Notifier<void> {
 
     if (ack is String) {
       final parsed = DateTime.tryParse(ack);
-      ref.read(conversationStoreProvider.notifier).setPartnerOnline(
-            chatId,
-            isOnline: false,
-            lastSeen: parsed,
-          );
       ref.read(conversationRuntimeStoreProvider.notifier).setPresence(
             chatId,
             isOnline: false,
@@ -175,7 +166,7 @@ class RealtimeCoordinator extends Notifier<void> {
   /// Emit compressed read receipt for a conversation.
   void markSeenUpTo(String chatId, int lastSeenSequence) {
     ref
-        .read(conversationStoreProvider.notifier)
+        .read(conversationRuntimeStoreProvider.notifier)
         .markSeenUpTo(chatId, lastSeenSequence);
     ref.read(socketServiceProvider.notifier).emit(
       'mark_seen',

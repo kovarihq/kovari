@@ -23,7 +23,6 @@ import 'package:mobile/features/chat/utils/presence_formatter.dart';
 import 'package:mobile/features/chat/providers/chat_media_service.dart';
 import 'package:mobile/features/chat/providers/chat_mutation_service.dart';
 import 'package:mobile/features/chat/providers/chat_runtime_providers.dart';
-import 'package:mobile/features/chat/providers/conversation_store.dart';
 import 'package:mobile/features/chat/providers/message_store.dart';
 import 'package:mobile/features/chat/providers/conversation_runtime_store.dart';
 import 'package:mobile/features/chat/providers/conversation_runtime_manager.dart';
@@ -211,7 +210,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     _inputController.clear();
 
     // Asynchronously send the message (includes encryption)
-    final conversation = ref.read(conversationProvider(_chatId));
+    final conversation = ref.read(conversationRuntimeProvider(_chatId))?.metadata;
     ref
         .read(chatMutationServiceProvider)
         .sendMessage(
@@ -248,10 +247,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   @override
   Widget build(BuildContext context) {
     AppLogger.d('📺 [ChatScreen] Building for ID: $_chatId');
-    final conversation = ref.watch(
-      conversationStoreProvider.select((map) => map[_chatId]),
-    );
     final runtimeState = ref.watch(conversationRuntimeProvider(_chatId));
+    final conversation = runtimeState?.metadata;
     final ConversationMessageState msgState = ref.watch(
       messageStoreProvider(_chatId),
     );
@@ -291,7 +288,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       messageStoreProvider(_chatId).select((s) => s.highestKnownSequence),
       (prev, next) {
         if (next != null && next > 0) {
-          final conv = ref.read(conversationStoreProvider)[_chatId];
+          final conv = ref.read(conversationRuntimeStoreProvider)[_chatId]?.metadata;
           final currentSeen = conv?.lastSeenSequence ?? 0;
           if (next > currentSeen) {
             ref

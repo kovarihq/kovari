@@ -10,7 +10,6 @@ import 'package:mobile/core/theme/app_text_styles.dart';
 import 'package:mobile/core/widgets/skeletons/kovari_skeletons.dart';
 import 'package:mobile/features/chat/models/conversation_entity.dart';
 import 'package:mobile/features/chat/providers/conversation_runtime_store.dart';
-import 'package:mobile/features/chat/providers/conversation_store.dart';
 import 'package:mobile/features/chat/screens/chat_screen.dart';
 import 'package:mobile/shared/widgets/app_card.dart';
 import 'package:mobile/shared/widgets/kovari_avatar.dart';
@@ -32,7 +31,7 @@ class _ChatInboxScreenState extends ConsumerState<ChatInboxScreen> {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      ref.read(conversationStoreProvider.notifier).fetchInbox();
+      ref.read(conversationRuntimeStoreProvider.notifier).fetchInbox();
     });
   }
 
@@ -141,7 +140,7 @@ class _ChatInboxScreenState extends ConsumerState<ChatInboxScreen> {
         Expanded(
           child: KovariRefreshIndicator(
             onRefresh: () => ref
-                .read(conversationStoreProvider.notifier)
+                .read(conversationRuntimeStoreProvider.notifier)
                 .fetchInbox(forceRefresh: true),
             child: CustomScrollView(
               physics: const BouncingScrollPhysics(

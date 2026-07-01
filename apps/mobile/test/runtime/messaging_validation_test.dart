@@ -18,7 +18,6 @@ import 'package:mobile/features/chat/models/message_entity.dart';
 import 'package:mobile/features/chat/providers/chat_media_service.dart';
 import 'package:mobile/features/chat/providers/chat_mutation_service.dart';
 import 'package:mobile/features/chat/providers/conversation_runtime_store.dart';
-import 'package:mobile/features/chat/providers/conversation_store.dart';
 import 'package:mobile/features/chat/providers/message_store.dart';
 import 'package:mobile/features/chat/providers/conversation_runtime_manager.dart';
 import 'package:mobile/features/chat/models/pending_upload.dart';
@@ -91,41 +90,12 @@ class FakeMutationJournal extends ChangeNotifier implements MutationJournal {
   bool hasPending(String entityId) => getPendingFor(entityId).isNotEmpty;
 }
 
-// ─────────────────────────────────────────────
-// Fake ConversationStore (no socket subscription)
-// ─────────────────────────────────────────────
-class FakeConversationStore extends Notifier<Map<String, ConversationEntity>>
-    implements ConversationStore {
-  @override
-  Map<String, ConversationEntity> build() => {};
-
-  @override
-  Future<void> updateLastMessage(String chatId, MessageEntity message) async {}
-
-  @override
-  void upsertConversation(ConversationEntity entity) {}
-
-  @override
-  Future<void> fetchInbox({bool forceRefresh = false}) async {}
-
-  @override
-  void incrementUnread(String chatId) {}
-
-  @override
-  void markSeenUpTo(String chatId, int sequence) {}
-
-  @override
-  void setPartnerOnline(
-    String chatId, {
-    required bool isOnline,
-    DateTime? lastSeen,
-  }) {}
-}
 
 // ─────────────────────────────────────────────
 // Fake PendingUploadStore (no Hive)
 // ─────────────────────────────────────────────
-class FakePendingUploadStore extends ChangeNotifier implements PendingUploadStore {
+class FakePendingUploadStore extends ChangeNotifier
+    implements PendingUploadStore {
   final Map<String, PendingUpload> _uploads = {};
 
   @override
@@ -336,8 +306,6 @@ void main() {
           ApiResponse<Map<String, dynamic>>.fallback(reason: 'test_stub'),
     );
 
-
-
     container = ProviderContainer(
       overrides: [
         apiClientProvider.overrideWithValue(mockApiClient),
@@ -348,10 +316,10 @@ void main() {
         cloudinaryServiceProvider.overrideWithValue(mockCloudinaryService),
         // In-memory MutationJournal — no Hive initialization needed
         mutationJournalProvider.overrideWith((_) => fakeMutationJournal),
-        // Fake ConversationStore — avoids ref-after-dispose on inbox update
-        conversationStoreProvider.overrideWith(() => FakeConversationStore()),
         // Fake PendingUploadStore — no Hive initialization needed
-        pendingUploadStoreProvider.overrideWith((_) => FakePendingUploadStore()),
+        pendingUploadStoreProvider.overrideWith(
+          (_) => FakePendingUploadStore(),
+        ),
         authProvider.overrideWith(() => AuthNotifierFake()),
         conversationCacheRepositoryProvider.overrideWith((ref, userId) {
           final mock = MockConversationCacheRepository();
@@ -385,6 +353,11 @@ void main() {
         }),
       ],
     );
+
+    // Keep providers active to prevent onCancel / subscription teardown during tests
+    container.listen(messageStoreProvider('user1_user2'), (_, __) {});
+    container.listen(messageStoreProvider('group_chat_abc'), (_, __) {});
+    container.listen(conversationRuntimeStoreProvider, (_, __) {});
   });
 
   tearDown(() {
@@ -853,7 +826,8 @@ void main() {
       final mediaService = container.read(chatMediaServiceProvider);
       final socketService =
           container.read(socketServiceProvider.notifier) as SocketServiceMock;
-      final pendingUploadStore = container.read(pendingUploadStoreProvider) as FakePendingUploadStore;
+      final pendingUploadStore =
+          container.read(pendingUploadStoreProvider) as FakePendingUploadStore;
 
       // Seed runtime store so we have the conversation
       container
@@ -932,8 +906,11 @@ void main() {
         orElse: () => SocketEvent(type: 'none', data: {}),
       );
 
-      expect(mediaSend.type, 'send_message',
-          reason: 'send_message socket event should be emitted after upload');
+      expect(
+        mediaSend.type,
+        'send_message',
+        reason: 'send_message socket event should be emitted after upload',
+      );
       expect(
         mediaSend.data['message']['mediaUrl'],
         'https://cloudinary.com/test.jpg',

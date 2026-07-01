@@ -3,7 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mobile/core/realtime/socket_service.dart';
 import 'package:mobile/core/realtime/socket_state.dart';
 import 'package:mobile/features/chat/providers/conversation_runtime_store.dart';
-import 'package:mobile/features/chat/providers/conversation_store.dart';
 import 'package:mobile/features/chat/providers/message_store.dart';
 import 'package:mobile/core/runtime/mutation_journal.dart';
 
@@ -28,7 +27,6 @@ class MessagingDebugView extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final socketState = ref.watch(socketServiceProvider);
     final runtimeStore = ref.watch(conversationRuntimeStoreProvider);
-    final conversationStore = ref.watch(conversationStoreProvider);
     final journal = ref.read(mutationJournalProvider);
 
     final focusRuntime = focusChatId != null ? runtimeStore[focusChatId] : null;
@@ -36,7 +34,7 @@ class MessagingDebugView extends ConsumerWidget {
         ? ref.watch(messageStoreProvider(focusChatId!))
         : null;
 
-    final totalPending = conversationStore.keys
+    final totalPending = runtimeStore.keys
         .fold<int>(0, (sum, id) => sum + journal.getPendingFor(id).length);
 
     final socketColor = switch (socketState) {

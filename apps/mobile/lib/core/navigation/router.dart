@@ -8,7 +8,7 @@ import 'package:mobile/core/providers/auth_provider.dart';
 import 'package:mobile/core/services/fcm_service.dart';
 import 'package:mobile/core/utils/app_logger.dart';
 import 'package:mobile/core/utils/nav_observer.dart';
-import 'package:mobile/features/chat/providers/conversation_store.dart';
+import 'package:mobile/features/chat/providers/conversation_runtime_store.dart';
 import 'package:mobile/features/chat/screens/chat_screen.dart';
 import 'package:mobile/features/chat/utils/direct_chat_id.dart';
 import 'package:mobile/features/groups/providers/entity_stores.dart';
@@ -102,7 +102,7 @@ final routerProvider = Provider<GoRouter>((ref) {
           if (!isGroup && !entityId.contains('_')) {
             final hasGroup = ref.read(groupStoreProvider).containsKey(entityId);
             final hasConversation = ref
-                .read(conversationStoreProvider)
+                .read(conversationRuntimeStoreProvider)
                 .containsKey(entityId);
             if (!hasGroup && !hasConversation) {
               final myUuid = ref.read(authProvider).user?.resolvedUuid;

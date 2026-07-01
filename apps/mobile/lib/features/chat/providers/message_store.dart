@@ -13,7 +13,6 @@ import 'package:mobile/features/chat/models/message_entity.dart';
 import 'package:mobile/features/chat/providers/chat_mutation_service.dart';
 import 'package:mobile/features/chat/providers/conversation_runtime_manager.dart';
 import 'package:mobile/features/chat/providers/conversation_runtime_store.dart';
-import 'package:mobile/features/chat/providers/conversation_store.dart';
 import 'package:mobile/features/chat/utils/direct_chat_id.dart';
 import 'package:mobile/core/realtime/conversation_integrity_service.dart';
 
@@ -150,13 +149,14 @@ class MessageStore extends Notifier<ConversationMessageState> {
     final link = ref.keepAlive();
     _isActive = true;
 
+    final eventsStream = ref.watch(socketServiceProvider.notifier).events;
+
     Timer? disposeTimer;
     StreamSubscription<SocketEvent>? sub;
 
     void startSubscription() {
       sub?.cancel();
-      final events = ref.read(socketServiceProvider.notifier).events;
-      sub = events.listen((SocketEvent event) => _handleSocketEvent(event));
+      sub = eventsStream.listen((SocketEvent event) => _handleSocketEvent(event));
     }
 
     ref.onDispose(() {
@@ -599,10 +599,7 @@ class MessageStore extends Notifier<ConversationMessageState> {
 
     _enforceBudget();
 
-    // Update both stores: legacy ConversationStore (inbox) + new RuntimeStore (watermarks/snippets)
-    ref
-        .read(conversationStoreProvider.notifier)
-        .updateLastMessage(_chatId, optimistic);
+    // Update unified RuntimeStore (watermarks/snippets)
     ref
         .read(conversationRuntimeStoreProvider.notifier)
         .updateLastMessage(
@@ -668,10 +665,7 @@ class MessageStore extends Notifier<ConversationMessageState> {
 
     _enforceBudget();
 
-    // Update both stores with authoritative message info
-    ref
-        .read(conversationStoreProvider.notifier)
-        .updateLastMessage(_chatId, authoritative);
+    // Update unified RuntimeStore with authoritative message info
     ref
         .read(conversationRuntimeStoreProvider.notifier)
         .updateLastMessage(
@@ -727,7 +721,7 @@ class MessageStore extends Notifier<ConversationMessageState> {
 
   /// Heuristic to get the partner's Clerk ID for E2EE routing.
   String? getPartnerClerkId() {
-    final conversation = ref.read(conversationProvider(_chatId));
+    final conversation = ref.read(conversationRuntimeProvider(_chatId))?.metadata;
     return conversation?.partnerClerkId;
   }
 
@@ -809,8 +803,9 @@ class MessageStore extends Notifier<ConversationMessageState> {
     }.whereType<String>().where((id) => id.isNotEmpty).toSet();
     if (myIds.contains(readerUserId)) return false;
 
+    final conv = ref.read(conversationRuntimeProvider(_chatId))?.metadata;
     final partnerId =
-        ref.read(conversationProvider(_chatId))?.partnerUserId ??
+        conv?.partnerUserId ??
         directChatPartnerId(
           _chatId,
           user.id,
@@ -819,7 +814,7 @@ class MessageStore extends Notifier<ConversationMessageState> {
     if (partnerId == null) return true;
 
     return readerUserId == partnerId ||
-        readerUserId == ref.read(conversationProvider(_chatId))?.partnerClerkId;
+        readerUserId == conv?.partnerClerkId;
   }
 
   int? _parseSocketInt(dynamic value) {
@@ -961,7 +956,9 @@ class MessageStore extends Notifier<ConversationMessageState> {
             (e.id == entity.id) ||
             (entity.clientMessageId != null &&
                 e.clientMessageId == entity.clientMessageId) ||
-            (e.senderId == entity.senderId &&
+            (entity.text != null &&
+                entity.text!.isNotEmpty &&
+                e.senderId == entity.senderId &&
                 e.text == entity.text &&
                 e.createdAt.difference(entity.createdAt).inSeconds.abs() < 2),
       );
@@ -991,12 +988,7 @@ class MessageStore extends Notifier<ConversationMessageState> {
 
       _enforceBudget();
 
-      // Update legacy ConversationStore (inbox list)
-      ref.read(conversationStoreProvider.notifier)
-        ..updateLastMessage(_chatId, entity)
-        ..incrementUnread(_chatId);
-
-      // Update new ConversationRuntimeStore (watermarks, snippets, unread)
+      // Update unified RuntimeStore (watermarks, snippets, unread)
       ref.read(conversationRuntimeStoreProvider.notifier)
         ..updateLastMessage(
           chatId: _chatId,
