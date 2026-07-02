@@ -3,6 +3,10 @@
     {
       "path": "/api/cron/send-waitlist-emails",
       "schedule": "0 12 * * *"
+    },
+    {
+      "path": "/api/cron/send-offline-emails",
+      "schedule": "*/5 * * * *"
     }
   ]
 }
