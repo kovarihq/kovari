@@ -119,7 +119,7 @@ export class NotificationEventDispatcher {
           // @ts-ignore
           const destinationName = interestRes.data?.destinations?.name || "your destination";
 
-          const ctaLink = `${getAppUrl()}/interests`;
+          const ctaLink = `${getAppUrl()}/requests`;
 
           await sendMatchInterestEmail({
             to: recipientEmail,
