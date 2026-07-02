@@ -16,6 +16,9 @@ import { passwordResetEmail } from "./email-templates/password-reset";
 import { groupInviteEmail } from "./email-templates/group-invite";
 import { registrationVerificationEmail } from "./email-templates/registration-verification";
 import { getEmailConfig } from "./email-config";
+import { matchInterestEmail } from "./email-templates/match-interest";
+import { matchAcceptedEmail } from "./email-templates/match-accepted";
+import { offlineMessagesEmail, OfflineConversationGroup } from "./email-templates/offline-messages";
 
 const MAX_RETRIES = 3;
 const RETRY_DELAYS_MS = [1000, 2000, 4000];
@@ -33,7 +36,8 @@ async function sendBrevoWithRetry(
   params: BrevoEmailParams
 ): Promise<{ messageId?: string } | { error: string }> {
   // @ts-ignore
-  const SibApiV3Sdk = await import("sib-api-v3-sdk");
+  const SibApiV3SdkImport = await import("sib-api-v3-sdk");
+  const SibApiV3Sdk = SibApiV3SdkImport.ApiClient ? SibApiV3SdkImport : (SibApiV3SdkImport.default || SibApiV3SdkImport);
   const defaultClient = SibApiV3Sdk.ApiClient.instance;
   const apiKey = defaultClient.authentications["api-key"];
   apiKey.apiKey = process.env.BREVO_API_KEY!;
@@ -413,6 +417,242 @@ export const sendBetaInviteEmail = async ({
       span.setAttribute("error", true);
       span.setAttribute("error_message", errorMsg);
       console.error("Error sending beta invite email:", { to: maskEmail(to), error: errorMsg });
+      return { success: false, error: errorMsg };
+    }
+  );
+};
+
+export interface SendMatchInterestEmailParams {
+  to: string;
+  fromName: string;
+  destinationName: string;
+  ctaLink: string;
+}
+
+export const sendMatchInterestEmail = async ({
+  to,
+  fromName,
+  destinationName,
+  ctaLink,
+}: SendMatchInterestEmailParams): Promise<{
+  success: boolean;
+  messageId?: string;
+  error?: string;
+}> => {
+  if (!process.env.BREVO_API_KEY) {
+    return { success: false, error: "BREVO_API_KEY is not configured" };
+  }
+
+  const startTime = performance.now();
+  return Sentry.startSpan(
+    {
+      op: "email.send",
+      name: "Send Match Interest Email",
+    },
+    async (span) => {
+      span.setAttribute("recipient", to);
+      const systemEmailConfig = getEmailConfig("system");
+      span.setAttribute("sender", systemEmailConfig.email);
+
+      const subject = `${fromName} wants to travel with you`;
+      const html = matchInterestEmail({ fromName, destinationName, ctaLink });
+
+      const sendSmtpEmail = {
+        to: [{ email: to }],
+        sender: { email: systemEmailConfig.email, name: systemEmailConfig.name },
+        replyTo: { email: systemEmailConfig.replyTo, name: systemEmailConfig.name },
+        subject,
+        htmlContent: html,
+      };
+
+      const result = await sendBrevoWithRetry(sendSmtpEmail);
+      const duration = performance.now() - startTime;
+
+      if ("messageId" in result) {
+        const messageId = result.messageId || "unknown";
+        span.setAttribute("success", true);
+        span.setAttribute("message_id", messageId);
+        console.log("EMAIL_MATCH_SENT", {
+          duration: `${duration.toFixed(2)}ms`,
+          recipient: maskEmail(to),
+          template: "match-interest",
+          provider: "brevo",
+          messageId,
+        });
+        return { success: true, messageId };
+      }
+
+      const errorMsg = "error" in result ? result.error : "Unknown error";
+      Sentry.captureMessage("Match interest email send failed", {
+        level: "error",
+        extra: { error: errorMsg, recipient: to },
+      });
+      span.setAttribute("error", true);
+      span.setAttribute("error_message", errorMsg);
+      console.error("EMAIL_FAILED", {
+        duration: `${duration.toFixed(2)}ms`,
+        recipient: maskEmail(to),
+        template: "match-interest",
+        provider: "brevo",
+        error: errorMsg,
+      });
+      return { success: false, error: errorMsg };
+    }
+  );
+};
+
+export interface SendMatchAcceptedEmailParams {
+  to: string;
+  partnerName: string;
+  ctaLink: string;
+}
+
+export const sendMatchAcceptedEmail = async ({
+  to,
+  partnerName,
+  ctaLink,
+}: SendMatchAcceptedEmailParams): Promise<{
+  success: boolean;
+  messageId?: string;
+  error?: string;
+}> => {
+  if (!process.env.BREVO_API_KEY) {
+    return { success: false, error: "BREVO_API_KEY is not configured" };
+  }
+
+  const startTime = performance.now();
+  return Sentry.startSpan(
+    {
+      op: "email.send",
+      name: "Send Match Accepted Email",
+    },
+    async (span) => {
+      span.setAttribute("recipient", to);
+      const systemEmailConfig = getEmailConfig("system");
+      span.setAttribute("sender", systemEmailConfig.email);
+
+      const subject = `You matched with ${partnerName}! 🎉`;
+      const html = matchAcceptedEmail({ partnerName, ctaLink });
+
+      const sendSmtpEmail = {
+        to: [{ email: to }],
+        sender: { email: systemEmailConfig.email, name: systemEmailConfig.name },
+        replyTo: { email: systemEmailConfig.replyTo, name: systemEmailConfig.name },
+        subject,
+        htmlContent: html,
+      };
+
+      const result = await sendBrevoWithRetry(sendSmtpEmail);
+      const duration = performance.now() - startTime;
+
+      if ("messageId" in result) {
+        const messageId = result.messageId || "unknown";
+        span.setAttribute("success", true);
+        span.setAttribute("message_id", messageId);
+        console.log("EMAIL_MATCH_SENT", {
+          duration: `${duration.toFixed(2)}ms`,
+          recipient: maskEmail(to),
+          template: "match-accepted",
+          provider: "brevo",
+          messageId,
+        });
+        return { success: true, messageId };
+      }
+
+      const errorMsg = "error" in result ? result.error : "Unknown error";
+      Sentry.captureMessage("Match accepted email send failed", {
+        level: "error",
+        extra: { error: errorMsg, recipient: to },
+      });
+      span.setAttribute("error", true);
+      span.setAttribute("error_message", errorMsg);
+      console.error("EMAIL_FAILED", {
+        duration: `${duration.toFixed(2)}ms`,
+        recipient: maskEmail(to),
+        template: "match-accepted",
+        provider: "brevo",
+        error: errorMsg,
+      });
+      return { success: false, error: errorMsg };
+    }
+  );
+};
+
+export interface SendOfflineMessagesEmailParams {
+  to: string;
+  recipientName: string;
+  conversations: OfflineConversationGroup[];
+  ctaLink: string;
+}
+
+export const sendOfflineMessagesEmail = async ({
+  to,
+  recipientName,
+  conversations,
+  ctaLink,
+}: SendOfflineMessagesEmailParams): Promise<{
+  success: boolean;
+  messageId?: string;
+  error?: string;
+}> => {
+  if (!process.env.BREVO_API_KEY) {
+    return { success: false, error: "BREVO_API_KEY is not configured" };
+  }
+
+  const startTime = performance.now();
+  return Sentry.startSpan(
+    {
+      op: "email.send",
+      name: "Send Offline Messages Email",
+    },
+    async (span) => {
+      span.setAttribute("recipient", to);
+      const systemEmailConfig = getEmailConfig("system");
+      span.setAttribute("sender", systemEmailConfig.email);
+
+      const totalMessages = conversations.reduce((acc, c) => acc + c.messages.length, 0);
+      const subject = `You have ${totalMessages} unread message${totalMessages > 1 ? "s" : ""} on KOVARI`;
+      const html = offlineMessagesEmail({ recipientName, conversations, ctaLink });
+
+      const sendSmtpEmail = {
+        to: [{ email: to }],
+        sender: { email: systemEmailConfig.email, name: systemEmailConfig.name },
+        replyTo: { email: systemEmailConfig.replyTo, name: systemEmailConfig.name },
+        subject,
+        htmlContent: html,
+      };
+
+      const result = await sendBrevoWithRetry(sendSmtpEmail);
+      const duration = performance.now() - startTime;
+
+      if ("messageId" in result) {
+        const messageId = result.messageId || "unknown";
+        span.setAttribute("success", true);
+        span.setAttribute("message_id", messageId);
+        console.log("EMAIL_MATCH_SENT", {
+          duration: `${duration.toFixed(2)}ms`,
+          recipient: maskEmail(to),
+          template: "offline-messages",
+          provider: "brevo",
+          messageId,
+        });
+        return { success: true, messageId };
+      }
+
+      const errorMsg = "error" in result ? result.error : "Unknown error";
+      Sentry.captureMessage("Offline messages email send failed", {
+        level: "error",
+        extra: { error: errorMsg, recipient: to },
+      });
+      span.setAttribute("error", true);
+      span.setAttribute("error_message", errorMsg);
+      console.error("EMAIL_FAILED", {
+        duration: `${duration.toFixed(2)}ms`,
+        recipient: maskEmail(to),
+        template: "offline-messages",
+        provider: "brevo",
+        error: errorMsg,
+      });
       return { success: false, error: errorMsg };
     }
   );

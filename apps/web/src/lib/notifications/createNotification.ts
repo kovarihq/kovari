@@ -97,7 +97,13 @@ export async function createNotification(
 
     const notificationId = notifData.id;
 
-    // 4. Async Push Evaluation (Non-blocking)
+    // 4. Dispatch to Notification Event Dispatcher (Non-blocking side-effects: Email, future Push/SMS)
+    import("@/services/notifications/dispatcher").then(({ NotificationEventDispatcher }) => {
+      NotificationEventDispatcher.dispatch(params, notificationId)
+        .catch(err => console.error("[Notification] Dispatcher Error:", err));
+    }).catch(err => console.error("[Notification] Dispatcher Import Error:", err));
+
+    // 5. Async FCM Push Evaluation (Non-blocking)
     // Pass both clerkId (for presence) and supabaseId (for subscriptions)
     if (clerkId && supabaseId) {
       evaluatePushNotifications(clerkId, supabaseId, type, entityId, entityType as EntityType, title, message, imageUrl, notificationId, priority, params.data)

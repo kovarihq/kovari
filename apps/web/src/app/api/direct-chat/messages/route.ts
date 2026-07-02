@@ -248,6 +248,11 @@ export async function PATCH(req: NextRequest) {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
+    // Call service-layer helper to cancel any pending offline message emails
+    import("@/services/messaging/chatNotificationService").then(({ cancelOfflineReminder }) => {
+      cancelOfflineReminder(currentUserId).catch(err => console.error("[PATCH Messages] Failed to cancel offline reminder:", err));
+    }).catch(err => console.error("[PATCH Messages] Failed to import chatNotificationService:", err));
+
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error("[PATCH /api/direct-chat/messages] error", error);

@@ -48,7 +48,8 @@ export async function sendWaitlistConfirmation({
     async (span) => {
       try {
         // @ts-ignore
-        const SibApiV3Sdk = await import("sib-api-v3-sdk");
+        const SibApiV3SdkImport = await import("sib-api-v3-sdk");
+        const SibApiV3Sdk = SibApiV3SdkImport.ApiClient ? SibApiV3SdkImport : (SibApiV3SdkImport.default || SibApiV3SdkImport);
 
         const defaultClient = SibApiV3Sdk.ApiClient.instance;
         const apiKey = defaultClient.authentications["api-key"];

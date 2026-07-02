@@ -77,6 +77,19 @@ export default function NotificationsPage() {
         }
       />
 
+      {/* Desktop Header */}
+      <div className="hidden md:flex items-center justify-between px-6 py-3 border-b border-border bg-card flex-shrink-0">
+        <h1 className="text-md font-semibold text-foreground">Notifications</h1>
+        <Button
+          variant="ghost"
+          onClick={handleMarkAllAsRead}
+          disabled={unreadCount === 0}
+          className="text-sm text-primary font-medium hover:bg-transparent hover:text-primary focus-visible:border-none focus-visible:ring-0 disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          Mark all as read
+        </Button>
+      </div>
+
       {/* Notifications List */}
       <div className="flex-1 overflow-y-auto scrollbar-hide">
         {loading ? (

@@ -16,3 +16,7 @@ export * from "./email-config";
 export * from "./geocoding";
 export * from "./contracts/profile";
 export * from "./email-templates/feedback-alert";
+export * from "./email-templates/match-interest";
+export * from "./email-templates/match-accepted";
+export * from "./email-templates/offline-messages";
+
