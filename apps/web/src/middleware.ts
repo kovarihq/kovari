@@ -24,6 +24,7 @@ const isWaitlistPublicPath = createRouteMatcher([
   "/api/users/sync",
   "/api/cron/send-waitlist-emails",
   "/api/cron/send-offline-emails",
+  "/api/internal/notify",
   "/pricing",
   "/about",
   "/about-us",
@@ -84,6 +85,7 @@ const isPublicRoute = createRouteMatcher([
   "/google54b5f6252311fa10.html",
   "/api/cron/send-offline-emails",
   "/api/cron/send-waitlist-emails",
+  "/api/internal/notify",
 ]);
 
 /** Check if user is in launch_bypass_users table */
