@@ -36,6 +36,18 @@ class KovariUser {
   final String? banReason;
   final String? banExpiresAt;
 
+  /// True when the user has an active ban or non-expired suspension.
+  bool get isActivelyBanned {
+    if (!banned) return false;
+    if (banExpiresAt != null) {
+      final expires = DateTime.tryParse(banExpiresAt!);
+      if (expires != null && expires.isBefore(DateTime.now())) {
+        return false;
+      }
+    }
+    return true;
+  }
+
   /// Resolves the best UUID for encryption/identity.
   /// Falls back to [id] if [uuid] is null and [id] is in UUID format.
   String? get resolvedUuid {

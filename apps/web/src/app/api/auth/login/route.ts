@@ -3,7 +3,7 @@ import bcrypt from "bcryptjs";
 import { generateAccessToken, generateRefreshToken, hashToken } from "@/lib/auth/jwt";
 import { writeAuditLog } from "@/lib/audit/log";
 import { sendSecurityAlert } from "@/lib/alerts/security";
-import { createRouteHandlerSupabaseClientWithServiceRole } from "@kovari/api";
+import { createRouteHandlerSupabaseClientWithServiceRole, isActiveBan, BAN_ERROR_MESSAGE } from "@kovari/api";
 import { generateRequestId } from "@/lib/api/requestId";
 import { detectClient } from "@/lib/api/clientDetection";
 import { 
@@ -48,6 +48,10 @@ export async function POST(request: NextRequest) {
 
       if (!user || !user.password_hash || !(await bcrypt.compare(password, user.password_hash))) {
         return NextResponse.json({ error: "Invalid credentials" }, { status: 401 });
+      }
+
+      if (isActiveBan(user)) {
+        return NextResponse.json({ error: BAN_ERROR_MESSAGE, code: "BANNED_USER" }, { status: 403 });
       }
 
       const refreshToken = generateRefreshToken(user.id, user.email);
@@ -140,30 +144,7 @@ async function handleStandardLogin(
       return formatErrorResponse("Invalid credentials", ApiErrorCode.UNAUTHORIZED, requestId, 401);
     }
 
-    const refreshToken = generateRefreshToken(user.id, user.email);
-    const tokenHash = hashToken(refreshToken);
-    const accessToken = generateAccessToken(user.id, user.email, tokenHash);
-
-    let isActuallyBanned = user.banned ?? false;
-    if (isActuallyBanned && user.ban_expires_at) {
-      if (new Date(user.ban_expires_at) < new Date()) {
-        isActuallyBanned = false;
-        
-        // Auto-lift ban in background (best effort)
-        supabase.from("users").update({ banned: false }).eq("id", user.id).then(({ error }) => {
-          if (error) console.error("Failed to auto-lift expired ban for user:", user.id, error);
-        });
-      }
-    }
-
-    if (!isActuallyBanned) {
-      await writeAuditLog({
-        action: "AUTH_LOGIN_SUCCESS",
-        actorId: user.id,
-        ipAddress: ip,
-        userAgent: userAgent,
-      });
-    } else {
+    if (isActiveBan(user)) {
       await writeAuditLog({
         action: "AUTH_LOGIN_ATTEMPT",
         actorId: user.id,
@@ -176,9 +157,21 @@ async function handleStandardLogin(
         severity: "medium",
         userId: user.id,
         ipAddress: ip,
-        details: { reason: user.ban_reason }
+        details: { reason: user.ban_reason },
       });
+      return formatErrorResponse(BAN_ERROR_MESSAGE, ApiErrorCode.FORBIDDEN, requestId, 403);
     }
+
+    const refreshToken = generateRefreshToken(user.id, user.email);
+    const tokenHash = hashToken(refreshToken);
+    const accessToken = generateAccessToken(user.id, user.email, tokenHash);
+
+    await writeAuditLog({
+      action: "AUTH_LOGIN_SUCCESS",
+      actorId: user.id,
+      ipAddress: ip,
+      userAgent: userAgent,
+    });
 
     const authData = {
       accessToken,
@@ -187,9 +180,9 @@ async function handleStandardLogin(
         id: user.id, 
         email: user.email, 
         name: (Array.isArray((user as any)?.profiles) ? (user as any).profiles[0]?.name : ((user as any)?.profiles as any)?.name) || null,
-        banned: isActuallyBanned,
-        banReason: user.ban_reason || null,
-        banExpiresAt: user.ban_expires_at || null,
+        banned: false,
+        banReason: null,
+        banExpiresAt: null,
       }
     };
 

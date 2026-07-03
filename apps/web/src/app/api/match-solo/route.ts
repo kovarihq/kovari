@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { resolveUser } from "@/lib/auth/resolveUser";
-import { createRouteHandlerSupabaseClientWithServiceRole } from "@kovari/api";
+import { createRouteHandlerSupabaseClientWithServiceRole, isActiveBan } from "@kovari/api";
 import { generateRequestId } from "@/lib/api/requestId";
 import { detectClient } from "@/lib/api/clientDetection";
 import { fetchWithTimeout, safeParseJson } from "@/lib/api/fetcher";
@@ -230,6 +230,21 @@ async function filterInteractedMatches(userId: string, matches: any[]) {
   const { data: matchesA } = await supabase.from("matches").select("user_b_id").eq("user_a_id", userId).eq("match_type", "solo").neq("status", "ended");
   const { data: matchesB } = await supabase.from("matches").select("user_a_id").eq("user_b_id", userId).eq("match_type", "solo").neq("status", "ended");
 
+  // Exclude actively banned users from discovery results
+  const { data: bannedUsers } = await supabase
+    .from("users")
+    .select("id, clerk_user_id, banned, ban_expires_at")
+    .eq("banned", true);
+
+  const bannedUuidSet = new Set<string>();
+  const bannedClerkSet = new Set<string>();
+  bannedUsers?.forEach((u) => {
+    if (isActiveBan(u)) {
+      bannedUuidSet.add(u.id);
+      if (u.clerk_user_id) bannedClerkSet.add(u.clerk_user_id);
+    }
+  });
+
   // 1. Collect all UUIDs to exclude
   const excludeUuidSet = new Set<string>();
   iBlocked?.forEach(b => excludeUuidSet.add(b.blocked_id));
@@ -254,6 +269,7 @@ async function filterInteractedMatches(userId: string, matches: any[]) {
   return matches.filter(m => {
     const id = m.userId || m.id;
     if (!id) return true;
+    if (bannedUuidSet.has(id) || bannedClerkSet.has(id)) return false;
     return !excludeUuidSet.has(id) && !clerkIds.has(id);
   });
 }

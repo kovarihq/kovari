@@ -80,18 +80,8 @@ export async function setMatchingCache(userId: string, key: string, data: any, v
  * Invalidate all matching cache for a user instantly
  */
 export async function invalidateMatchingCache(userId: string) {
-  try {
-    if (!isRedisActive) return; // Graceful skip if Redis is unconfigured
-    await ensureRedisConnection();
-    const indexKey = `user:${userId}:match_keys`;
-    const keys = await redis.sMembers(indexKey);
-    
-    if (keys.length > 0) {
-      await redis.del([...keys, indexKey]);
-    }
-  } catch (err: any) {
-    logger.error("REDIS-INVALIDATE", "Redis Cache Invalidation Error", err);
-  }
+  const { invalidateMatchingCache: invalidateShared } = await import("@kovari/api");
+  return invalidateShared(userId);
 }
 
 /**

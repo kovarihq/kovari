@@ -14,7 +14,7 @@ import {
 import { sendPushNotification } from "@/services/notifications/push";
 import { pubClient, connectRedis } from "@/services/socket/redis";
 import { NotificationEventDispatcher } from "@/services/notifications/dispatcher";
-import { createAdminSupabaseClient } from "@kovari/api";
+import { createAdminSupabaseClient, canUserReceiveNotifications } from "@kovari/api";
 import { PushService } from "@/services/notifications/pushService";
 
 /**
@@ -78,6 +78,12 @@ export async function createNotification(
     if (!supabaseId) {
       console.error("[Notification] Could not resolve user:", userId);
       return { success: false, error: "User not found" };
+    }
+
+    const canReceive = await canUserReceiveNotifications(supabaseId);
+    if (!canReceive) {
+      console.log(`[Notification] Suppressed for banned user: ${supabaseId}`);
+      return { success: false, error: "Recipient unavailable" };
     }
 
     // 3. Insert into Database (Source of Truth)

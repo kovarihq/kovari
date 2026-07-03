@@ -6,7 +6,7 @@ import {
   ServerToClientEvents,
 } from "@kovari/types";
 import { pubClient } from "./redis";
-import { createAdminSupabaseClient } from "@kovari/api";
+import { createAdminSupabaseClient, isActiveBan } from "@kovari/api";
 import { PresenceManager } from "./presence";
 import { RateLimiter } from "./rateLimiter";
 import { bufferNotification } from "../notifications/batching";
@@ -146,10 +146,24 @@ export const registerSocketEvents = (
     }
 
     try {
+      const supabaseId = socket.data.supabaseId;
+      if (supabaseId) {
+        const supabase = createAdminSupabaseClient();
+        const { data: senderRow } = await supabase
+          .from("users")
+          .select("banned, ban_expires_at")
+          .eq("id", supabaseId)
+          .maybeSingle();
+        if (senderRow && isActiveBan(senderRow)) {
+          socket.disconnect(true);
+          if (callback) callback({ status: "error", error: "Account has been banned" });
+          return;
+        }
+      }
+
       console.log(`[Socket] Message sent to ${chatId} by ${userId}`);
 
       const isDirectChat = chatId.includes("_");
-      const supabaseId = socket.data.supabaseId;
 
       if (isDirectChat && supabaseId) {
         const [id1, id2] = chatId.split("_");

@@ -1,11 +1,8 @@
 import { createAdminSupabaseClient } from "@kovari/api";
-
-const UUID_REGEX =
-  /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
+import { isActiveBan } from "@kovari/api";
 
 /**
- * Map socket `auth.userId` to internal `users.id` (Supabase UUID).
- * Web sends Clerk `user_*`; mobile JWT sends internal UUID.
+ * Map socket auth id to Supabase UUID; reject deleted or banned users.
  */
 export async function resolveSupabaseUserIdFromAuthId(
   authUserId: string,
@@ -13,24 +10,32 @@ export async function resolveSupabaseUserIdFromAuthId(
   if (!authUserId) return null;
 
   const supabase = createAdminSupabaseClient();
+  const UUID_REGEX =
+    /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
 
   const { data: byClerk } = await supabase
     .from("users")
-    .select("id")
+    .select("id, banned, ban_expires_at")
     .eq("clerk_user_id", authUserId)
     .eq("isDeleted", false)
     .maybeSingle();
 
-  if (byClerk?.id) return byClerk.id;
+  if (byClerk?.id) {
+    if (isActiveBan(byClerk)) return null;
+    return byClerk.id;
+  }
 
   if (UUID_REGEX.test(authUserId)) {
     const { data: byId } = await supabase
       .from("users")
-      .select("id")
+      .select("id, banned, ban_expires_at")
       .eq("id", authUserId)
       .eq("isDeleted", false)
       .maybeSingle();
-    if (byId?.id) return byId.id;
+    if (byId?.id) {
+      if (isActiveBan(byId)) return null;
+      return byId.id;
+    }
   }
 
   return null;
@@ -42,6 +47,9 @@ export async function resolveSupabaseUserIdFromAuthId(
 export async function presenceKeyForSupabaseUserId(
   supabaseUserId: string,
 ): Promise<string> {
+  const UUID_REGEX =
+    /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
+
   if (!UUID_REGEX.test(supabaseUserId)) return supabaseUserId;
 
   const supabase = createAdminSupabaseClient();

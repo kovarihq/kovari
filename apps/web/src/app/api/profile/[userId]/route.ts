@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { resolveUser } from "@/lib/auth/resolveUser";
-import { createAdminSupabaseClient } from "@kovari/api";
+import { createAdminSupabaseClient, isProfileHiddenDueToBan } from "@kovari/api";
 import { generateRequestId } from "@/lib/api/requestId";
 import { formatStandardResponse, formatErrorResponse } from "@/lib/api/responseHelpers";
 import { ApiErrorCode } from "@/types/api";
@@ -67,6 +67,10 @@ export async function GET(
 
   if (dbError || !dbUser) {
     logger.error(requestId, "User lookup failed", dbError);
+    return formatErrorResponse("User not found", ApiErrorCode.NOT_FOUND, requestId, 404);
+  }
+
+  if (await isProfileHiddenDueToBan(dbUser.id)) {
     return formatErrorResponse("User not found", ApiErrorCode.NOT_FOUND, requestId, 404);
   }
 

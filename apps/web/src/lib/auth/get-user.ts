@@ -14,7 +14,7 @@ export interface AuthenticatedUser {
  */
 export async function getAuthenticatedUser(req: NextRequest): Promise<AuthenticatedUser | null> {
   try {
-    const result = await resolveUser(req, { mode: 'optional' });
+    const result = await resolveUser(req, { mode: 'protected' });
 
     if (!result.ok || !result.user) {
       return null;

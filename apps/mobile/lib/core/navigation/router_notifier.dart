@@ -67,6 +67,10 @@ class RouterNotifier extends ChangeNotifier {
 
     // 2. Auth Guard
     if (!auth.isAuthenticated) {
+      if (auth.user?.isActivelyBanned == true) {
+        return state.matchedLocation == '/banned' ? null : '/banned';
+      }
+
       final isPublicAuthPage =
           state.matchedLocation == '/login' ||
           state.matchedLocation == '/sign-up' ||
@@ -85,7 +89,7 @@ class RouterNotifier extends ChangeNotifier {
     }
 
     // 3. Ban Guard
-    if (auth.user?.banned == true) {
+    if (auth.user?.isActivelyBanned == true) {
       return state.matchedLocation == '/banned' ? null : '/banned';
     }
 

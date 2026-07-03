@@ -5,7 +5,7 @@ import {
   EntityType 
 } from "@kovari/types";
 import { pubClient, connectRedis } from "../socket/redis";
-import { createAdminSupabaseClient } from "@kovari/api";
+import { createAdminSupabaseClient, isActiveBan } from "@kovari/api";
 
 interface ShouldSendPushParams {
   userId: string;       // Clerk ID
@@ -31,6 +31,16 @@ export async function shouldSendPush({
   entityType,
 }: ShouldSendPushParams): Promise<boolean> {
   await connectRedis();
+
+  const supabase = createAdminSupabaseClient();
+  const uuidRegex = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
+  const { data: userRow } = uuidRegex.test(userId)
+    ? await supabase.from("users").select("banned, ban_expires_at").eq("id", userId).maybeSingle()
+    : await supabase.from("users").select("banned, ban_expires_at").eq("clerk_user_id", userId).maybeSingle();
+
+  if (userRow && isActiveBan(userRow)) {
+    return false;
+  }
 
   const priority = NotificationPriorityMap[type] || NotificationPriority.LOW;
 

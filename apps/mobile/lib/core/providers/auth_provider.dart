@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mobile/core/auth/auth_repository.dart';
 import 'package:mobile/core/auth/session_manager.dart';
@@ -9,6 +10,8 @@ import 'package:mobile/core/network/api_endpoints.dart';
 import 'package:mobile/core/providers/connectivity_provider.dart';
 import 'package:mobile/core/utils/app_logger.dart';
 import 'package:mobile/shared/models/kovari_user.dart';
+import 'package:mobile/core/providers/cache_provider.dart';
+import 'package:mobile/core/realtime/socket_service.dart';
 import 'package:mobile/features/chat/providers/cache_providers.dart';
 
 class AuthState {
@@ -84,6 +87,7 @@ class AuthNotifier extends Notifier<AuthState> {
         );
         syncProfile();
       }
+      await syncBanStatus();
     }
 
     // Auto-retry syncProfile when connectivity is restored
@@ -99,6 +103,77 @@ class AuthNotifier extends Notifier<AuthState> {
         }
       }
     });
+  }
+
+  /// Poll server for current ban status (cold launch, resume, mid-session).
+  Future<void> syncBanStatus() async {
+    if (!state.isAuthenticated) return;
+
+    try {
+      final apiClient = ref.read(apiClientProvider);
+      final response = await apiClient.get<Map<String, dynamic>>(
+        ApiEndpoints.authMe,
+        ignoreCache: true,
+        parser: (data) => data as Map<String, dynamic>,
+      );
+
+      if (response.success && response.data != null) {
+        final raw = response.data!;
+        final userMap = (raw['user'] as Map<String, dynamic>?) ??
+            (raw['data']?['user'] as Map<String, dynamic>?);
+        if (userMap == null) return;
+
+        final user = KovariUser.fromAuthResponse(userMap);
+        final storage = TokenStorage();
+        await storage.saveUserData(jsonEncode(user.toJson()));
+
+        if (user.isActivelyBanned) {
+          await _handleBannedSession(user);
+          return;
+        }
+
+        state = state.copyWith(user: user);
+      }
+    } on DioException catch (e) {
+      if (e.response?.statusCode == 403) {
+        final data = e.response?.data;
+        KovariUser? bannedUser;
+        if (data is Map) {
+          final userMap = data['user'];
+          if (userMap is Map<String, dynamic>) {
+            bannedUser = KovariUser.fromAuthResponse(userMap);
+          }
+        }
+        await _handleBannedSession(bannedUser ?? state.user);
+      }
+    } catch (e) {
+      AppLogger.e('🛡️ [AuthNotifier] Ban status sync failed', error: e);
+    }
+  }
+
+  Future<void> _handleBannedSession(KovariUser? user) async {
+    final bannedUser = user ?? state.user;
+    if (bannedUser == null) return;
+
+    try {
+      await ref.read(localCacheProvider).clearAll();
+    } catch (_) {}
+
+    try {
+      ref.read(socketServiceProvider.notifier).disconnect();
+    } catch (_) {}
+
+    final storage = TokenStorage();
+    await storage.saveUserData(jsonEncode(bannedUser.toJson()));
+
+    final repo = ref.read(authRepositoryProvider);
+    await repo.logout(reason: 'BANNED');
+
+    state = AuthState(
+      user: bannedUser,
+      isAuthenticated: false,
+      isBootstrapping: false,
+    );
   }
 
   /// Eagerly fetch the latest profile to ensure we have the UUID for encryption.

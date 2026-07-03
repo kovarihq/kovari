@@ -1,6 +1,10 @@
 import { auth, clerkClient } from "@clerk/nextjs/server";
 import { NextRequest } from "next/server";
-import { createRouteHandlerSupabaseClientWithServiceRole } from "@kovari/api";
+import {
+  createRouteHandlerSupabaseClientWithServiceRole,
+  assertNotBanned,
+  BanEnforcementError,
+} from "@kovari/api";
 import { verifyAccessToken, isUUIDv4 } from "./jwt";
 import { AuthResult, ResolveUserOptions, AuthFailureReason } from "@/types/auth";
 import { generateRequestId } from "../api/requestId";
@@ -10,7 +14,7 @@ import { logPerformanceMetric, logInvocation } from "../observability/performanc
 
 /**
  * 🛰️ Unified Identity Resolver
- * validate → find → provision
+ * validate → find → provision → ban gate
  */
 export async function resolveUser(
   req: NextRequest,
@@ -31,6 +35,43 @@ export async function resolveUser(
   }
 }
 
+async function verifyUserAccountStatus(
+  supabase: ReturnType<typeof createRouteHandlerSupabaseClientWithServiceRole>,
+  userId: string,
+  requestId: string,
+  mode: ResolveUserOptions['mode'],
+): Promise<AuthResult | null> {
+  const { data: dbUser, error: fetchError } = await supabase
+    .from("users")
+    .select("id, email, name, isDeleted, banned, ban_reason, ban_expires_at")
+    .eq("id", userId)
+    .single();
+
+  if (fetchError || !dbUser) {
+    logger.error(requestId, "Identity verification failed", fetchError);
+    return { ok: false, reason: 'USER_NOT_FOUND', message: "Identity verification failed", requestId };
+  }
+
+  if (dbUser.isDeleted) {
+    logger.warn(requestId, "User account is deleted", { userId: dbUser.id });
+    return { ok: false, reason: 'BANNED_USER', message: "Account unavailable", requestId };
+  }
+
+  if (mode === 'protected') {
+    try {
+      await assertNotBanned(supabase, userId);
+    } catch (err) {
+      if (err instanceof BanEnforcementError) {
+        logger.warn(requestId, "Banned user blocked at resolveUser gate", { userId });
+        return { ok: false, reason: 'BANNED_USER', message: err.message, requestId };
+      }
+      throw err;
+    }
+  }
+
+  return null;
+}
+
 async function _resolveUser(
   req: NextRequest,
   options: ResolveUserOptions = { mode: 'protected' },
@@ -39,8 +80,6 @@ async function _resolveUser(
   const requestId = req.headers.get("x-request-id") || generateRequestId();
   const { client } = detectClient(req);
 
-  // 1. Rate Limiting Hook (Before validation)
-  // Mobile → userId-based, Web → IP-based
   const ip = req.headers.get("x-forwarded-for") || "unknown";
   try {
     await applyRateLimit(req, client, ip, requestId);
@@ -52,10 +91,8 @@ async function _resolveUser(
   try {
     const supabase = createRouteHandlerSupabaseClientWithServiceRole();
 
-    // 2. STAGE: VALIDATE
     let identity: { id: string; email: string; provider: 'jwt' | 'clerk'; dbUuid?: string } | null = null;
 
-    // A. Priority: Mobile JWT
     const authHeader = req.headers.get("authorization");
     if (authHeader?.startsWith("Bearer ")) {
       const jwtStart = performance.now();
@@ -69,31 +106,11 @@ async function _resolveUser(
       }
     }
 
-    // B. Fallback: Clerk (Web Claims Caching & Local DB Lookup Caching)
     if (!identity) {
       const authObj = await auth();
       const clerkUserId = authObj.userId;
-      const sessionClaims = authObj.sessionClaims;
 
       if (clerkUserId) {
-        // Fast-path 1: Read database UUID from Clerk JWT template custom claims (if configured)
-        const cachedDbUuid = sessionClaims?.db_uuid as string | undefined;
-        const cachedEmail = sessionClaims?.email as string | undefined;
-
-        if (cachedDbUuid && cachedEmail) {
-          return {
-            ok: true,
-            user: {
-              userId: cachedDbUuid,
-              email: cachedEmail,
-              provider: 'clerk',
-              providerId: clerkUserId
-            },
-            requestId
-          };
-        }
-
-        // Fast-path 2: DB-First Lookup (Checks if already mapped locally, bypassing Clerk API)
         const dbStart = performance.now();
         const { data: dbUser } = await supabase
           .from("users")
@@ -103,6 +120,9 @@ async function _resolveUser(
         logPerformanceMetric("resolveUser_db_lookup_ms", performance.now() - dbStart, { requestId: resolveRequestId });
 
         if (dbUser) {
+          const statusResult = await verifyUserAccountStatus(supabase, dbUser.id, requestId, options.mode);
+          if (statusResult) return statusResult;
+
           return {
             ok: true,
             user: {
@@ -115,7 +135,6 @@ async function _resolveUser(
           };
         }
 
-        // Fallback: Clerk API request (Only on first login before sync is finalized)
         try {
           const clerkStart = performance.now();
           const clerk = await clerkClient();
@@ -148,7 +167,6 @@ async function _resolveUser(
       }
     }
 
-    // Handle Anonymous for Optional Mode
     if (!identity) {
       if (options.mode === 'optional') {
         return { ok: true, user: null as any, requestId };
@@ -156,29 +174,21 @@ async function _resolveUser(
       return { ok: false, reason: 'INVALID_TOKEN', message: "Authentication required", requestId };
     }
 
-    // 3. STAGE: ATOMIC IDENTITY SYNC (Fallback write path - executed once per new user)
     if (identity.dbUuid) {
-      const { data: dbUser, error: fetchError } = await supabase
+      const statusResult = await verifyUserAccountStatus(supabase, identity.dbUuid, requestId, options.mode);
+      if (statusResult) return statusResult;
+
+      const { data: dbUser } = await supabase
         .from("users")
-        .select("id, email, name, isDeleted")
+        .select("id, email, name")
         .eq("id", identity.dbUuid)
         .single();
-
-      if (fetchError || !dbUser) {
-        logger.error(requestId, "Identity verification failed", fetchError);
-        return { ok: false, reason: 'USER_NOT_FOUND', message: "Identity verification failed", requestId };
-      }
-
-      if (dbUser.isDeleted) {
-        logger.warn(requestId, "User account is deleted", { userId: dbUser.id });
-        return { ok: false, reason: 'BANNED_USER', message: "Account unavailable", requestId };
-      }
 
       return {
         ok: true,
         user: {
-          userId: dbUser.id,
-          email: dbUser.email,
+          userId: dbUser!.id,
+          email: dbUser!.email,
           provider: identity.provider,
           providerId: identity.id
         },
@@ -202,24 +212,15 @@ async function _resolveUser(
       return { ok: false, reason: 'USER_NOT_FOUND', message: "Core identity sync failed", requestId };
     }
 
-    // 4. STAGE: VERIFY & RESOLVE
-    const { data: dbUser, error: fetchError } = await supabase
+    const statusResult = await verifyUserAccountStatus(supabase, userId, requestId, options.mode);
+    if (statusResult) return statusResult;
+
+    const { data: dbUser } = await supabase
       .from("users")
-      .select("id, email, name, isDeleted")
+      .select("id, email, name")
       .eq("id", userId)
       .single();
 
-    if (fetchError || !dbUser) {
-      logger.error(requestId, "Post-sync verification failed", fetchError);
-      return { ok: false, reason: 'USER_NOT_FOUND', message: "Identity verification failed", requestId };
-    }
-
-    if (dbUser.isDeleted) {
-      logger.warn(requestId, "User account is deleted", { userId: dbUser.id });
-      return { ok: false, reason: 'BANNED_USER', message: "Account unavailable", requestId };
-    }
-
-    // Async Metadata update to Clerk public metadata in background (does not block current execution)
     if (identity.provider === 'clerk') {
       clerkClient().then((clerk) => {
         clerk.users.updateUserMetadata(identity!.id, {
@@ -228,13 +229,13 @@ async function _resolveUser(
       }).catch(err => console.error("Failed to get Clerk client background", err));
     }
 
-    logger.info(requestId, "User resolved successfully", { userId: dbUser.id, provider: identity.provider });
+    logger.info(requestId, "User resolved successfully", { userId: dbUser!.id, provider: identity.provider });
     
     return {
       ok: true,
       user: {
-        userId: dbUser.id,
-        email: dbUser.email,
+        userId: dbUser!.id,
+        email: dbUser!.email,
         provider: identity.provider,
         providerId: identity.id
       },
@@ -251,12 +252,6 @@ async function _resolveUser(
   }
 }
 
-/**
- * Placeholder for Auth Rate Limiting
- */
 async function applyRateLimit(req: NextRequest, client: string, ip: string, requestId: string) {
-  // Mobile → userId-based limiting (if we can peek at token)
-  // Web → IP-based limiting
-  // For now: Always succeed (Hook prepared)
   return true;
 }

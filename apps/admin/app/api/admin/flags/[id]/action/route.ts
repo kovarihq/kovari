@@ -1,6 +1,8 @@
 // apps/admin/app/api/admin/flags/[id]/action/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@kovari/api";
+import { enforceBanSideEffects } from "@kovari/api/server";
+import { revokeClerkSessionsForUser } from "@/admin-lib/revokeClerkSessions";
 import { requireAdmin } from "@/admin-lib/adminAuth";
 import { logAdminAction } from "@/admin-lib/logAdminAction";
 import * as Sentry from "@sentry/nextjs";
@@ -453,6 +455,9 @@ export async function POST(req: NextRequest, { params }: Params) {
       });
       console.log("Admin action logged (SUSPEND & RESOLVE)");
 
+      await enforceBanSideEffects({ userId });
+      await revokeClerkSessionsForUser(userId);
+
       return NextResponse.json({ 
         success: true,
         suspendUntil: banUntil,
@@ -629,6 +634,9 @@ export async function POST(req: NextRequest, { params }: Params) {
           metadata: { flagId, action: "ban", permanent: true },
         });
         console.log("Admin action logged (BAN & RESOLVE)");
+
+        await enforceBanSideEffects({ userId });
+        await revokeClerkSessionsForUser(userId);
 
         return NextResponse.json({ 
           success: true,

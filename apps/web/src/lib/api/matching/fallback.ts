@@ -1,4 +1,4 @@
-import { createAdminSupabaseClient, redis, ensureRedisConnection } from "@kovari/api";
+import { createAdminSupabaseClient, redis, ensureRedisConnection, isActiveBan } from "@kovari/api";
 import { logger } from "@/lib/api/logger";
 import { profileMapper } from "@/lib/mappers/profileMapper";
 
@@ -156,7 +156,9 @@ export async function performSoloDbMatchingFallback(
         email,
         name,
         clerk_user_id,
-        isDeleted
+        isDeleted,
+        banned,
+        ban_expires_at
       )
     ` as any)
     .eq("users.isDeleted", false)
@@ -181,9 +183,11 @@ export async function performSoloDbMatchingFallback(
   const { data: dbRows, error } = await query;
   if (error || !dbRows) return [];
 
-  const rows = dbRows as any;
+  const rows = (dbRows as any[]).filter(
+    (p) => !p.users || !isActiveBan(p.users),
+  );
 
-  // Fetch Redis travel sessions for these matched users to get their actual budgets/dates
+  if (rows.length === 0) return [];
   const sessionsMap = new Map<string, any>();
   try {
     const redisClient = await ensureRedisConnection();

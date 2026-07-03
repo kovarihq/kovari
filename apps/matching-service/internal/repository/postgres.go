@@ -51,6 +51,7 @@ func (r *PostgresRepository) FetchProfilesBatch(ctx context.Context, clerkUserId
 		FROM users u
 		LEFT JOIN profiles p ON u.id = p.user_id
 		WHERE u.clerk_user_id = ANY($1) AND u."isDeleted" = false
+		AND (u.banned = false OR (u.ban_expires_at IS NOT NULL AND u.ban_expires_at <= NOW()))
 	`
 
 	rows, err := r.pool.Query(ctx, query, clerkUserIds)

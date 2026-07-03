@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { verifyGoogleToken } from "@/lib/auth/google";
 import { generateAccessToken, generateRefreshToken, hashToken } from "@/lib/auth/jwt";
-import { createRouteHandlerSupabaseClientWithServiceRole } from "@kovari/api";
+import { createRouteHandlerSupabaseClientWithServiceRole, isActiveBan, BAN_ERROR_MESSAGE } from "@kovari/api";
 import { generateRequestId } from "@/lib/api/requestId";
 import { formatStandardResponse, formatErrorResponse } from "@/lib/api/responseHelpers";
 import { ApiErrorCode } from "@/types/api";
@@ -61,6 +61,10 @@ export async function POST(request: NextRequest) {
       return formatErrorResponse("User fetch failed", ApiErrorCode.INTERNAL_SERVER_ERROR, requestId, 500);
     }
 
+    if (isActiveBan(user)) {
+      return formatErrorResponse(BAN_ERROR_MESSAGE, ApiErrorCode.FORBIDDEN, requestId, 403);
+    }
+
     // 4. Generate Tokens
     const refreshToken = generateRefreshToken(userId, email);
     const tokenHash = hashToken(refreshToken);
@@ -85,19 +89,6 @@ export async function POST(request: NextRequest) {
 
     const latencyMs = Date.now() - start;
 
-    let isActuallyBanned = user.banned ?? false;
-    if (isActuallyBanned && user.ban_expires_at) {
-      if (new Date(user.ban_expires_at) < new Date()) {
-        isActuallyBanned = false;
-        
-        // Auto-lift ban in background (best effort)
-        supabase.from("users").update({ banned: false }).eq("id", user.id).then(({ error }) => {
-          if (error) console.error("Failed to auto-lift expired ban for user:", user.id, error);
-        });
-      }
-    }
-
-    // 6. Return standard success envelope
     return formatStandardResponse(
       {
         accessToken,
@@ -106,9 +97,9 @@ export async function POST(request: NextRequest) {
           id: user.id,
           email: user.email,
           name: (Array.isArray((user as any)?.profiles) ? (user as any).profiles[0]?.name : ((user as any)?.profiles as any)?.name) || null,
-          banned: isActuallyBanned,
-          banReason: user.ban_reason || null,
-          banExpiresAt: user.ban_expires_at || null,
+          banned: false,
+          banReason: null,
+          banExpiresAt: null,
         },
       },
       {},

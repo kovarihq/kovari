@@ -1,12 +1,14 @@
 import { NextRequest } from "next/server";
 import { verifyAccessToken } from "./jwt";
+import { createRouteHandlerSupabaseClientWithServiceRole, isActiveBan } from "@kovari/api";
 
 export interface UserContext {
   id: string;
 }
 
 /**
- * Extracts and verifies the JWT from the Authorization header for mobile requests
+ * Extracts and verifies the JWT from the Authorization header for mobile requests.
+ * Rejects banned users at the auth layer.
  */
 export async function getUserFromRequest(req: NextRequest): Promise<UserContext | null> {
   try {
@@ -22,12 +24,10 @@ export async function getUserFromRequest(req: NextRequest): Promise<UserContext 
       return null;
     }
 
-    // Case 11: Logout then reuse token -> Rejected
-    // If the token was linked to a session, verify the session still exists.
+    const { createRouteHandlerSupabaseClientWithServiceRole: getSupabase } = await import("@kovari/api");
+    const supabase = getSupabase();
+
     if (payload.tokenHash) {
-      const { createRouteHandlerSupabaseClientWithServiceRole } = await import("@kovari/api");
-      const supabase = createRouteHandlerSupabaseClientWithServiceRole();
-      
       const { data: session, error } = await supabase
         .from("refresh_tokens")
         .select("id")
@@ -38,6 +38,17 @@ export async function getUserFromRequest(req: NextRequest): Promise<UserContext 
         console.warn(`[AUTH] Rejected access token for user ${payload.sub} (Session invalid/logged out)`);
         return null;
       }
+    }
+
+    const { data: userRow } = await supabase
+      .from("users")
+      .select("banned, ban_expires_at")
+      .eq("id", payload.sub)
+      .maybeSingle();
+
+    if (userRow && isActiveBan(userRow)) {
+      console.warn(`[AUTH] Rejected access token for banned user ${payload.sub}`);
+      return null;
     }
 
     return {

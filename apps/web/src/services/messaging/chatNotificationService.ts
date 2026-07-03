@@ -1,4 +1,4 @@
-import { createAdminSupabaseClient, getDirectChatId } from "@kovari/api";
+import { createAdminSupabaseClient, getDirectChatId, isActiveBan } from "@kovari/api";
 import { pubClient, connectRedis } from "../socket/redis";
 import { sendOfflineMessagesEmail, OfflineConversationGroup } from "@kovari/api";
 import * as Sentry from "@sentry/nextjs";
@@ -22,6 +22,17 @@ export async function scheduleOfflineReminder(params: OfflineMessageReminderPara
   const { recipientId } = params;
 
   const supabaseAdmin = createAdminSupabaseClient();
+
+  const { data: banRow } = await supabaseAdmin
+    .from("users")
+    .select("banned, ban_expires_at")
+    .eq("id", recipientId)
+    .maybeSingle();
+
+  if (banRow && isActiveBan(banRow)) {
+    console.log(`[chatNotificationService] Skipping schedule for banned user ${recipientId}`);
+    return;
+  }
   
   // Resolve Clerk ID to check online status
   const { data: userRow } = await supabaseAdmin
@@ -111,12 +122,17 @@ export async function processPendingOfflineEmails(): Promise<{ processed: number
         // Fetch recipient profile details and email
         const { data: recipientUser } = await supabaseAdmin
           .from("users")
-          .select("email, profiles(name)")
+          .select("email, banned, ban_expires_at, profiles(name)")
           .eq("id", recipientId)
           .single();
 
         if (!recipientUser?.email) {
           console.error(`[chatNotificationService] Email not found for recipient ${recipientId}`);
+          continue;
+        }
+
+        if (isActiveBan(recipientUser)) {
+          console.log(`[chatNotificationService] Skipping offline email for banned user ${recipientId}`);
           continue;
         }
 

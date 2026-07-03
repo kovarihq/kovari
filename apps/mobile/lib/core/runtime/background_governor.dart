@@ -1,5 +1,6 @@
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:mobile/core/providers/auth_provider.dart';
 import 'package:mobile/core/realtime/socket_service.dart';
 import 'package:mobile/core/runtime/runtime_scheduler.dart';
 import 'package:mobile/core/utils/app_logger.dart';
@@ -46,6 +47,12 @@ class BackgroundGovernor extends WidgetsBindingObserver {
 
   void _handleForeground() {
     AppLogger.d('☀️ [BackgroundGovernor] App foregrounded. Resuming runtime.');
+
+    try {
+      _ref.read(authProvider.notifier).syncBanStatus();
+    } catch (e) {
+      AppLogger.e('⚠️ [BackgroundGovernor] Ban status sync failed', error: e);
+    }
     
     // 1. Reset scheduler throttling gradually
     Future.delayed(const Duration(milliseconds: 500), () {

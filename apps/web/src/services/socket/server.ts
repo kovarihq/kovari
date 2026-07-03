@@ -2,7 +2,8 @@ import { Server } from "socket.io";
 import { createServer } from "http";
 import { registerSocketEvents } from "./events";
 import { resolveSupabaseUserIdFromAuthId } from "./resolveSocketUser";
-import { connectRedis, redisAdapter } from "./redis";
+import { connectRedis, redisAdapter, pubClient, subClient } from "./redis";
+import { BAN_SOCKET_CHANNEL } from "@kovari/api";
 import { PresenceManager } from "./presence";
 import { createAdminSupabaseClient } from "@kovari/api";
 import {
@@ -102,13 +103,16 @@ io.use(async (socket, next) => {
   socket.data.sessionId = sessionId;
 
   // Resolve Supabase UUID and profile_photo once at connection (two queries, no join — avoids schema cache issues)
+  const supabaseId = await resolveSupabaseUserIdFromAuthId(userId);
+  if (!supabaseId) {
+    return next(new Error("Authentication error: account unavailable"));
+  }
+  socket.data.supabaseId = supabaseId;
+
   try {
     const supabase = createAdminSupabaseClient();
-    const supabaseId = await resolveSupabaseUserIdFromAuthId(userId);
-    socket.data.supabaseId = supabaseId;
 
-    if (supabaseId) {
-      const { data: profileRow } = await supabase
+    const { data: profileRow } = await supabase
         .from("profiles")
         .select("profile_photo, name, username")
         .eq("user_id", supabaseId)
@@ -116,15 +120,9 @@ io.use(async (socket, next) => {
       
       (socket.data as any).profilePhoto = profileRow?.profile_photo || null;
       (socket.data as any).fullName = profileRow?.name || profileRow?.username || "Someone";
-    } else {
-      (socket.data as any).profilePhoto = null;
-      (socket.data as any).fullName = "Someone";
-    }
   } catch (err) {
     console.error("[Socket Auth] Supabase lookup failed — check SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY env vars:", err);
-    socket.data.supabaseId = null;
-    (socket.data as any).profilePhoto = null;
-    (socket.data as any).fullName = "Someone";
+    return next(new Error("Authentication error: profile lookup failed"));
   }
 
   next();
@@ -158,6 +156,26 @@ async function startServer() {
   if (redisConnected) {
     io.adapter(redisAdapter);
     console.log("[Socket] Redis adapter enabled (multi-instance mode)");
+
+    await subClient.subscribe(BAN_SOCKET_CHANNEL, async (message) => {
+      try {
+        const payload = JSON.parse(message) as {
+          userId: string;
+          clerkUserId?: string | null;
+        };
+        const keys = [payload.clerkUserId, payload.userId].filter(Boolean) as string[];
+        for (const key of keys) {
+          const sockets = await io.in(`user_socket:${key}`).fetchSockets();
+          for (const s of sockets) {
+            s.emit("account_banned", { reason: "Account has been banned" });
+            s.disconnect(true);
+          }
+        }
+        console.log(`[Socket] Disconnected banned user sockets: ${keys.join(", ")}`);
+      } catch (err) {
+        console.error("[Socket] Failed to process ban event:", err);
+      }
+    });
   } else {
     console.warn(
       "[Socket] ⚠️  Redis unavailable — running in single-instance (in-memory) mode.\n" +

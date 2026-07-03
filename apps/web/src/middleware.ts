@@ -7,6 +7,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { logPerformanceMetric } from "@/lib/observability/performance";
 import { generateRequestId } from "@/lib/api/requestId";
+import { checkMobileJwtBan } from "@/lib/moderation/checkMobileJwtBan";
 
 const isBannedPage = createRouteMatcher(["/banned"]);
 const isAuthPage = createRouteMatcher(["/sign-in(.*)", "/sign-up(.*)"]);
@@ -45,7 +46,6 @@ const isWaitlistPublicPath = createRouteMatcher([
   "/manifest.json",
   "/manifest.webmanifest",
   "/api/auth/(.*)",
-  "/api/profile(.*)",
   "/api/settings/accept-policies",
   "/api/webhooks/clerk",
   "/api/health",
@@ -76,7 +76,6 @@ const isPublicRoute = createRouteMatcher([
   "/manifest.json",
   "/manifest.webmanifest",
   "/api/auth/(.*)",
-  "/api/profile(.*)",
   "/api/settings/accept-policies",
   "/api/webhooks/clerk",
   "/api/health",
@@ -277,6 +276,15 @@ const clerk = clerkMiddleware(async (auth, req: NextRequest) => {
             const isPublic = isWaitlistLaunchMode() ? isWaitlistPublicPath(req) : isPublicRoute(req);
 
             if (!isPublic) {
+              try {
+                if (sessionId) {
+                  const client = await clerkClient();
+                  await client.sessions.revokeSession(sessionId);
+                }
+              } catch (e) {
+                console.warn("Failed to revoke banned-user session in middleware:", e);
+              }
+
               if (isApiRoute) {
                 return NextResponse.json(
                   { error: "Account has been banned" },
@@ -424,6 +432,11 @@ export default async function middleware(req: NextRequest, evt: any) {
   }
 
   let res: NextResponse;
+
+  const mobileBanResponse = await checkMobileJwtBan(req, isMobileToken);
+  if (mobileBanResponse) {
+    return mobileBanResponse;
+  }
 
   // 1. Bypass Clerk for Mobile Auth Routes (Prevents SyntaxError: Unexpected end of JSON input)
   if (isAuthRoute) {

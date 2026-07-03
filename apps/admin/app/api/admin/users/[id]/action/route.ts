@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@kovari/api";
+import { enforceBanSideEffects } from "@kovari/api/server";
+import { revokeClerkSessionsForUser } from "@/admin-lib/revokeClerkSessions";
 import { requireAdmin } from "@/admin-lib/adminAuth";
 import { logAdminAction } from "@/admin-lib/logAdminAction";
 import * as Sentry from "@sentry/nextjs";
@@ -335,29 +337,8 @@ export async function POST(req: NextRequest, { params }: Params) {
         await resolveFlag(flagId, action);
       }
 
-      // Forcefully revoke Clerk session to kick user out immediately
-      try {
-        const { clerkClient } = await import("@clerk/nextjs/server");
-        const client = await clerkClient();
-        
-        // Improve: Need to find Clerk User ID from our DB if userId is the supabase ID
-        const { data: userData } = await supabaseAdmin
-          .from("users")
-          .select("clerk_user_id")
-          .eq("id", userId)
-          .single();
-
-        if (userData?.clerk_user_id) {
-           // Revoke all sessions for this user
-           const sessions = await client.sessions.getSessionList({ userId: userData.clerk_user_id });
-           for (const session of sessions.data) {
-             await client.sessions.revokeSession(session.id);
-           }
-        }
-      } catch (clerkError) {
-        // Log but don't fail the request since the DB update succeeded
-        console.error("Failed to revoke Clerk sessions:", clerkError);
-      }
+      await enforceBanSideEffects({ userId });
+      await revokeClerkSessionsForUser(userId);
 
       return NextResponse.json({ success: true, emailSent });
     }

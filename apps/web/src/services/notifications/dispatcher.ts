@@ -1,5 +1,5 @@
 import { NotificationType, CreateNotificationParams } from "@kovari/types";
-import { createAdminSupabaseClient, getDirectChatId } from "@kovari/api";
+import { createAdminSupabaseClient, getDirectChatId, canUserReceiveNotifications } from "@kovari/api";
 import { pubClient, connectRedis } from "../socket/redis";
 import * as Sentry from "@sentry/nextjs";
 import {
@@ -23,9 +23,20 @@ const MATCH_ACCEPTED_EMAIL_TTL = 604800; // 7 days
  * Checks if a user has enabled email notifications for a specific type.
  * Currently defaults to true for all users/types in V1.
  */
-export function canReceiveEmailNotification(userId: string, type: NotificationType): boolean {
-  // Abstraction for future preference checks
-  return true;
+export async function canReceiveEmailNotification(userId: string, type: NotificationType): Promise<boolean> {
+  const uuidRegex = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
+  let recipientId = userId;
+  if (!uuidRegex.test(userId)) {
+    const supabaseAdmin = createAdminSupabaseClient();
+    const { data: userRow } = await supabaseAdmin
+      .from("users")
+      .select("id")
+      .eq("clerk_user_id", userId)
+      .single();
+    if (!userRow) return false;
+    recipientId = userRow.id;
+  }
+  return canUserReceiveNotifications(recipientId);
 }
 
 export class NotificationEventDispatcher {
@@ -54,8 +65,8 @@ export class NotificationEventDispatcher {
   private static async dispatchEmail(params: CreateNotificationParams, notificationId: string): Promise<void> {
     const { userId, type, entityId } = params;
 
-    if (!canReceiveEmailNotification(userId, type)) {
-      console.log(`[Dispatcher] Email notifications suppressed by preferences for user: ${userId}`);
+    if (!(await canReceiveEmailNotification(userId, type))) {
+      console.log(`[Dispatcher] Email notifications suppressed for user: ${userId}`);
       return;
     }
 

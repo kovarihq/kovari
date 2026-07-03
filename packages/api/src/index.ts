@@ -6,6 +6,7 @@ export * from "./syncUserToSupabase";
 export * from "./getUserUuidByClerkId";
 export * from "./chatId";
 export * from "./blocked-users";
+export * from "./moderation";
 export * from "./supabase";
 export * from "./supabase-admin";
 export * from "./redis";
@@ -19,4 +20,3 @@ export * from "./email-templates/feedback-alert";
 export * from "./email-templates/match-interest";
 export * from "./email-templates/match-accepted";
 export * from "./email-templates/offline-messages";
-

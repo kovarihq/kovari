@@ -162,6 +162,13 @@ func main() {
 
 		ctx := r.Context()
 		
+		if banned, err := sbRepo.IsUserBanned(ctx, userId); err != nil {
+			log.Printf("Warning: ban check failed for %s: %v", userId, err)
+		} else if banned {
+			auth.SendError(w, http.StatusForbidden, "BANNED_USER", "Account has been banned", r)
+			return
+		}
+
 		// STEP 1: Parallel Fetch sessions from Redis
 		var userSession *models.SoloSession
 		var candidates []models.SoloSession
@@ -253,6 +260,23 @@ func main() {
 					session.GeoSource = "healed"
 				}
 				validCandidates = append(validCandidates, session)
+			}
+		}
+
+		allowedIds, err := sbRepo.FilterBannedUserIds(ctx, allUserIds)
+		if err != nil {
+			log.Printf("Warning: banned user filter failed: %v", err)
+		} else {
+			filtered := validCandidates[:0]
+			for _, c := range validCandidates {
+				if allowedIds[c.UserId] {
+					filtered = append(filtered, c)
+				}
+			}
+			validCandidates = filtered
+			if !allowedIds[userId] {
+				auth.SendError(w, http.StatusForbidden, "BANNED_USER", "Account has been banned", r)
+				return
 			}
 		}
 

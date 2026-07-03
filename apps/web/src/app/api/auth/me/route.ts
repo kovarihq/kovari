@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getUserFromRequest } from "@/lib/auth/middleware";
-import { createRouteHandlerSupabaseClientWithServiceRole } from "@kovari/api";
+import { verifyAccessToken } from "@/lib/auth/jwt";
+import { createRouteHandlerSupabaseClientWithServiceRole, isActiveBan, BAN_ERROR_MESSAGE } from "@kovari/api";
 
 /**
  * Get current user context (Mobile JWT)
@@ -8,42 +8,57 @@ import { createRouteHandlerSupabaseClientWithServiceRole } from "@kovari/api";
  */
 export async function GET(request: NextRequest) {
   try {
-    // 1. Authenticate with JWT
-    const userContext = await getUserFromRequest(request);
-    if (!userContext) {
+    const authHeader = request.headers.get("authorization");
+    if (!authHeader?.startsWith("Bearer ")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const { id } = userContext;
+    const payload = verifyAccessToken(authHeader.substring(7));
+    if (!payload?.sub) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
 
-    // 2. Query Supabase
     const supabase = createRouteHandlerSupabaseClientWithServiceRole();
+
+    if (payload.tokenHash) {
+      const { data: session } = await supabase
+        .from("refresh_tokens")
+        .select("id")
+        .eq("token_hash", payload.tokenHash)
+        .maybeSingle();
+      if (!session) {
+        return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      }
+    }
 
     const { data: user, error } = await supabase
       .from("users")
       .select("id, email, google_id, clerk_user_id, banned, ban_reason, ban_expires_at, profiles(name)")
-      .eq("id", id)
+      .eq("id", payload.sub)
       .maybeSingle();
 
     if (error || !user) {
-      console.warn("User not found from valid JWT context:", id, error);
+      console.warn("User not found from valid JWT context:", payload.sub, error);
       return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
 
-    // 3. Handle Ban Expiration
-    let isActuallyBanned = user.banned ?? false;
-    if (isActuallyBanned && user.ban_expires_at) {
-      if (new Date(user.ban_expires_at) < new Date()) {
-        isActuallyBanned = false;
-        
-        // Auto-lift ban in background (best effort)
-        supabase.from("users").update({ banned: false }).eq("id", id).then(({ error }) => {
-          if (error) console.error("Failed to auto-lift expired ban for user:", id, error);
-        });
-      }
+    if (isActiveBan(user)) {
+      return NextResponse.json(
+        {
+          error: BAN_ERROR_MESSAGE,
+          code: "BANNED_USER",
+          user: {
+            id: user.id,
+            email: user.email,
+            banned: true,
+            banReason: user.ban_reason || null,
+            banExpiresAt: user.ban_expires_at || null,
+          },
+        },
+        { status: 403 },
+      );
     }
 
-    // 4. Return user data
     const profileName = Array.isArray((user as any)?.profiles)
       ? ((user as any).profiles[0]?.name || null)
       : (((user as any)?.profiles as any)?.name || null);
@@ -53,9 +68,9 @@ export async function GET(request: NextRequest) {
         id: user.id,
         email: user.email,
         name: profileName,
-        banned: isActuallyBanned,
-        banReason: user.ban_reason || null,
-        banExpiresAt: user.ban_expires_at || null,
+        banned: false,
+        banReason: null,
+        banExpiresAt: null,
       },
     });
 

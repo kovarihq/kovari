@@ -5,7 +5,7 @@ import {
   generateRefreshToken, 
   hashToken 
 } from "@/lib/auth/jwt";
-import { createRouteHandlerSupabaseClientWithServiceRole } from "@kovari/api";
+import { createRouteHandlerSupabaseClientWithServiceRole, assertNotBanned, BanEnforcementError, BAN_ERROR_MESSAGE } from "@kovari/api";
 
 export async function POST(req: NextRequest) {
   try {
@@ -18,7 +18,6 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // 1. Verify Token Signature
     const payload = verifyRefreshToken(refreshToken);
     if (!payload) {
       return NextResponse.json(
@@ -27,7 +26,6 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // 2. Lookup Hashed Token in Database (Replay Attack Protection)
     const supabase = createRouteHandlerSupabaseClientWithServiceRole();
     const tokenHash = hashToken(refreshToken);
 
@@ -38,7 +36,6 @@ export async function POST(req: NextRequest) {
       .maybeSingle();
 
     if (lookupError || !storedToken) {
-      // Re-use detection: if token is valid but not in DB, it might have been stolen or used.
       console.warn(`[AUTH] Potential refresh token reuse attack for user: ${payload.sub}`);
       return NextResponse.json(
         { error: "Invalid refresh token session" }, 
@@ -46,19 +43,30 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // 3. ROTATION: Delete the old token immediately
+    try {
+      await assertNotBanned(supabase, payload.sub);
+    } catch (err) {
+      if (err instanceof BanEnforcementError) {
+        await supabase.from("refresh_tokens").delete().eq("user_id", payload.sub);
+        return NextResponse.json(
+          { error: BAN_ERROR_MESSAGE, code: "BANNED_USER" },
+          { status: 403 },
+        );
+      }
+      throw err;
+    }
+
     await supabase
       .from("refresh_tokens")
       .delete()
       .eq("id", storedToken.id);
 
-    // 4. Generate & Store new pair
     const newRefreshToken = generateRefreshToken(payload.sub, payload.email);
     const newTokenHash = hashToken(newRefreshToken);
     const newAccessToken = generateAccessToken(payload.sub, payload.email, newTokenHash);
     
     const expiresAt = new Date();
-    expiresAt.setDate(expiresAt.getDate() + 7); // 7 days
+    expiresAt.setDate(expiresAt.getDate() + 7);
 
     const { error: storeError } = await supabase
       .from("refresh_tokens")
