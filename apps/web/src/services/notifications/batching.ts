@@ -3,6 +3,7 @@ import {
   NotificationType,
   CreateNotificationParams,
 } from "@kovari/types";
+import { SITE_URL } from "@/lib/config/site";
 
 /**
  * Buffers notifications to avoid spamming the user with multiple alerts
@@ -87,7 +88,7 @@ async function processBuffer(userId: string, chatId: string, senderName: string,
     },
   };
 
-  const webBaseUrl = process.env.WEB_BASE_URL || "https://kovari.in";
+  const webBaseUrl = process.env.WEB_BASE_URL || SITE_URL;
   const internalSecret = process.env.INTERNAL_NOTIFY_SECRET;
 
   if (!internalSecret) {

@@ -1,11 +1,13 @@
 import Footer from "@/shared/components/landing/Footer";
 import React from "react";
-import { Metadata } from "next";
+import { createMarketingMetadata } from "@/lib/seo";
 
-export const metadata: Metadata = {
+export const metadata = createMarketingMetadata({
   title: "Privacy Policy",
-  description: "Learn how Kovari protects your personal data and privacy. We prioritize your security as you connect with travel groups and plan your global adventures.",
-};
+  description:
+    "Learn how Kovari protects your personal data and privacy. We prioritize your security as you connect with travel groups and plan your global adventures.",
+  path: "/privacy",
+});
 
 export default function PrivacyPage() {
   const lastUpdated = "March 3, 2026";

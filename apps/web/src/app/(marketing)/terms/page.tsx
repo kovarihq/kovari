@@ -1,11 +1,13 @@
 import Footer from "@/shared/components/landing/Footer";
 import React from "react";
-import { Metadata } from "next";
+import { createMarketingMetadata } from "@/lib/seo";
 
-export const metadata: Metadata = {
+export const metadata = createMarketingMetadata({
   title: "Terms of Service",
-  description: "Review the Terms of Service for Kovari. Understand our platform guidelines, user agreements, and rules for organizing community travel.",
-};
+  description:
+    "Review the Terms of Service for Kovari. Understand our platform guidelines, user agreements, and rules for organizing community travel.",
+  path: "/terms",
+});
 
 export default function TermsPage() {
   const lastUpdated = "March 3, 2026";

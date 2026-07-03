@@ -1,12 +1,14 @@
 import Footer from "@/shared/components/landing/Footer";
 import React from "react";
-import { Metadata } from "next";
+import { createMarketingMetadata } from "@/lib/seo";
 
-export async function generateMetadata(): Promise<Metadata> {
-  return {
+export async function generateMetadata() {
+  return createMarketingMetadata({
     title: "About Kovari | Social Travel Platform",
-    description: "Learn how Kovari is reimagining group travel planning for the WhatsApp-and-spreadsheet generation.",
-  };
+    description:
+      "Learn how Kovari is reimagining group travel planning for the WhatsApp-and-spreadsheet generation.",
+    path: "/about",
+  });
 }
 
 export default function AboutPage() {

@@ -1,4 +1,5 @@
 import { ImageResponse } from "next/og";
+import { SITE_LOGO_FALLBACK_PATH } from "@/lib/config/site";
 
 // Route segment config
 export const runtime = "edge";
@@ -14,7 +15,7 @@ export const contentType = "image/png";
 
 export default async function Image() {
   const logoData = await fetch(
-    new URL("../../public/logo.png", import.meta.url)
+    new URL(`../../public${SITE_LOGO_FALLBACK_PATH}`, import.meta.url)
   ).then((res) => res.arrayBuffer());
 
   return new ImageResponse(

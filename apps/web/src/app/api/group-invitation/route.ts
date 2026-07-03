@@ -10,39 +10,24 @@ import {
 import { ApiErrorCode } from "@/types/api";
 import { createNotification } from "@/lib/notifications/createNotification";
 import { NotificationType } from "@kovari/types";
+import { absoluteUrl, getProductionAppUrl } from "@/lib/config/site";
 
 // Helper to generate a random token
 const generateToken = (length = 24) =>
   randomBytes(length).toString("base64url");
 
-function getInviteBaseUrl(req: Request, platform?: string): string {
+function getInviteBaseUrl(platform?: string): string {
   if (platform === "mobile") {
     return "kovari://invite";
-  }
-  const origin = req.headers.get("origin");
-  if (origin) {
-    const base = origin.replace(/\/$/, "");
-    return `${base}/invite`;
-  }
-  const host = req.headers.get("x-forwarded-host") ?? req.headers.get("host");
-  const proto = req.headers.get("x-forwarded-proto") ?? "https";
-  if (host) {
-    const scheme = proto === "https" ? "https" : "http";
-    return `${scheme}://${host}/invite`;
   }
   const explicit = process.env.NEXT_PUBLIC_INVITE_BASE_URL?.trim();
   if (explicit) {
     return explicit.replace(/\/$/, "");
   }
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL?.trim();
-  if (appUrl) {
-    const base = appUrl.replace(/\/$/, "");
-    return `${base}/invite`;
+  if (process.env.NODE_ENV === "development") {
+    return `${getProductionAppUrl()}/invite`;
   }
-  if (process.env.VERCEL_URL) {
-    return `https://${process.env.VERCEL_URL}/invite`;
-  }
-  return "http://localhost:3000/invite";
+  return absoluteUrl("/invite");
 }
 
 export async function GET(req: NextRequest) {
@@ -141,7 +126,7 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    const inviteBaseUrl = getInviteBaseUrl(req, platform ?? undefined);
+    const inviteBaseUrl = getInviteBaseUrl(platform ?? undefined);
     const connector = inviteBaseUrl.includes("://") && !inviteBaseUrl.startsWith("http") ? "/" : "/";
     // Actually, for kovari://invite it should be kovari://invite/token
     // For http://.../invite it should be http://.../invite/token
@@ -447,7 +432,7 @@ export async function POST(req: NextRequest) {
           .maybeSingle();
         if (g?.name) groupName = g.name;
 
-        const inviteBaseUrl = getInviteBaseUrl(req, platform);
+        const inviteBaseUrl = getInviteBaseUrl(platform);
         const { sendGroupInviteEmail } = await import("@kovari/api");
         await sendGroupInviteEmail({
           to: invite.email,

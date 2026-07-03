@@ -1,6 +1,11 @@
 import { type Metadata } from "next";
 import { headers } from "next/headers";
-import { WebAppJsonLd, OrganizationJsonLd } from "@/shared/components/seo/JsonLd";
+import {
+  SITE_NAME,
+  SITE_URL,
+  absoluteUrl,
+} from "@/lib/config/site";
+import { WebAppJsonLd, OrganizationJsonLd, WebSiteJsonLd } from "@/shared/components/seo/JsonLd";
 import {
   ClerkProvider,
   SignInButton,
@@ -41,61 +46,74 @@ const inter = Inter({
   weight: ["400", "500", "600"],
 });
 
-export const metadata: Metadata = {
-  metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL || "https://kovari.in"),
-  title: {
-    default: "Kovari | Connect & Travel With the Right People",
-    template: "%s | Kovari",
-  },
-  description: "Kovari is the social travel platform to plan trips, find travel companions, and explore the world together. Built for groups who travel differently.",
-  keywords: [
-    "group travel planner",
-    "travel with friends",
-    "plan trips with friends app",
-    "travel companion finder",
-    "group trip organizer",
-    "social travel platform",
-    "travel planning app India",
-    "find travel companions India",
-    "kovari",
-    "kovari app"
-  ],
-  authors: [{ name: "Kovari", url: "https://kovari.in" }],
-  creator: "Kovari",
-  publisher: "Kovari",
-  robots: {
-    index: true,
-    follow: true,
-    googleBot: {
+const defaultTitle = "Kovari | Connect & Travel With the Right People";
+const defaultDescription =
+  "Kovari is the social travel platform to plan trips, find travel companions, and explore the world together. Built for groups who travel differently.";
+
+export async function generateMetadata(): Promise<Metadata> {
+  const headersList = await headers();
+  const pathname = headersList.get("x-pathname") || "/";
+
+  return {
+    metadataBase: new URL(SITE_URL),
+    title: {
+      default: defaultTitle,
+      template: `%s | ${SITE_NAME}`,
+    },
+    description: defaultDescription,
+    keywords: [
+      "group travel planner",
+      "travel with friends",
+      "plan trips with friends app",
+      "travel companion finder",
+      "group trip organizer",
+      "social travel platform",
+      "travel planning app India",
+      "find travel companions India",
+      "kovari",
+      "kovari app",
+    ],
+    authors: [{ name: SITE_NAME, url: SITE_URL }],
+    creator: SITE_NAME,
+    publisher: SITE_NAME,
+    alternates: {
+      canonical: absoluteUrl(pathname),
+    },
+    robots: {
       index: true,
       follow: true,
-      "max-video-preview": -1,
-      "max-image-preview": "large",
-      "max-snippet": -1,
+      googleBot: {
+        index: true,
+        follow: true,
+        "max-video-preview": -1,
+        "max-image-preview": "large",
+        "max-snippet": -1,
+      },
     },
-  },
-  openGraph: {
-    type: "website",
-    locale: "en_IN",
-    url: "https://kovari.in",
-    siteName: "Kovari",
-    title: "Kovari | Connect & Travel With the Right People",
-    description: "The social travel platform for people who travel in groups. Plan trips, find companions, explore together.",
-  },
-  twitter: {
-    card: "summary_large_image",
-    title: "Kovari | Connect & Travel With the Right People",
-    description: "The social travel platform for people who travel in groups.",
-    creator: "@kovariapp",
-  },
-  category: "travel",
-  manifest: "/manifest.json",
-  icons: {
-    icon: "/favicon.webp",
-    shortcut: "/favicon.webp",
-    apple: "/favicon.webp",
-  },
-};
+    openGraph: {
+      type: "website",
+      locale: "en_IN",
+      url: SITE_URL,
+      siteName: SITE_NAME,
+      title: defaultTitle,
+      description:
+        "The social travel platform for people who travel in groups. Plan trips, find companions, explore together.",
+    },
+    twitter: {
+      card: "summary_large_image",
+      title: defaultTitle,
+      description: "The social travel platform for people who travel in groups.",
+      creator: "@kovariapp",
+    },
+    category: "travel",
+    manifest: "/manifest.json",
+    icons: {
+      icon: "/favicon.webp",
+      shortcut: "/favicon.webp",
+      apple: "/favicon.webp",
+    },
+  };
+}
 
 export default async function RootLayout({
   children,
@@ -104,14 +122,11 @@ export default async function RootLayout({
 }>) {
   const headersList = await headers();
   const nonce = headersList.get("x-nonce") || "";
-  const pathname = headersList.get("x-pathname") || "";
-  const canonicalUrl = `https://kovari.in${pathname}`;
 
   return (
     <ClerkProvider nonce={nonce}>
       <html lang="en" suppressHydrationWarning>
         <head>
-          <link rel="canonical" href={canonicalUrl} />
           {process.env.NODE_ENV === "production" && (
             <script src="/scripts/disable-console.js" nonce={nonce} suppressHydrationWarning />
           )}
@@ -163,6 +178,7 @@ export default async function RootLayout({
         >
           <WebAppJsonLd />
           <OrganizationJsonLd />
+          <WebSiteJsonLd />
           <ThemeProvider
             attribute="class"
             defaultTheme="light"

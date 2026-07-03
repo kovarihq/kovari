@@ -8,6 +8,7 @@ import {
 } from "@kovari/api";
 import * as Sentry from "@sentry/nextjs";
 import { checkRateLimit } from "@/lib/auth/rateLimit";
+import { getProductionAppUrl } from "@/lib/config/site";
 
 function maskEmail(email: string): string {
   if (!email) return "";
@@ -21,13 +22,8 @@ function maskEmail(email: string): string {
 const RESET_TOKEN_TTL_SECONDS = 3600; // 1 hour
 const REDIS_KEY_PREFIX = "password_reset:";
 
-function getBaseUrl(req: NextRequest): string {
-  const origin = req.headers.get("origin");
-  if (origin) return origin;
-  const host = req.headers.get("x-forwarded-host") ?? req.headers.get("host");
-  const proto = req.headers.get("x-forwarded-proto") ?? "https";
-  if (host) return `${proto}://${host}`;
-  return process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+function getBaseUrl(): string {
+  return getProductionAppUrl();
 }
 
 export async function POST(req: NextRequest) {
@@ -154,7 +150,7 @@ export async function POST(req: NextRequest) {
         JSON.stringify({ userId, email }),
       );
 
-      const baseUrl = getBaseUrl(req);
+      const baseUrl = getBaseUrl();
       let resetLink = `${baseUrl}/forgot-password?token=${token}${
         from ? `&from=${encodeURIComponent(from)}` : ""
       }`;

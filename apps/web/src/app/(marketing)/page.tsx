@@ -1,12 +1,15 @@
 import LandingContent from "@/shared/components/landing/LandingContent";
 import ClientRedirectGate from "@/shared/components/landing/ClientRedirectGate";
 import { createAdminSupabaseClient } from "@kovari/api";
+import { createMarketingMetadata } from "@/lib/seo";
 
 export async function generateMetadata() {
-  return {
+  return createMarketingMetadata({
     title: "Kovari | Connect & Travel With the Right People",
-    description: "Kovari helps you plan trips, build travel groups, and find companions who match your travel style. Join the waitlist.",
-  };
+    description:
+      "Kovari helps you plan trips, build travel groups, and find companions who match your travel style. Join the waitlist.",
+    path: "/",
+  });
 }
 
 export default async function HomePage() {

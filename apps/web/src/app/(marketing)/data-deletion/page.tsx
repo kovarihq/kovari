@@ -1,11 +1,13 @@
 import Footer from "@/shared/components/landing/Footer";
 import React from "react";
-import { Metadata } from "next";
+import { createMarketingMetadata } from "@/lib/seo";
 
-export const metadata: Metadata = {
+export const metadata = createMarketingMetadata({
   title: "Data Deletion Policy",
-  description: "Learn how to securely delete your account and personal data from Kovari, in alignment with applicable global data protection frameworks and privacy standards.",
-};
+  description:
+    "Learn how to securely delete your account and personal data from Kovari, in alignment with applicable global data protection frameworks and privacy standards.",
+  path: "/data-deletion",
+});
 
 export default function DataDeletionPage() {
   const lastUpdated = "March 3, 2026";

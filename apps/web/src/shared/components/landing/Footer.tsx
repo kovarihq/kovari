@@ -6,6 +6,7 @@ import Image from "next/image";
 import InstagramIcon from '@mui/icons-material/Instagram';
 import LinkedInIcon from '@mui/icons-material/LinkedIn';
 import XIcon from "@mui/icons-material/X";
+import { SOCIAL_LINKS } from "@/lib/config/site";
 
 export default function Footer() {
   return (
@@ -37,7 +38,7 @@ export default function Footer() {
           {/* Right: Socials */}
           <div className="flex items-center gap-3">
             <Link
-              href="https://instagram.com/kovari.app"
+              href={SOCIAL_LINKS.instagram}
               target="_blank"
               rel="noopener noreferrer"
               className="text-muted-foreground hover:text-foreground transition-colors"
@@ -45,7 +46,7 @@ export default function Footer() {
               <InstagramIcon className="!w-5 !h-5 sm:!w-6 sm:!h-6" strokeWidth={1.5} />
             </Link>
             <Link
-              href="https://x.com/kovariapp"
+              href={SOCIAL_LINKS.twitter}
               target="_blank"
               rel="noopener noreferrer"
               className="text-muted-foreground hover:text-foreground transition-colors"
@@ -53,7 +54,7 @@ export default function Footer() {
               <XIcon className="!w-5 !h-5 sm:!w-5 sm:!h-5" />
             </Link>
             <Link
-              href="https://linkedin.com/company/kovariapp"
+              href={SOCIAL_LINKS.linkedin}
               target="_blank"
               rel="noopener noreferrer"
               className="text-muted-foreground hover:text-foreground transition-colors"
@@ -86,6 +87,24 @@ export default function Footer() {
               className="hover:text-foreground transition-colors"
             >
               Terms of Service
+            </Link>
+            <Link
+              href="/user-safety"
+              className="hover:text-foreground transition-colors"
+            >
+              Safety & Trust
+            </Link>
+            <Link
+              href="/community-guidelines"
+              className="hover:text-foreground transition-colors"
+            >
+              Community Guidelines
+            </Link>
+            <Link
+              href="/data-deletion"
+              className="hover:text-foreground transition-colors"
+            >
+              Data Deletion
             </Link>
           </nav>
 

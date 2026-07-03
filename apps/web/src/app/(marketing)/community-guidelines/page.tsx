@@ -1,13 +1,14 @@
 import Footer from "@/shared/components/landing/Footer";
 import Link from "next/link";
 import React from "react";
-import { Metadata } from "next";
+import { createMarketingMetadata } from "@/lib/seo";
 
-export const metadata: Metadata = {
+export const metadata = createMarketingMetadata({
   title: "Community Guidelines",
   description:
     "Read Kovari's Community Guidelines to understand the standards of conduct expected from all users on the platform.",
-};
+  path: "/community-guidelines",
+});
 
 export default function CommunityGuidelinesPage() {
   const lastUpdated = "March 3, 2026";

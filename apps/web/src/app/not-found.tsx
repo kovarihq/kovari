@@ -2,6 +2,12 @@ import Link from "next/link";
 import { auth } from "@clerk/nextjs/server";
 import { MoveLeft } from "lucide-react";
 import { Button } from "@/shared/components/ui/button";
+import type { Metadata } from "next";
+
+export const metadata: Metadata = {
+  title: "Page Not Found",
+  robots: { index: false, follow: false },
+};
 
 export default async function NotFound() {
   let userId: string | null = null;

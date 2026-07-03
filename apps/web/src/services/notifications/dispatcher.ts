@@ -7,12 +7,13 @@ import {
   sendMatchAcceptedEmail,
 } from "@kovari/api";
 import { scheduleOfflineReminder } from "../messaging/chatNotificationService";
+import { getProductionAppUrl } from "@/lib/config/site";
 
 /**
  * Standard base URL helper mapping environments automatically.
  */
 export function getAppUrl(): string {
-  return process.env.NEXT_PUBLIC_APP_URL || (process.env.NODE_ENV === "development" ? "http://localhost:3000" : "https://kovari.in");
+  return getProductionAppUrl();
 }
 
 // Idempotency TTL Constants

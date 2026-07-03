@@ -365,8 +365,20 @@ export default async function middleware(req: NextRequest, evt: any) {
   const mwStart = performance.now();
   const mwRequestId = req.headers.get("x-request-id") || generateRequestId().slice(0, 8);
   req.headers.set("x-request-id", mwRequestId);
-  const host = req.headers.get("host");
+  const host = req.headers.get("host") ?? "";
+
   if (host === "www.kovari.in") {
+    const url = req.nextUrl.clone();
+    url.host = "kovari.in";
+    url.protocol = "https:";
+    return NextResponse.redirect(url, 301);
+  }
+
+  // Production Vercel alias → canonical domain (preview deployments are excluded)
+  if (
+    host.endsWith(".vercel.app") &&
+    process.env.VERCEL_ENV === "production"
+  ) {
     const url = req.nextUrl.clone();
     url.host = "kovari.in";
     url.protocol = "https:";
@@ -467,6 +479,11 @@ export default async function middleware(req: NextRequest, evt: any) {
     res.headers.set("X-Content-Type-Options", "nosniff");
     res.headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
     res.headers.set("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
+
+    // Preview deployments: allow access but prevent indexing
+    if (host.endsWith(".vercel.app") && process.env.VERCEL_ENV === "preview") {
+      res.headers.set("X-Robots-Tag", "noindex, nofollow");
+    }
   }
 
   const mwDuration = performance.now() - mwStart;
