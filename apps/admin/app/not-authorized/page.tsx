@@ -1,18 +1,44 @@
 'use client';
 
-import { SignOutButton, useClerk } from '@clerk/nextjs';
+import { useClerk } from '@clerk/nextjs';
+import { useState } from 'react';
 
 function SignOutButtonOrPlaceholder() {
+  const [loading, setLoading] = useState(false);
   try {
     const clerk = useClerk();
-    // If clerk is available, render SignOutButton
+    
+    const handleSignOut = async () => {
+      setLoading(true);
+      try {
+        await clerk.signOut();
+      } catch (err) {
+        console.error("Clerk signOut failed, attempting manual cookie clear:", err);
+      }
+      
+      // Manual cookie clearing fallback
+      try {
+        document.cookie.split(";").forEach((c) => {
+          const cookieName = c.trim().split("=")[0];
+          document.cookie = `${cookieName}=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/; domain=.kovari.in`;
+          document.cookie = `${cookieName}=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/`;
+        });
+      } catch (cookieErr) {
+        console.error("Manual cookie clear failed:", cookieErr);
+      }
+      
+      window.location.href = "/sign-in";
+    };
+
     if (clerk) {
       return (
-        <SignOutButton redirectUrl="/sign-in">
-          <button className="inline-flex h-10 items-center justify-center rounded-md border border-border bg-foreground px-4 text-sm font-medium text-background transition hover:cursor-pointer">
-            Sign out
-          </button>
-        </SignOutButton>
+        <button
+          onClick={handleSignOut}
+          disabled={loading}
+          className="inline-flex h-10 items-center justify-center rounded-md border border-border bg-foreground px-4 text-sm font-medium text-background transition hover:cursor-pointer disabled:opacity-50"
+        >
+          {loading ? "Signing out..." : "Sign out"}
+        </button>
       );
     }
   } catch {
@@ -28,6 +54,7 @@ function SignOutButtonOrPlaceholder() {
     </button>
   );
 }
+
 
 export default function NotAuthorizedPage() {
   return (
