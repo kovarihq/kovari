@@ -11,6 +11,8 @@ import { Loader2, ArrowLeft } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { Spinner } from "@heroui/react";
 import Image from "next/image";
+import { SITE_URL } from "@/lib/config/site";
+
 
 interface AuthFormProps {
   mode: "sign-in" | "sign-up";
@@ -400,7 +402,9 @@ export default function AuthForm({ mode }: AuthFormProps) {
     {/* Back to home — outside the card, inside outer wrapper */}
     <div className="pt-5 flex justify-center">
       <button
-        onClick={() => router.push("/")}
+        onClick={() => {
+          window.location.href = SITE_URL;
+        }}
         className="inline-flex items-center gap-1 text-xs text-muted-foreground/70 hover:text-muted-foreground transition-colors duration-200"
         disabled={isLoading}
       >

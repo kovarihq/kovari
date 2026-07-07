@@ -176,18 +176,18 @@ const clerk = clerkMiddleware(async (auth, req: NextRequest) => {
   const mwRequestId = req.headers.get("x-request-id") || generateRequestId().slice(0, 8);
   logPerformanceMetric("middleware_auth_ms", authDuration, { userId, requestId: mwRequestId });
 
-  // If user is signed in and trying to access sign-in or sign-up, redirect to dashboard
+  // If user is signed in and trying to access sign-in or sign-up, redirect to dashboard on app domain
   if (userId && isAuthPage(req)) {
-    const url = req.nextUrl.clone();
-    url.pathname = "/dashboard";
-    return NextResponse.redirect(url);
+    const isProd = process.env.NODE_ENV === "production";
+    const targetUrl = new URL("/dashboard", isProd ? "https://app.kovari.in" : `http://app.localhost:3000`);
+    return NextResponse.redirect(targetUrl);
   }
 
-  // If user is signed in and lands on /, send them straight to /dashboard
+  // If user is signed in and lands on /, redirect to dashboard on app domain
   if (userId && url.pathname === "/") {
-    const redirectUrl = req.nextUrl.clone();
-    redirectUrl.pathname = "/dashboard";
-    return NextResponse.redirect(redirectUrl);
+    const isProd = process.env.NODE_ENV === "production";
+    const targetUrl = new URL("/dashboard", isProd ? "https://app.kovari.in" : `http://app.localhost:3000`);
+    return NextResponse.redirect(targetUrl);
   }
 
   // 3. Absolute Priority: Ban & Deletion Checks
@@ -357,8 +357,10 @@ const clerk = clerkMiddleware(async (auth, req: NextRequest) => {
 const ALLOWED_ORIGINS = [
   'https://kovari.in',
   'https://www.kovari.in',
+  'https://app.kovari.in',
   process.env.NODE_ENV === 'development' ? 'http://localhost:3000' : null,
   process.env.NODE_ENV === 'development' ? 'http://localhost:3001' : null,
+  process.env.NODE_ENV === 'development' ? 'http://app.localhost:3000' : null,
 ].filter(Boolean) as string[];
 
 export default async function middleware(req: NextRequest, evt: any) {
@@ -366,6 +368,94 @@ export default async function middleware(req: NextRequest, evt: any) {
   const mwRequestId = req.headers.get("x-request-id") || generateRequestId().slice(0, 8);
   req.headers.set("x-request-id", mwRequestId);
   const host = req.headers.get("host") ?? "";
+  const pathname = req.nextUrl.pathname;
+
+  // 1. Skip all API routes, static files, and Sentry/monitoring
+  const isApiOrAsset =
+    pathname.startsWith("/api/") ||
+    pathname.startsWith("/apiauth/") ||
+    pathname.startsWith("/_next/") ||
+    pathname.startsWith("/monitoring") ||
+    pathname.includes(".") ||
+    pathname.startsWith("/sitemap") ||
+    pathname.startsWith("/robots");
+
+  if (!isApiOrAsset) {
+    let cleanHost = host.toLowerCase().split(":")[0];
+    const isProd = process.env.NODE_ENV === "production";
+
+    if (cleanHost === "www.kovari.in") {
+      cleanHost = "kovari.in";
+    }
+
+    const isBrandDomain = cleanHost === "kovari.in" || cleanHost === "localhost" || cleanHost === "127.0.0.1";
+    const isProductDomain = cleanHost === "app.kovari.in" || cleanHost.startsWith("app.localhost");
+
+    // Route Groups
+    const PUBLIC_MARKETING_ROUTES = [
+      "/",
+      "/about",
+      "/about-us",
+      "/privacy",
+      "/terms",
+      "/community-guidelines",
+      "/user-safety",
+      "/data-deletion",
+      "/pricing",
+      "/landing",
+    ];
+
+    const AUTH_ROUTES = [
+      "/sign-in",
+      "/sign-up",
+      "/forgot-password",
+      "/verify-email",
+      "/sso-callback",
+    ];
+
+    const APP_ROUTES = [
+      "/dashboard",
+      "/explore",
+      "/settings",
+      "/chat",
+      "/profile",
+      "/groups",
+      "/create-group",
+      "/invite",
+      "/notifications",
+      "/onboarding",
+      "/requests",
+      "/safety",
+      "/banned",
+    ];
+
+    const isBrandPath = PUBLIC_MARKETING_ROUTES.includes(pathname);
+    const isAuthPath = AUTH_ROUTES.some((route) => pathname === route || pathname.startsWith(route + "/"));
+    const isAppPath = APP_ROUTES.some((route) => pathname === route || pathname.startsWith(route + "/"));
+
+    // Redirection Status Code: 307 (Temporary during rollout)
+    const redirectStatus = 307;
+
+    if (isBrandDomain) {
+      // Redirect application and auth routes from Brand to Product domain
+      if (isAppPath || isAuthPath) {
+        const targetUrl = new URL(pathname + req.nextUrl.search, isProd ? "https://app.kovari.in" : `http://app.localhost:3000`);
+        return NextResponse.redirect(targetUrl, redirectStatus);
+      }
+    } else if (isProductDomain) {
+      // Root routing on Product domain: if accessing root, redirect to dashboard
+      if (pathname === "/") {
+        const targetUrl = new URL("/dashboard", req.url);
+        return NextResponse.redirect(targetUrl, redirectStatus);
+      }
+
+      // Redirect marketing paths from Product to Brand domain
+      if (isBrandPath && pathname !== "/") {
+        const targetUrl = new URL(pathname + req.nextUrl.search, isProd ? "https://kovari.in" : `http://localhost:3000`);
+        return NextResponse.redirect(targetUrl, redirectStatus);
+      }
+    }
+  }
 
   if (host === "www.kovari.in") {
     const url = req.nextUrl.clone();
@@ -402,7 +492,6 @@ export default async function middleware(req: NextRequest, evt: any) {
     form-action 'self';
   `.replace(/\s{2,}/g, " ").trim();
 
-  const pathname = req.nextUrl.pathname;
 
   // Inject nonce, CSP, and pathname to request headers
   req.headers.set("x-nonce", nonce);
@@ -480,8 +569,10 @@ export default async function middleware(req: NextRequest, evt: any) {
     res.headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
     res.headers.set("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
 
-    // Preview deployments: allow access but prevent indexing
-    if (host.endsWith(".vercel.app") && process.env.VERCEL_ENV === "preview") {
+    const cleanHost = host.toLowerCase().split(":")[0];
+    const isProductDomain = cleanHost === "app.kovari.in" || cleanHost.startsWith("app.localhost");
+    // Preview deployments & Product subdomain: allow access but prevent indexing
+    if (isProductDomain || (host.endsWith(".vercel.app") && process.env.VERCEL_ENV === "preview")) {
       res.headers.set("X-Robots-Tag", "noindex, nofollow");
     }
   }

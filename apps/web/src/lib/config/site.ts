@@ -27,10 +27,11 @@ export function absoluteUrl(path: string = "/"): string {
   return `${SITE_URL}${path.startsWith("/") ? path : `/${path}`}`;
 }
 
-/** Production app URL for emails and deep links — always kovari.in in prod. */
+/** Production app URL for emails and deep links — always app.kovari.in in prod. */
 export function getProductionAppUrl(): string {
   if (process.env.NODE_ENV === "development") {
-    return process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+    return process.env.NEXT_PUBLIC_APP_URL || "http://app.localhost:3000";
   }
-  return SITE_URL;
+  return "https://app.kovari.in";
 }
+
