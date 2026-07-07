@@ -65,7 +65,8 @@ export class AnalyticsService {
       let query = supabaseAdmin
         .from('users')
         .select('id, email, beta_status, onboarding_completed, isDeleted, last_seen_at, activation_date, clerk_user_id, profiles(email, name, travel_intentions, created_at, username, profile_photo)')
-        .eq('isDeleted', false);
+        .eq('isDeleted', false)
+        .eq('is_internal', false);
 
       if (adminEmailsArr.length > 0) {
         query = query.not('email', 'in', `(${adminEmailsArr.map(e => `"${e}"`).join(',')})`);

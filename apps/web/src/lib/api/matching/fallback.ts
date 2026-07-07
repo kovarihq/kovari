@@ -158,10 +158,16 @@ export async function performSoloDbMatchingFallback(
         clerk_user_id,
         isDeleted,
         banned,
-        ban_expires_at
+        ban_expires_at,
+        is_internal
       )
     ` as any)
-    .eq("users.isDeleted", false)
+    .eq("users.isDeleted", false);
+
+  const isCallerInternal = currentUserRow?.is_internal || false;
+  query = query.eq("users.is_internal", isCallerInternal);
+
+  query = query
     .neq("user_id", currentUserId)
     .not("name", "ilike", "%Audit%") // Exclude audit users
     .not("username", "ilike", "%seed_%") // Exclude seed users
@@ -336,12 +342,22 @@ export async function performGroupDbMatchingFallback(
 ) {
   const supabase = createAdminSupabaseClient();
 
-  // Fetch current user's travel intentions for scoring
-  const { data: currentUserProfile } = await supabase
-    .from("profiles")
-    .select("travel_intentions")
-    .eq("user_id", currentUserId)
-    .single();
+  // Fetch current user's details
+  const [profileRes, userRes] = await Promise.all([
+    supabase
+      .from("profiles")
+      .select("travel_intentions")
+      .eq("user_id", currentUserId)
+      .single(),
+    supabase
+      .from("users")
+      .select("is_internal")
+      .eq("id", currentUserId)
+      .single()
+  ]);
+
+  const currentUserProfile = profileRes.data;
+  const isCallerInternal = userRes.data?.is_internal || false;
 
   const userIntentions: any[] = Array.isArray(currentUserProfile?.travel_intentions)
     ? currentUserProfile.travel_intentions
@@ -401,7 +417,24 @@ export async function performGroupDbMatchingFallback(
 
   if (!groups) return [];
 
-  const results = groups.map((g: any) => {
+  // Filter groups based on internal/public match
+  let filteredGroups = groups;
+  const creatorIds = groups.map((g: any) => g.creator_id).filter(Boolean);
+  if (creatorIds.length > 0) {
+    const { data: internalCreators } = await supabase
+      .from("users")
+      .select("id")
+      .in("id", creatorIds)
+      .eq("is_internal", true);
+    const internalCreatorSet = new Set(internalCreators?.map(u => u.id) || []);
+    
+    filteredGroups = groups.filter((g: any) => {
+      const isCreatorInternal = internalCreatorSet.has(g.creator_id);
+      return isCallerInternal ? isCreatorInternal : !isCreatorInternal;
+    });
+  }
+
+  const results = filteredGroups.map((g: any) => {
     let score = 0.5;
 
     // Boost groups whose destination matches user's travel intentions

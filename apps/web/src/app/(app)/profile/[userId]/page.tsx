@@ -32,20 +32,66 @@ const fetchUserProfile = async (
 ): Promise<UserProfileType | null> => {
   try {
     const supabase = createAdminSupabaseClient();
+    const { userId: clerkUserId } = await auth();
 
+    // 1. Fetch profile and target user details in parallel
+    const [profileRes, targetUserRes] = await Promise.all([
+      supabase
+        .from("profiles")
+        .select(
+          `name, username, age, gender, nationality, bio, languages, profile_photo, job, location, religion, smoking, drinking, personality, food_preference, birthday, verified, interests`,
+        )
+        .eq("user_id", userId)
+        .single(),
+      supabase
+        .from("users")
+        .select("id, is_internal, email")
+        .eq("id", userId)
+        .single()
+    ]);
 
-    // 1. Fetch profile
-    const { data: profileData, error: profileError } = await supabase
-      .from("profiles")
-      .select(
-        `name, username, age, gender, nationality, bio, languages, profile_photo, job, location, religion, smoking, drinking, personality, food_preference, birthday, verified, interests`,
-      )
-      .eq("user_id", userId)
-      .single();
+    const profileData = profileRes.data;
+    const targetUser = targetUserRes.data;
 
-    if (profileError || !profileData) {
-      console.error("[DEBUG] profileError:", profileError);
+    if (profileRes.error || !profileData || targetUserRes.error || !targetUser) {
+      console.error("[DEBUG] profileError or targetUserError:", profileRes.error || targetUserRes.error);
       return null;
+    }
+
+    // 2. Enforce visibility rules for internal accounts
+    if (targetUser.is_internal) {
+      let isCallerAllowed = false;
+      if (clerkUserId) {
+        const { data: currentUserRow } = await supabase
+          .from("users")
+          .select("id, is_internal, email")
+          .eq("clerk_user_id", clerkUserId)
+          .single();
+
+        if (currentUserRow) {
+          const isOwnProfile = currentUserRow.id === userId;
+          const isCallerInternal = currentUserRow.is_internal || false;
+          
+          let isCallerAdmin = false;
+          if (currentUserRow.email) {
+            const { data: adminRow } = await supabase
+              .from("admins")
+              .select("id")
+              .eq("email", currentUserRow.email.toLowerCase())
+              .maybeSingle();
+            isCallerAdmin = !!adminRow;
+          }
+
+          if (isOwnProfile || isCallerInternal || isCallerAdmin) {
+            isCallerAllowed = true;
+          }
+        }
+      }
+
+      if (!isCallerAllowed) {
+        console.warn(`[Profile View Suppressed] Public user tried to view internal profile: ${userId}`);
+        return null;
+      }
     }
 
     const interests = profileData?.interests || [];

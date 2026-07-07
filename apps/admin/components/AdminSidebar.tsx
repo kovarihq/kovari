@@ -19,6 +19,7 @@ import {
   Loader2,
   MessageSquare,
   TrendingUp,
+  Wrench,
 } from "lucide-react";
 import {
   Sidebar,
@@ -101,6 +102,11 @@ const menuItems = [
     title: "Audit Logs",
     url: "/audit",
     icon: FileText,
+  },
+  {
+    title: "Testing",
+    url: "/testing",
+    icon: Wrench,
   },
 ];
 

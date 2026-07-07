@@ -53,31 +53,66 @@ export async function createNotification(
 
     let supabaseId: string | null = null;
     let clerkId: string | null = null;
+    let isRecipientInternal = false;
+
+    const supabaseAdmin = createAdminSupabaseClient();
 
     if (isUuid) {
       supabaseId = userId;
-      const supabaseAdmin = createAdminSupabaseClient();
       // Fetch clerk_id for push/socket logic that might need it
       const { data: userRow } = await supabaseAdmin
         .from("users")
-        .select("clerk_user_id")
+        .select("clerk_user_id, is_internal")
         .eq("id", userId)
         .single();
       clerkId = userRow?.clerk_user_id || null;
+      isRecipientInternal = userRow?.is_internal || false;
     } else {
       clerkId = userId;
-      const supabaseAdmin = createAdminSupabaseClient();
       const { data: userRow } = await supabaseAdmin
         .from("users")
-        .select("id")
+        .select("id, is_internal")
         .eq("clerk_user_id", userId)
         .single();
       supabaseId = userRow?.id || null;
+      isRecipientInternal = userRow?.is_internal || false;
     }
 
     if (!supabaseId) {
       console.error("[Notification] Could not resolve user:", userId);
       return { success: false, error: "User not found" };
+    }
+
+    // Enforce notification safety & isolation rules
+    const senderId = params.data?.senderId || params.data?.sender_id || params.data?.fromUserId || params.data?.actorId;
+    if (senderId) {
+      const { data: senderRow } = await supabaseAdmin
+        .from("users")
+        .select("is_internal")
+        .eq(senderId.includes("-") ? "id" : "clerk_user_id", senderId)
+        .maybeSingle();
+      
+      const isSenderInternal = senderRow?.is_internal || false;
+
+      // 1. Public recipients cannot receive notifications from internal accounts
+      if (!isRecipientInternal && isSenderInternal) {
+        console.log(`[Notification Suppressed] Blocked notification to public user ${supabaseId} from internal sender ${senderId}`);
+        return { success: false, error: "Recipient unavailable" };
+      }
+    }
+
+    // 2. Internal recipients should not receive non-transactional/discovery notifications (e.g. only chat, groups, and reports allowed)
+    const allowedInternalTypes = [
+      NotificationType.NEW_MESSAGE,
+      NotificationType.GROUP_INVITE_RECEIVED,
+      NotificationType.GROUP_JOIN_APPROVED,
+      NotificationType.GROUP_JOIN_REQUEST_RECEIVED,
+      NotificationType.REPORT_SUBMITTED,
+      NotificationType.MATCH_ACCEPTED
+    ];
+    if (isRecipientInternal && !allowedInternalTypes.includes(type)) {
+      console.log(`[Notification Suppressed] Suppressed discovery notification type ${type} for internal test account ${supabaseId}`);
+      return { success: false, error: "Recipient unavailable" };
     }
 
     const canReceive = await canUserReceiveNotifications(supabaseId);
@@ -87,7 +122,6 @@ export async function createNotification(
     }
 
     // 3. Insert into Database (Source of Truth)
-    const supabaseAdmin = createAdminSupabaseClient();
     const { data: notifData, error } = await supabaseAdmin
       .from("notifications")
       .insert({

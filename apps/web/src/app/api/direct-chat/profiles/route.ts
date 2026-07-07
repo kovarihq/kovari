@@ -20,6 +20,10 @@ export async function POST(req: NextRequest) {
 
     const supabase = createAdminSupabaseClient();
 
+    // Get caller's internal status
+    const { data: callerUser } = await supabase.from("users").select("is_internal").eq("clerk_user_id", clerkUserId).single();
+    const isCallerInternal = callerUser?.is_internal || false;
+
     // 1. Separate inputs into Clerk IDs ('user_...') and UUIDs
     const clerkIds = userIds.filter(id => id.startsWith("user_"));
     const uuids = userIds.filter(id => !id.startsWith("user_"));
@@ -34,10 +38,16 @@ export async function POST(req: NextRequest) {
       if (uuids.length > 0) {
         conditions.push(`id.in.(${uuids.join(",")})`);
       }
-      const { data, error } = await supabase
+      
+      let userQuery = supabase
         .from("users")
-        .select("id, clerk_user_id")
-        .or(conditions.join(","));
+        .select("id, clerk_user_id");
+      
+      if (!isCallerInternal) {
+        userQuery = userQuery.eq("is_internal", false);
+      }
+
+      const { data, error } = await userQuery.or(conditions.join(","));
       
       if (error) {
         console.error("Profiles lookup DB error mapping users:", error);

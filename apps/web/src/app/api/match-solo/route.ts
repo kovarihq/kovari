@@ -206,6 +206,36 @@ async function filterInteractedMatches(userId: string, matches: any[]) {
   if (!matches || matches.length === 0) return [];
   const supabase = createRouteHandlerSupabaseClientWithServiceRole();
   
+  // Get caller's internal status
+  const { data: callerUser } = await supabase.from("users").select("is_internal").eq("id", userId).single();
+  const isCallerInternal = callerUser?.is_internal || false;
+
+  // Find match user IDs
+  const matchUserIds = matches.map(m => m.userId || m.id).filter(Boolean);
+  const internalUserSet = new Set<string>();
+
+  if (matchUserIds.length > 0) {
+    const uuidCandidates = matchUserIds.filter(id => id.includes("-"));
+    const clerkCandidates = matchUserIds.filter(id => !id.includes("-"));
+    const conditions = [];
+    if (uuidCandidates.length > 0) conditions.push(`id.in.(${uuidCandidates.join(",")})`);
+    if (clerkCandidates.length > 0) conditions.push(`clerk_user_id.in.(${clerkCandidates.join(",")})`);
+
+    if (conditions.length > 0) {
+      const { data: matchedUsers } = await supabase
+        .from("users")
+        .select("id, clerk_user_id, is_internal")
+        .or(conditions.join(","));
+      
+      matchedUsers?.forEach(u => {
+        if (isCallerInternal ? !u.is_internal : u.is_internal) {
+          internalUserSet.add(u.id);
+          if (u.clerk_user_id) internalUserSet.add(u.clerk_user_id);
+        }
+      });
+    }
+  }
+
   // Get users I blocked
   const { data: iBlocked } = await supabase.from("blocked_users").select("blocked_id").eq("blocker_id", userId);
   
@@ -270,6 +300,7 @@ async function filterInteractedMatches(userId: string, matches: any[]) {
     const id = m.userId || m.id;
     if (!id) return true;
     if (bannedUuidSet.has(id) || bannedClerkSet.has(id)) return false;
+    if (internalUserSet.has(id)) return false;
     return !excludeUuidSet.has(id) && !clerkIds.has(id);
   });
 }

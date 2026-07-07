@@ -60,6 +60,7 @@ export default function App({
   const { user, isSignedIn, isLoaded } = useUser();
   const { signOut } = useClerk();
   const [profilePhotoUrl, setProfilePhotoUrl] = useState<string | null>(null);
+  const [isInternal, setIsInternal] = useState(false);
   const [profilePhotoLoading, setProfilePhotoLoading] = useState(false);
   const [profilePhotoError, setProfilePhotoError] = useState<string | null>(
     null,
@@ -80,10 +81,11 @@ export default function App({
         // First, get the user's row in the users table by clerk_user_id
         const { data: userRow, error: userError } = await supabase
           .from("users")
-          .select("id")
+          .select("id, is_internal")
           .eq("clerk_user_id", user.id)
           .maybeSingle();
         if (userError) throw userError;
+        setIsInternal(userRow?.is_internal || false);
         if (!userRow?.id) {
           setProfilePhotoUrl(null);
           setProfilePhotoLoading(false);
@@ -288,7 +290,7 @@ export default function App({
         )} */}
 
         {/* Logo */}
-        <NavbarBrand className="flex items-center">
+        <NavbarBrand className="flex items-center gap-2">
           <Link
             href="/"
             className="!opacity-100 flex items-center"
@@ -311,6 +313,11 @@ export default function App({
               priority
             />
           </Link>
+          {isInternal && (
+            <span className="text-[10px] font-bold tracking-widest bg-yellow-500/20 text-yellow-500 border border-yellow-500/30 px-2 py-0.5 rounded-full uppercase select-none animate-pulse">
+              Test Mode
+            </span>
+          )}
         </NavbarBrand>
 
         <NavbarContent as="div" justify="end">

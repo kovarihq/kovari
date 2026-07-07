@@ -311,6 +311,25 @@ async function filterInteractedGroups(userId: string, groups: any[]) {
   if (!groups || groups.length === 0) return [];
   const supabase = createRouteHandlerSupabaseClientWithServiceRole();
   
+  // Get caller's internal status
+  const { data: callerUser } = await supabase.from("users").select("is_internal").eq("id", userId).single();
+  const isCallerInternal = callerUser?.is_internal || false;
+
+  const creatorIds = groups.map(g => g.creatorId || g.creator_id || g.creator?.userId).filter(Boolean);
+  const internalCreatorSet = new Set<string>();
+
+  if (creatorIds.length > 0) {
+    const { data: creators } = await supabase
+      .from("users")
+      .select("id, is_internal")
+      .in("id", creatorIds);
+    creators?.forEach(u => {
+      if (isCallerInternal ? !u.is_internal : u.is_internal) {
+        internalCreatorSet.add(u.id);
+      }
+    });
+  }
+
   // Get users I blocked
   const { data: iBlocked } = await supabase.from("blocked_users").select("blocked_id").eq("blocker_id", userId);
   
@@ -340,6 +359,7 @@ async function filterInteractedGroups(userId: string, groups: any[]) {
     const groupId = g.id || g.groupId;
     
     if (creatorId && blockedUserSet.has(creatorId)) return false;
+    if (creatorId && internalCreatorSet.has(creatorId)) return false;
     if (groupId && excludeGroupSet.has(groupId)) return false;
     
     return true;

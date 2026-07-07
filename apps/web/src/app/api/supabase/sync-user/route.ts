@@ -3,6 +3,8 @@ import { createClient } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";
 import * as Sentry from "@sentry/nextjs";
 import { logPerformanceMetric, logInvocation } from "@/lib/observability/performance";
+import { INTERNAL_TEST_USERS } from "@/../../packages/config/internal-test-users";
+
 
 function maskEmail(email: string): string {
   if (!email) return "";
@@ -106,24 +108,33 @@ async function _POST() {
     }
 
     // Always activate users so they can access Kovari and be correctly counted in the analytics dashboard
+    const emailLower = email.toLowerCase().trim();
+    const testUser = INTERNAL_TEST_USERS.find(
+      (u) => u.email.toLowerCase() === emailLower || u.prodEmail.toLowerCase() === emailLower
+    );
+
+    const updatePayload: any = {
+      last_seen_at: new Date().toISOString()
+    };
+
     if (user.beta_status !== "activated") {
-      const { error: userUpdateError } = await supabase
-        .from("users")
-        .update({
-          beta_status: "activated",
-          activation_date: user.activation_date || new Date().toISOString()
-        })
-        .eq("id", userIdFromRpc);
-      if (userUpdateError) {
-        console.error("[SYNC-USER] Failed to update user beta status:", userUpdateError);
-      }
+      updatePayload.beta_status = "activated";
+      updatePayload.activation_date = user.activation_date || new Date().toISOString();
     }
 
-    // Always update last_seen_at to track user activity
-    await supabase
+    if (testUser) {
+      updatePayload.account_type = "INTERNAL";
+      updatePayload.test_role = testUser.role;
+    }
+
+    const { error: userUpdateError } = await supabase
       .from("users")
-      .update({ last_seen_at: new Date().toISOString() })
+      .update(updatePayload)
       .eq("id", userIdFromRpc);
+
+    if (userUpdateError) {
+      console.error("[SYNC-USER] Failed to update user details:", userUpdateError);
+    }
 
     if (user.isDeleted === true) {
       return NextResponse.json({ error: "Account has been deleted" }, { status: 403 });

@@ -32,10 +32,11 @@ export async function GET(request: NextRequest) {
     if (!authUser) return formatErrorResponse("Unauthorized", ApiErrorCode.UNAUTHORIZED, requestId, 401);
 
     const email = authUser.email;
-    const { data: dbUser } = await supabase.from("users").select("id").eq("email", email).single();
+    const { data: dbUser } = await supabase.from("users").select("id, is_internal").eq("email", email).single();
     if (!dbUser) return formatErrorResponse("User not found", ApiErrorCode.NOT_FOUND, requestId, 404);
 
     const userId = dbUser.id;
+    const isCallerInternal = dbUser.is_internal || false;
     const { searchParams } = new URL(request.url);
     const params = Object.fromEntries(searchParams.entries());
 
@@ -73,13 +74,42 @@ export async function GET(request: NextRequest) {
               return result.ok ? result.data : null;
             }).filter(Boolean);
 
+            let filteredMatches = transformed;
+            if (transformed.length > 0) {
+              const matchUserIds = transformed.map((m: any) => m?.userId || m?.id).filter(Boolean);
+              const uuidCandidates = matchUserIds.filter(id => id.includes("-"));
+              const clerkCandidates = matchUserIds.filter(id => !id.includes("-"));
+              const conditions = [];
+              if (uuidCandidates.length > 0) conditions.push(`id.in.(${uuidCandidates.join(",")})`);
+              if (clerkCandidates.length > 0) conditions.push(`clerk_user_id.in.(${clerkCandidates.join(",")})`);
+
+              if (conditions.length > 0) {
+                const { data: matchedUsers } = await supabase
+                  .from("users")
+                  .select("id, clerk_user_id, is_internal")
+                  .or(conditions.join(","));
+                
+                const internalUserSet = new Set<string>();
+                matchedUsers?.forEach(u => {
+                  if (isCallerInternal ? !u.is_internal : u.is_internal) {
+                    internalUserSet.add(u.id);
+                    if (u.clerk_user_id) internalUserSet.add(u.clerk_user_id);
+                  }
+                });
+                filteredMatches = transformed.filter((m: any) => {
+                  const id = m?.userId || m?.id;
+                  return !id || !internalUserSet.has(id);
+                });
+              }
+            }
+
             return formatStandardResponse(
-              { matches: transformed },
+              { matches: filteredMatches },
               { 
                 source: "go",
                 contractState: state,
-                filtered: droppedCount > 0,
-                droppedCount
+                filtered: droppedCount > 0 || filteredMatches.length < transformed.length,
+                droppedCount: droppedCount + (transformed.length - filteredMatches.length)
               },
               { requestId, latencyMs: Date.now() - start }
             );

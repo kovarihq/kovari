@@ -35,10 +35,11 @@ export async function POST(req: NextRequest) {
     const { userId: _, ...payloadContext } = body; // Strip body userId
 
     const email = authUser.email;
-    const { data: dbUser } = await supabase.from("users").select("id").eq("email", email).single();
+    const { data: dbUser } = await supabase.from("users").select("id, is_internal").eq("email", email).single();
     if (!dbUser) return formatErrorResponse("User not found", ApiErrorCode.NOT_FOUND, requestId, 404);
 
     const userId = dbUser.id;
+    const isCallerInternal = dbUser.is_internal || false;
 
     // 3. Try Go Service (ML Scoring)
     const isGoConfigured = !!process.env.GO_SERVICE_URL && !GO_URL.includes("localhost");
@@ -74,13 +75,32 @@ export async function POST(req: NextRequest) {
               return result.ok ? result.data : null;
             }).filter(Boolean);
 
+            let filteredGroups = transformed;
+            if (transformed.length > 0) {
+              const creatorIds = transformed.map((g: any) => g?.creatorId || g?.creator_id || g?.creator?.userId).filter(Boolean);
+              if (creatorIds.length > 0) {
+                const { data: creators } = await supabase
+                  .from("users")
+                  .select("id, is_internal")
+                  .in("id", creatorIds);
+                
+                const internalCreatorSet = new Set(creators?.filter(u => u.is_internal).map(u => u.id) || []);
+                filteredGroups = transformed.filter((g: any) => {
+                  const cid = g?.creatorId || g?.creator_id || g?.creator?.userId;
+                  if (!cid) return true;
+                  const isCreatorInternal = internalCreatorSet.has(cid);
+                  return isCallerInternal ? isCreatorInternal : !isCreatorInternal;
+                });
+              }
+            }
+
             return formatStandardResponse(
-              { groups: transformed },
+              { groups: filteredGroups },
               { 
                 source: "go",
                 contractState: state,
-                filtered: droppedCount > 0,
-                droppedCount
+                filtered: droppedCount > 0 || filteredGroups.length < transformed.length,
+                droppedCount: droppedCount + (transformed.length - filteredGroups.length)
               },
               { requestId, latencyMs: Date.now() - start }
             );
