@@ -46,6 +46,7 @@ import { createClient } from "@kovari/api/client";
 import Link from "next/link";
 import SidebarMenu from "./sidebar-menu";
 import useTotalUnreadCount from "@/shared/hooks/use-total-unread-count";
+import { getProductionAppUrl } from "@/lib/config/site";
 
 export const AcmeLogo = () => {
   return (
@@ -382,7 +383,9 @@ export default function App({
           ) : (
             <Button
               className="px-6 h-9 bg-primary hover:bg-primary-hover text-background rounded-lg"
-              onClick={() => handleNavigation("/sign-up")}
+              onClick={() => {
+                window.location.href = `${getProductionAppUrl()}/sign-up`;
+              }}
             >
               Sign Up
             </Button>

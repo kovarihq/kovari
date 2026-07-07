@@ -53,6 +53,34 @@ const defaultDescription =
 export async function generateMetadata(): Promise<Metadata> {
   const headersList = await headers();
   const pathname = headersList.get("x-pathname") || "/";
+  const host = headersList.get("host") || "";
+  const cleanHost = host.toLowerCase().split(":")[0];
+  const isProductDomain = cleanHost === "app.kovari.in" || cleanHost.startsWith("app.localhost");
+
+  const canonicalUrl = isProductDomain
+    ? `https://app.kovari.in${pathname}`
+    : absoluteUrl(pathname);
+
+  const robotsConfig = isProductDomain
+    ? {
+        index: false,
+        follow: false,
+        googleBot: {
+          index: false,
+          follow: false,
+        },
+      }
+    : {
+        index: true,
+        follow: true,
+        googleBot: {
+          index: true,
+          follow: true,
+          "max-video-preview": -1,
+          "max-image-preview": "large" as const,
+          "max-snippet": -1,
+        },
+      };
 
   return {
     metadataBase: new URL(SITE_URL),
@@ -77,19 +105,9 @@ export async function generateMetadata(): Promise<Metadata> {
     creator: SITE_NAME,
     publisher: SITE_NAME,
     alternates: {
-      canonical: absoluteUrl(pathname),
+      canonical: canonicalUrl,
     },
-    robots: {
-      index: true,
-      follow: true,
-      googleBot: {
-        index: true,
-        follow: true,
-        "max-video-preview": -1,
-        "max-image-preview": "large",
-        "max-snippet": -1,
-      },
-    },
+    robots: robotsConfig,
     openGraph: {
       type: "website",
       locale: "en_IN",
@@ -122,6 +140,9 @@ export default async function RootLayout({
 }>) {
   const headersList = await headers();
   const nonce = headersList.get("x-nonce") || "";
+  const host = headersList.get("host") || "";
+  const cleanHost = host.toLowerCase().split(":")[0];
+  const isProductDomain = cleanHost === "app.kovari.in" || cleanHost.startsWith("app.localhost");
 
   return (
     <ClerkProvider nonce={nonce}>
@@ -176,9 +197,13 @@ export default async function RootLayout({
         <body
           className={`${inter.variable} ${poppins.variable} ${manrope.variable} font-sans`}
         >
-          <WebAppJsonLd />
-          <OrganizationJsonLd />
-          <WebSiteJsonLd />
+          {!isProductDomain && (
+            <>
+              <WebAppJsonLd />
+              <OrganizationJsonLd />
+              <WebSiteJsonLd />
+            </>
+          )}
           <ThemeProvider
             attribute="class"
             defaultTheme="light"

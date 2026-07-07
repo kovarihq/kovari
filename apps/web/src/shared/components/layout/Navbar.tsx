@@ -31,6 +31,7 @@ import MobileMenuOverlay from "./MobileMenuOverlay";
 import { motion } from "framer-motion";
 import WaitlistModal from "../landing/WaitlistModal";
 import { trackEvent } from "@kovari/utils";
+import { getProductionAppUrl } from "@/lib/config/site";
 
 export const AcmeLogo = () => {
   return (
@@ -317,7 +318,7 @@ export default function App({
             {/* Waitlist launch: Join Waitlist CTA instead of Log In / Avatar */}
             {showWaitlistNavbar ? (
               <>
-                <Link href="/sign-in" className="hidden sm:flex">
+                <Link href={`${getProductionAppUrl()}/sign-in`} className="hidden sm:flex">
                   <Button
                     className="px-4 h-9 rounded-full font-medium text-foreground hover:text-foreground bg-transparent hover:bg-transparent"
                   >
@@ -415,7 +416,7 @@ export default function App({
                     </DropdownMenu>
                   ) : (
                     <div className="flex gap-x-2">
-                      <Link href="/sign-in">
+                      <Link href={`${getProductionAppUrl()}/sign-in`}>
                         <Button
                           variant="ghost"
                           className="hover:bg-secondary hover:text-primary px-4 h-9 rounded-full font-medium"
@@ -423,7 +424,7 @@ export default function App({
                           Log In
                         </Button>
                       </Link>
-                      <Link href="/sign-up">
+                      <Link href={`${getProductionAppUrl()}/sign-up`}>
                         <Button
                           variant="default"
                           className="px-4 h-9 rounded-full font-medium"

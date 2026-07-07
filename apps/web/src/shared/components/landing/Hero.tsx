@@ -4,6 +4,7 @@ import React, { useCallback } from "react";
 import { Button } from "@heroui/react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { getProductionAppUrl } from "@/lib/config/site";
 
 const BUTTON_WIDTH = "w-[170px]";
 const BUTTON_HEIGHT = "h-12";
@@ -36,9 +37,9 @@ export default function Hero({ onJoinWaitlist, waitlistCount }: HeroProps) {
     if (isWaitlistLaunchMode && onJoinWaitlist) {
       onJoinWaitlist();
     } else {
-      router.push("/sign-up");
+      window.location.href = `${getProductionAppUrl()}/sign-up`;
     }
-  }, [isWaitlistLaunchMode, onJoinWaitlist, router]);
+  }, [isWaitlistLaunchMode, onJoinWaitlist]);
 
   const hasCount = waitlistCount !== null;
   const formattedCount = hasCount ? new Intl.NumberFormat().format(waitlistCount) : "50";
@@ -100,7 +101,7 @@ export default function Hero({ onJoinWaitlist, waitlistCount }: HeroProps) {
             )}
             
             <Link
-              href="/sign-in"
+              href={`${getProductionAppUrl()}/sign-in`}
               className="text-xs sm:text-sm text-muted-foreground hover:text-foreground transition-colors font-medium underline underline-offset-4"
             >
               {isWaitlistLaunchMode ? "Already in Closed Beta? Log In" : "Already have an account? Log In"}
