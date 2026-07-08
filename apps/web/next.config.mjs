@@ -9,7 +9,7 @@ const __dirname = path.dirname(__filename);
 const nextConfig = {
   compress: true,
   compiler: {
-    removeConsole: process.env.NODE_ENV === "production",
+    removeConsole: process.env.NODE_ENV === "production" && process.env.KEEP_CONSOLE !== "true",
   },
   async headers() {
     const securityHeaders = [

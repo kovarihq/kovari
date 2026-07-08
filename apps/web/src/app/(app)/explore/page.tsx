@@ -41,6 +41,18 @@ const EXPLORE_TABS = [
 let globalSoloIntentCache: any[] | null = null;
 let globalGroupIntentCache: any[] | null = null;
 
+// Persistent set of IDs the user has swiped this session.
+// Lives at module level so it survives component remounts.
+// Seeded from sessionStorage so it also survives Fast Refresh (HMR) module reloads.
+const _storedSwipes = (() => {
+  try { return JSON.parse(sessionStorage.getItem("_kovari_swiped") || "[]"); } catch { return []; }
+})();
+const globalSwipedIds = new Set<string>(_storedSwipes);
+
+function persistSwipedIds() {
+  try { sessionStorage.setItem("_kovari_swiped", JSON.stringify([...globalSwipedIds])); } catch { /* ignore */ }
+}
+
 const isIntentBased = (search: SearchData, currentFilters?: Filters) => {
   const hasNoDestination = !search.destination || search.destination.trim() === "";
   if (!currentFilters) return hasNoDestination;
@@ -133,8 +145,8 @@ export default function ExplorePage() {
     travelMode: "solo",
   });
 
-  // Filters state
-  const [filters, setFilters] = useState<Filters>({
+  // Filters state separated per tab to prevent cross-contamination
+  const [soloFilters, setSoloFilters] = useState<Filters>({
     ageRange: [18, 65],
     gender: "Any",
     interests: [],
@@ -146,6 +158,24 @@ export default function ExplorePage() {
     nationality: "Any",
     languages: [],
   });
+
+  const [groupFilters, setGroupFilters] = useState<Filters>({
+    ageRange: [18, 65],
+    gender: "Any",
+    interests: [],
+    travelStyle: "Any",
+    budgetRange: [5000, 50000],
+    personality: "Any",
+    smoking: "No",
+    drinking: "No",
+    nationality: "Any",
+    languages: [],
+  });
+
+  const filters = activeTab === 0 ? soloFilters : groupFilters;
+  const setFilters = activeTab === 0 ? setSoloFilters : setGroupFilters;
+
+  const searchCounterRef = useRef(0);
 
   // Update destination when URL changes
   useEffect(() => {
@@ -167,6 +197,15 @@ export default function ExplorePage() {
   const hasInitialized = useRef(false);
   useEffect(() => {
     if (!user?.id) return;
+
+    // Safety guard: reset the session's swiped ID set completely on each mount.
+    // Previously stored data can contain the logged-in user's own IDs (both
+    // Clerk ID and DB UUID), which would filter out ALL results.
+    // The server-side filterInteractedMatches handles permanent skip filtering;
+    // globalSwipedIds is only a client-side supplement to prevent UI flicker
+    // within the current page session.
+    globalSwipedIds.clear();
+    persistSwipedIds();
     
     const initialSearch: SearchData = {
       destination: getPrefilledDestination(), // use URL param if present
@@ -208,18 +247,23 @@ export default function ExplorePage() {
     const globalCache = activeTab === 0 ? globalSoloIntentCache : globalGroupIntentCache;
     const cache = activeTab === 0 ? soloCache.current : groupCache.current;
 
+    let hasCachedResults = false;
     if (isIntent && globalCache && globalCache.length > 0) {
       setMatchedGroups(globalCache);
       setCurrentGroupIndex(0);
-    } else if (cache) {
+      hasCachedResults = true;
+    } else if (cache && cache.results.length > 0) {
       setMatchedGroups(cache.results);
       setCurrentGroupIndex(cache.index);
+      hasCachedResults = true;
     } else {
       setMatchedGroups([]);
       setCurrentGroupIndex(0);
     }
     setSearchError(null);
-    setLastSearchData(null);
+    if (!hasCachedResults) {
+      setLastSearchData(null);
+    }
     setLastFilters(null);
 
     // Trigger fresh fetch for this tab
@@ -235,6 +279,7 @@ export default function ExplorePage() {
   useEffect(() => {
     if (!user?.id) return;
     if (!hasInitialized.current) return;
+    if (lastFilters && filtersEqual(filters, lastFilters)) return;
 
     const delayDebounce = setTimeout(() => {
       const fullSearchData: SearchData = {
@@ -359,6 +404,8 @@ export default function ExplorePage() {
   };
 
   const performSearch = async (fullSearchData: SearchData, overrideFilters?: Filters) => {
+    searchCounterRef.current += 1;
+    const currentSearchId = searchCounterRef.current;
     const activeFilters = overrideFilters || filters;
 
     const isStillCurrent = () => {
@@ -379,9 +426,10 @@ export default function ExplorePage() {
 
     console.log("Starting search with data:", fullSearchData);
     if (isStillCurrent()) {
-      // Only show the loading spinner if we don't have cached results to show directly
+      // Clear lastSearchData unconditionally if we don't have cached results to prevent empty screen flashing
       if (!hasCache) {
         setSearchLoading(true);
+        setLastSearchData(null);
       }
       setSearchError(null);
       
@@ -408,36 +456,7 @@ export default function ExplorePage() {
           throw new Error("Please sign in to search for solo travelers");
         }
 
-        // Step 1: Store enhanced dynamic session (for solo matching)
-        const sessionPayload: any = {
-          userId,
-          destinationName: fullSearchData.destination,
-          budget: fullSearchData.budget,
-          startDate: fullSearchData.startDate.toISOString().split("T")[0],
-          endDate: fullSearchData.endDate.toISOString().split("T")[0],
-          travelMode: fullSearchData.travelMode,
-        };
-
-        if (fullSearchData.destinationDetails) {
-          sessionPayload.destination = {
-            name:
-              fullSearchData.destinationDetails.formatted ||
-              fullSearchData.destination,
-            lat: fullSearchData.destinationDetails.lat,
-            lon: fullSearchData.destinationDetails.lon,
-            city: fullSearchData.destinationDetails.city,
-            country: fullSearchData.destinationDetails.country,
-          };
-        }
-
-        // Step 1: Store session first and wait for it to complete to prevent race conditions in Redis
-        await fetch("/api/session", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(sessionPayload),
-        }).catch((err) => console.warn("Session store failed:", err));
-
-        // Step 2: Fetch solo matches
+        // Fetch solo matches directly without blocking on a separate session write
         const { data: travelers, meta: soloMeta } = await fetchSoloTravelers(
           userId,
           {
@@ -453,9 +472,13 @@ export default function ExplorePage() {
             nationality: activeFilters.nationality,
             dateStart: fullSearchData.startDate,
             dateEnd: fullSearchData.endDate,
-            budgetRange: `${activeFilters.budgetRange[0]}-${activeFilters.budgetRange[1]}`
+            budgetRange: `${activeFilters.budgetRange[0]}-${activeFilters.budgetRange[1]}`,
+            budget: fullSearchData.budget,
+            destinationDetails: fullSearchData.destinationDetails,
           } as any
         );
+
+        if (currentSearchId !== searchCounterRef.current) return;
 
         if (travelers.length > 0 || !soloMeta?.degraded) {
           // Convert lib structure to what ResultsDisplay expects
@@ -477,16 +500,22 @@ export default function ExplorePage() {
             is_solo_match: true,
           }));
 
-          // Cache solo results
-          soloCache.current = { results: soloMatchesAsGroups, index: 0 };
+          // Filter out any users the current session has already swiped,
+          // preventing re-fetched results from showing already-dismissed cards.
+          const freshMatches = soloMatchesAsGroups.filter((m) =>
+            !globalSwipedIds.has(m.id) && !globalSwipedIds.has(m.userId) && !globalSwipedIds.has(m.user?.userId)
+          );
+
+          // Cache solo results (already filtered)
+          soloCache.current = { results: freshMatches, index: 0 };
 
           // If this is an intent-based search, cache in global persistent cache too
           if (isIntent) {
-            globalSoloIntentCache = soloMatchesAsGroups;
+            globalSoloIntentCache = freshMatches;
           }
 
           if (isStillCurrent()) {
-            setMatchedGroups(soloMatchesAsGroups);
+            setMatchedGroups(freshMatches);
             setCurrentGroupIndex(0);
             setLastSearchData(fullSearchData);
             setLastFilters(activeFilters);
@@ -511,6 +540,8 @@ export default function ExplorePage() {
             budgetRange: `${activeFilters.budgetRange[0]}-${activeFilters.budgetRange[1]}`
           } as any
         );
+
+        if (currentSearchId !== searchCounterRef.current) return;
 
         const transformedGroups = groups.map((group) => ({
           ...group, // Preserve everything including flat profile properties
@@ -546,10 +577,12 @@ export default function ExplorePage() {
     } catch (err: any) {
       if (isStillCurrent()) {
         setSearchError(err.message || "Unknown error");
+        // Clear lastSearchData so we don't display the empty feed message
+        setLastSearchData(null);
       }
       console.error("Search error:", err);
     } finally {
-      if (isStillCurrent()) {
+      if (isStillCurrent() && currentSearchId === searchCounterRef.current) {
         setSearchLoading(false);
       }
     }
@@ -559,6 +592,22 @@ export default function ExplorePage() {
 
   const handleFilterChange = (key: string, value: any) => {
     setFilters((prev) => ({ ...prev, [key]: value }));
+  };
+
+  const handleResetFilters = () => {
+    const defaultFilters: Filters = {
+      ageRange: [18, 65],
+      gender: "Any",
+      interests: [],
+      travelStyle: "Any",
+      budgetRange: [5000, 50000],
+      personality: "Any",
+      smoking: "No",
+      drinking: "No",
+      nationality: "Any",
+      languages: [],
+    };
+    setFilters(defaultFilters);
   };
 
   // Navigation functions
@@ -580,10 +629,23 @@ export default function ExplorePage() {
 
   // Helper to remove swiped/interacted matches from UI and cache immediately
   const handleRemoveMatchedGroup = useCallback((id: string) => {
+    // Record the swiped ID so future fetches can filter it out.
+    globalSwipedIds.add(id);
+
     setMatchedGroups((prev) => {
-      const filtered = prev.filter((m) => m.id !== id && m.userId !== id && m.user?.userId !== id);
+      const filtered = prev.filter((m) => {
+        const isMatch = m.id === id || m.userId === id || m.user?.userId === id;
+        // When we find the swiped match, also register its partner ID format
+        // (the transformer now gives each user a consistent id/userId pair,
+        // but we register both just in case they differ)
+        if (isMatch && m.userId && m.userId !== id) {
+          globalSwipedIds.add(m.userId);
+        }
+        if (isMatch) persistSwipedIds();
+        return !isMatch;
+      });
       
-      // Update cache refs
+      // Update cache refs so tab-switch restore doesn't replay swiped cards
       if (activeTabRef.current === 0) {
         if (soloCache.current) {
           soloCache.current.results = filtered;
@@ -596,9 +658,25 @@ export default function ExplorePage() {
         globalGroupIntentCache = filtered;
       }
       
+      // Clamp index so we never go out of bounds
+      let nextIndex = currentGroupIndex;
+      if (filtered.length === 0) {
+        nextIndex = 0;
+      } else if (currentGroupIndex >= filtered.length) {
+        nextIndex = Math.max(0, filtered.length - 1);
+      }
+      
+      setCurrentGroupIndex(nextIndex);
+
+      if (activeTabRef.current === 0 && soloCache.current) {
+        soloCache.current.index = nextIndex;
+      } else if (activeTabRef.current === 1 && groupCache.current) {
+        groupCache.current.index = nextIndex;
+      }
+
       return filtered;
     });
-  }, []);
+  }, [currentGroupIndex]);
 
   // Action handlers
   const handleConnect = async (matchId: string) => {
@@ -686,6 +764,7 @@ export default function ExplorePage() {
                     onSearchDataChange={setSearchData}
                     onSearch={handleSearch}
                     onFilterChange={handleFilterChange}
+                    onResetFilters={handleResetFilters}
                     datePickerPortalContainer={datePickerPortalContainer}
                   />
                 </div>
@@ -706,6 +785,7 @@ export default function ExplorePage() {
               onSearchDataChange={setSearchData}
               onSearch={handleSearch}
               onFilterChange={handleFilterChange}
+              onResetFilters={handleResetFilters}
             />
           </div>
 

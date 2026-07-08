@@ -8,6 +8,7 @@
 import React, { useState, useEffect } from "react";
 import { Avatar, AvatarImage } from "@/shared/components/ui/avatar";
 import { UserAvatarFallback } from "@/shared/components/UserAvatarFallback";
+import { useToast } from "@/shared/hooks/use-toast";
 import { Card, CardContent } from "@/shared/components/ui/card";
 import { Badge } from "@/shared/components/ui/badge";
 import {
@@ -118,6 +119,7 @@ export function SoloMatchCard({
   onReport,
   onReportClick,
 }: SoloMatchCardProps) {
+  const { toast } = useToast();
   // Fallback to top-level if user object is nested incorrectly
   const user = {
     ...((match as any) || {}),
@@ -135,11 +137,23 @@ export function SoloMatchCard({
     ? (() => { try { return JSON.parse(travelIntentionsRaw); } catch { return []; } })()
     : (Array.isArray(travelIntentionsRaw) ? travelIntentionsRaw : []);
 
+  const [imageError, setImageError] = useState(false);
+
+  useEffect(() => {
+    setImageError(false);
+    setInterestSent(false);
+    setSkipSent(false);
+  }, [match.id]);
+
   const hasTripDetails = !!(
+    destinationId &&
+    destinationId.trim() !== "" &&
+    destinationId.toLowerCase() !== "global" &&
+    destinationId.toLowerCase() !== "any" &&
     match?.destination &&
     match.destination.trim() !== "" &&
-    match.destination !== "Global" &&
-    match.destination !== "Any"
+    match.destination.toLowerCase() !== "global" &&
+    match.destination.toLowerCase() !== "any"
   );
 
   const isPreferNotToSay = (val?: string) => {
@@ -179,13 +193,15 @@ export function SoloMatchCard({
 
     if (interestSent) return;
 
+    console.log("DEBUG: handleInterested called with match:", match, "user:", user);
     setInterestSent(true);
 
     // 🚀 INSTANT-FIRST: Advance to the next match immediately
     if (onInterested) {
-      onInterested(user.userId || "", destinationId);
+      console.log("DEBUG: Calling onInterested with ID:", match.id || user.userId || "");
+      onInterested(match.id || user.userId || "", destinationId);
     }
-
+ 
     try {
       // Validate required IDs for the background recording
       if (!currentUserId || !user?.userId) {
@@ -195,7 +211,7 @@ export function SoloMatchCard({
         });
         return;
       }
-
+ 
       // Fire and forget the network request in the background
       createSoloInterest(
         currentUserId,
@@ -203,26 +219,36 @@ export function SoloMatchCard({
         destinationId || "Global",
       ).catch((err) => {
         console.error("Background interest sync failed:", err);
+        toast({
+          title: "Connection Failed",
+          description: `Could not connect with ${user.full_name || user.name || "traveler"}. Please check your network.`,
+          variant: "destructive",
+        });
       });
-
+ 
     } catch (error) {
       console.error("Unexpected error in handleInterested:", error);
     }
   };
-
+ 
+  const [skipSent, setSkipSent] = useState(false);
+ 
   const handleSkip = (e?: React.MouseEvent) => {
     // 🛡️ EVENT PROTECTION: prevent bubbling or default behavior
     if (e) {
       e.preventDefault();
       e.stopPropagation();
     }
-
+ 
+    if (skipSent) return;
+    setSkipSent(true);
+ 
     // 🚀 INSTANT-FIRST: Advance to the next match immediately
     // We do this before ANY validation to ensure the UI is always responsive
     if (onSkip) {
-      onSkip(user.userId || "", destinationId);
+      onSkip(match.id || user.userId || "", destinationId);
     }
-
+ 
     try {
       // Validate IDs only for the background recording
       if (!currentUserId || !user?.userId) {
@@ -232,7 +258,7 @@ export function SoloMatchCard({
         });
         return;
       }
-
+ 
       // Fire and forget the network request in the background
       createSkipRecord(
         currentUserId,
@@ -242,7 +268,7 @@ export function SoloMatchCard({
       ).catch((err) => {
         console.error("Background skip sync failed:", err);
       });
-
+ 
     } catch (error) {
       // Catching errors to prevent crashing the UI handler
       console.error("Unexpected error in handleSkip:", error);
@@ -478,11 +504,12 @@ export function SoloMatchCard({
             <div className="flex flex-col">
               {/* Avatar (Centered and correctly sized) */}
                 <div className="w-full max-w-[400px] aspect-[4/3] rounded-2xl overflow-hidden bg-secondary shadow-none border border-border mb-4">
-                  {user.avatar ? (
+                  {user.avatar && !imageError ? (
                     <img
                       src={getFeedImageUrl(user.avatar)}
                       alt={user.full_name || user.name || "Traveler"}
                       className="w-full h-full object-cover cursor-pointer"
+                      onError={() => setImageError(true)}
                     />
                   ) : (
                     <Avatar className="w-full h-full text-lg rounded-2xl text-primary-foreground bg-secondary">
@@ -730,11 +757,12 @@ export function SoloMatchCard({
             {/* Left Column: Avatar, Compatibility, Highlight Tags */}
             <div className="flex flex-col gap-5 w-full md:w-60 shrink-0">
               <div className="w-full aspect-[4/3] md:w-60 md:h-80 md:aspect-auto rounded-2xl overflow-hidden bg-secondary flex items-center justify-center flex-shrink-0 relative shadow-none border border-border">
-                {user.avatar ? (
+                {user.avatar && !imageError ? (
                   <img
                     src={getFeedImageUrl(user.avatar)}
                     alt={user.full_name || user.name || "Traveler"}
                     className="w-full h-full object-cover cursor-pointer"
+                    onError={() => setImageError(true)}
                   />
                 ) : (
                   <Avatar className="w-full h-full text-lg rounded-2xl text-primary-foreground bg-secondary">
@@ -957,6 +985,7 @@ export function SoloMatchCard({
             onClick={handleSkip}
             disabled={isSkipping}
             className="flex-1 h-12 rounded-2xl text-foreground bg-secondary border border-border"
+            aria-label="Skip traveler"
           >
             {isSkipping ? (
               <Loader2 className="w-4 h-4 animate-spin" />
@@ -977,6 +1006,7 @@ export function SoloMatchCard({
             onClick={handleInterested}
             disabled={isInteresting || interestSent}
             className="order-first md:order-none flex-1 h-12 rounded-2xl"
+            aria-label={`Connect with ${user.full_name || user.name || "traveler"}`}
           >
             {isInteresting ? (
               <Loader2 className="w-4 h-4 animate-spin" />

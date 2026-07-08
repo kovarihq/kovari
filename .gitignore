@@ -73,3 +73,6 @@ venv/
 
 # Runs
 /runs
+
+# Compiled Binaries
+*.exe

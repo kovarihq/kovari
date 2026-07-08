@@ -1,3 +1,4 @@
+
 package repository
 
 import (
@@ -6,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os"
 	"strconv"
 	"strings"
 	"sync"
@@ -15,13 +17,19 @@ import (
 	"github.com/kovari/matching-service/internal/models"
 )
 
+type profileCacheEntry struct {
+	profile   *models.StaticAttributes
+	expiresAt time.Time
+}
+
 type SupabaseRepository struct {
-	url         string
-	anonKey     string
-	geoapifyKey string
-	client      *http.Client
-	redis       *RedisRepository
-	geoInFlight sync.Map
+	url          string
+	anonKey      string
+	geoapifyKey  string
+	client       *http.Client
+	redis        *RedisRepository
+	geoInFlight  sync.Map
+	profileCache sync.Map
 }
 
 func NewSupabaseRepository(url, anonKey, geoKey string, redis *RedisRepository) (*SupabaseRepository, error) {
@@ -29,15 +37,38 @@ func NewSupabaseRepository(url, anonKey, geoKey string, redis *RedisRepository) 
 		return nil, fmt.Errorf("Supabase URL and Anon Key are required")
 	}
 	url = strings.TrimSuffix(url, "/")
-	return &SupabaseRepository{
+	r := &SupabaseRepository{
 		url:         url,
 		anonKey:     anonKey,
 		geoapifyKey: geoKey,
 		redis:       redis,
 		client: &http.Client{
 			Timeout: 10 * time.Second,
+			Transport: &http.Transport{
+				MaxIdleConns:        100,
+				MaxIdleConnsPerHost: 100,
+				IdleConnTimeout:     90 * time.Second,
+				TLSHandshakeTimeout: 5 * time.Second,
+			},
 		},
-	}, nil
+	}
+
+	// Active eviction background cleanup to prevent memory leaks from stale cached profiles
+	go func() {
+		ticker := time.NewTicker(5 * time.Minute)
+		for range ticker.C {
+			now := time.Now()
+			r.profileCache.Range(func(key, value interface{}) bool {
+				entry, ok := value.(profileCacheEntry)
+				if ok && now.After(entry.expiresAt) {
+					r.profileCache.Delete(key)
+				}
+				return true
+			})
+		}
+	}()
+
+	return r, nil
 }
 
 func (r *SupabaseRepository) GeocodeGeoapify(ctx context.Context, raw string) (float64, float64, bool) {
@@ -176,16 +207,53 @@ type profileResponse struct {
 	Longitude      *float64    `json:"longitude"`
 }
 
-func (r *SupabaseRepository) FetchProfilesBatch(ctx context.Context, clerkUserIds []string, preResolved map[string]models.Coordinates) (map[string]*models.StaticAttributes, error) {
+func (r *SupabaseRepository) FetchProfilesBatch(ctx context.Context, requesterId string, clerkUserIds []string, preResolved map[string]models.Coordinates) (map[string]*models.StaticAttributes, error) {
 	if len(clerkUserIds) == 0 {
 		return make(map[string]*models.StaticAttributes), nil
 	}
 
-	t1 := time.Now()
+	results := make(map[string]*models.StaticAttributes)
+	var uncachedIds []string
+
+	now := time.Now()
+	for _, id := range clerkUserIds {
+		// Bypass cache read for active requester to guarantee profile freshness
+		if requesterId != "" && id == requesterId {
+			uncachedIds = append(uncachedIds, id)
+			continue
+		}
+
+		// Bypass cache read if profile cache is explicitly disabled via env
+		if os.Getenv("DISABLE_PROFILE_CACHE") == "true" {
+			uncachedIds = append(uncachedIds, id)
+			continue
+		}
+
+		if val, ok := r.profileCache.Load(id); ok {
+			entry := val.(profileCacheEntry)
+			if now.Before(entry.expiresAt) {
+				results[id] = entry.profile
+				if entry.profile.ClerkUserId != "" {
+					results[entry.profile.ClerkUserId] = entry.profile
+				}
+				if entry.profile.UserID != "" {
+					results[entry.profile.UserID] = entry.profile
+				}
+				continue
+			} else {
+				r.profileCache.Delete(id)
+			}
+		}
+		uncachedIds = append(uncachedIds, id)
+	}
+
+	if len(uncachedIds) == 0 {
+		return results, nil
+	}
 
 	var uuidList []string
 	var clerkIdList []string
-	for _, id := range clerkUserIds {
+	for _, id := range uncachedIds {
 		if len(id) == 36 && strings.Count(id, "-") == 4 {
 			uuidList = append(uuidList, id)
 		} else {
@@ -273,7 +341,7 @@ func (r *SupabaseRepository) FetchProfilesBatch(ctx context.Context, clerkUserId
 
 	g.Wait()
 
-	results := make(map[string]*models.StaticAttributes)
+	// Populate fetched profiles into the results map
 	for _, raw := range rawProfiles {
 		p := raw.profileResponse
 		clerkID := raw.Users.ClerkUserId
@@ -367,7 +435,20 @@ func (r *SupabaseRepository) FetchProfilesBatch(ctx context.Context, clerkUserId
 		}
 	}
 
-	log.Printf("TIMER: FetchProfilesBatch TOTAL took: %v", time.Since(t1))
+	// Cache the newly fetched profiles with a 10-minute TTL for production efficiency
+	expiresAt := time.Now().Add(10 * time.Minute)
+	for _, attr := range results {
+		entry := profileCacheEntry{
+			profile:   attr,
+			expiresAt: expiresAt,
+		}
+		if attr.ClerkUserId != "" {
+			r.profileCache.Store(attr.ClerkUserId, entry)
+		}
+		if attr.UserID != "" {
+			r.profileCache.Store(attr.UserID, entry)
+		}
+	}
 
 	return results, nil
 }

@@ -17,12 +17,7 @@ func parseDate(s string) time.Time {
 	return time.Time{}
 }
 
-func CalculateDateOverlapSolo(start1, end1, start2, end2 string) (float64, float64) {
-	s1 := parseDate(start1)
-	e1 := parseDate(end1)
-	s2 := parseDate(start2)
-	e2 := parseDate(end2)
-
+func CalculateDateOverlapSolo(s1, e1, s2, e2 time.Time) (float64, float64) {
 	if s1.IsZero() || e1.IsZero() || s2.IsZero() || e2.IsZero() {
 		return 0, 0
 	}
@@ -79,8 +74,21 @@ func CalculateDateOverlapGroup(start1, end1, start2, end2 string) (float64, floa
 	return math.Max(0, overlapDays), math.Max(1, tripDuration)
 }
 
+// Pre-allocated globals for personality and religion scoring to prevent hot-path heap allocations
+var religionNeutral = []string{"agnostic", "atheist", "prefer_not_to_say", "prefer not to say", "none", "unknown", "any", "unspecified"}
+
+var personalityScores = map[string]map[string]float64{
+	"introvert": {"introvert": 1.0, "ambivert": 0.7, "extrovert": 0.4},
+	"ambivert":  {"introvert": 0.7, "ambivert": 1.0, "extrovert": 0.7},
+	"extrovert": {"introvert": 0.4, "ambivert": 0.7, "extrovert": 1.0},
+}
+
 func getInterestWeight(interest string) float64 {
 	clean := strings.ToLower(strings.TrimSpace(interest))
+	return getInterestWeightClean(clean)
+}
+
+func getInterestWeightClean(clean string) float64 {
 	switch clean {
 	// Outdoor Adventure (Weight: 1.5)
 	case "himalayan treks", "camping & stargazing", "river rafting", "skiing & snow", "wildlife & safaris", "beach bumming", "scuba & snorkeling", "island hopping":
@@ -95,6 +103,56 @@ func getInterestWeight(interest string) float64 {
 	default:
 		return 1.0
 	}
+}
+
+func CalculateJaccardSimilarityOptimized(setA, setB map[string]bool) float64 {
+	if len(setA) == 0 || len(setB) == 0 {
+		return 0.5
+	}
+
+	intersectionWeight := 0.0
+	unionWeight := 0.0
+
+	// Calculate weighted intersection
+	for k := range setA {
+		if setB[k] {
+			intersectionWeight += getInterestWeightClean(k)
+		}
+	}
+
+	if intersectionWeight == 0 {
+		return 0.1
+	}
+
+	// Calculate weighted union
+	for k := range setA {
+		unionWeight += getInterestWeightClean(k)
+	}
+	for k := range setB {
+		if !setA[k] {
+			unionWeight += getInterestWeightClean(k)
+		}
+	}
+
+	jaccard := intersectionWeight / unionWeight
+
+	// Calculate weighted overlap coefficient
+	lenAWeight := 0.0
+	for k := range setA {
+		lenAWeight += getInterestWeightClean(k)
+	}
+	lenBWeight := 0.0
+	for k := range setB {
+		lenBWeight += getInterestWeightClean(k)
+	}
+	minWeight := lenAWeight
+	if lenBWeight < minWeight {
+		minWeight = lenBWeight
+	}
+	overlap := intersectionWeight / minWeight
+
+	// Hybrid approach: (Overlap + Jaccard) / 2
+	return (jaccard + overlap) / 2
 }
 
 func CalculateJaccardSimilarity(a, b []string) float64 {
@@ -117,47 +175,5 @@ func CalculateJaccardSimilarity(a, b []string) float64 {
 		}
 	}
 
-	intersectionWeight := 0.0
-	unionWeight := 0.0
-
-	// Calculate weighted intersection
-	for k := range setA {
-		if setB[k] {
-			intersectionWeight += getInterestWeight(k)
-		}
-	}
-
-	if intersectionWeight == 0 {
-		return 0.1
-	}
-
-	// Calculate weighted union
-	for k := range setA {
-		unionWeight += getInterestWeight(k)
-	}
-	for k := range setB {
-		if !setA[k] {
-			unionWeight += getInterestWeight(k)
-		}
-	}
-
-	jaccard := intersectionWeight / unionWeight
-
-	// Calculate weighted overlap coefficient
-	lenAWeight := 0.0
-	for k := range setA {
-		lenAWeight += getInterestWeight(k)
-	}
-	lenBWeight := 0.0
-	for k := range setB {
-		lenBWeight += getInterestWeight(k)
-	}
-	minWeight := lenAWeight
-	if lenBWeight < minWeight {
-		minWeight = lenBWeight
-	}
-	overlap := intersectionWeight / minWeight
-
-	// Hybrid approach: (Overlap + Jaccard) / 2
-	return (jaccard + overlap) / 2
+	return CalculateJaccardSimilarityOptimized(setA, setB)
 }
