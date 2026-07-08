@@ -78,12 +78,33 @@ func (r *SupabaseRepository) FilterBannedUserIds(ctx context.Context, ids []stri
 		return allowed, nil
 	}
 
-	idsParam := fmt.Sprintf("(\"%s\")", strings.Join(ids, "\",\""))
+	// Separate UUIDs and Clerk IDs
+	var uuids []string
+	var clerkIds []string
+	for _, id := range ids {
+		if strings.Contains(id, "-") && len(id) == 36 {
+			uuids = append(uuids, id)
+		} else {
+			clerkIds = append(clerkIds, id)
+		}
+	}
+
+	var conditions []string
+	if len(uuids) > 0 {
+		conditions = append(conditions, fmt.Sprintf("id.in.(%s)", strings.Join(uuids, ",")))
+	}
+	if len(clerkIds) > 0 {
+		conditions = append(conditions, fmt.Sprintf("clerk_user_id.in.(%s)", strings.Join(clerkIds, ",")))
+	}
+
+	if len(conditions) == 0 {
+		return allowed, nil
+	}
+
 	url := fmt.Sprintf(
-		"%s/rest/v1/users?select=id,clerk_user_id,banned,ban_expires_at&or=(id.in.%s,clerk_user_id.in.%s)",
+		"%s/rest/v1/users?select=id,clerk_user_id,banned,ban_expires_at&or=(%s)",
 		r.url,
-		idsParam,
-		idsParam,
+		strings.Join(conditions, ","),
 	)
 
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
@@ -100,13 +121,14 @@ func (r *SupabaseRepository) FilterBannedUserIds(ctx context.Context, ids []stri
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return allowed, nil
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("ban status fetch failed: status=%d body=%s", resp.StatusCode, string(body))
 	}
 
 	var rows []struct {
-		ID          string  `json:"id"`
-		ClerkUserID *string `json:"clerk_user_id"`
-		Banned      bool    `json:"banned"`
+		ID           string  `json:"id"`
+		ClerkUserID  *string `json:"clerk_user_id"`
+		Banned       bool    `json:"banned"`
 		BanExpiresAt *string `json:"ban_expires_at"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&rows); err != nil {

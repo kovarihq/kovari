@@ -1,6 +1,7 @@
 package main
 
 import (
+	"compress/gzip"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -10,6 +11,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strconv"
 	"sort"
 	"strings"
 	"syscall"
@@ -33,6 +35,29 @@ var (
 	sbRepo   *repository.SupabaseRepository
 	repo     *repository.RedisRepository
 )
+
+type gzipResponseWriter struct {
+	io.Writer
+	http.ResponseWriter
+}
+
+func (w gzipResponseWriter) Write(b []byte) (int, error) {
+	return w.Writer.Write(b)
+}
+
+func GzipMiddleware(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if !strings.Contains(r.Header.Get("Accept-Encoding"), "gzip") {
+			next(w, r)
+			return
+		}
+		w.Header().Set("Content-Encoding", "gzip")
+		gz := gzip.NewWriter(w)
+		defer gz.Close()
+		gzw := gzipResponseWriter{Writer: gz, ResponseWriter: w}
+		next(gzw, r)
+	}
+}
 
 func main() {
 	// Root and app-level env loading
@@ -152,7 +177,10 @@ func main() {
 		}
 
 		r.Body = http.MaxBytesReader(w, r.Body, 1<<20) // 1MB limit
-		var req struct{}
+		var req struct {
+			UserId  string                 `json:"userId"`
+			Context map[string]interface{} `json:"context"`
+		}
 		dec := json.NewDecoder(r.Body)
 		dec.DisallowUnknownFields()
 		if err := dec.Decode(&req); err != nil && err != io.EOF {
@@ -178,33 +206,27 @@ func main() {
 		defer redisCancel()
 		
 		g, gCtx := errgroup.WithContext(redisCtx)
-		tRedisStart := time.Now()
 		
 		g.Go(func() error {
-			t1 := time.Now()
 			var err error
 			userSession, err = repo.GetSession(gCtx, userId)
-			log.Printf("TIMER: Redis GetSession (%s) took: %v", userId, time.Since(t1))
 			return err
 		})
 		
 		g.Go(func() error {
-			t1 := time.Now()
 			var err error
 			candidates, err = repo.FetchAllSessions(gCtx, userId)
-			log.Printf("TIMER: Redis FetchAllSessions took: %v", time.Since(t1))
 			return err
 		})
 
 		if err := g.Wait(); err != nil {
-			log.Printf("Error: Redis fetch failed: %v", err)
+			logger.Error(requestId, userId, "REDIS_FETCH_FAILED", 503, time.Since(startTime), err, nil)
 			auth.SendError(w, 503, "STORAGE_ERROR", "Redis connection failed", r)
 			return
 		}
-		log.Printf("TIMER: Step 1 (Total Redis Parallel) took: %v", time.Since(tRedisStart))
 
 		if userSession == nil {
-			log.Printf("Error: Session for %s not found in Redis", userId)
+			logger.Error(requestId, userId, "SESSION_NOT_FOUND", 404, time.Since(startTime), fmt.Errorf("session not found in Redis"), nil)
 			auth.SendError(w, 404, "NOT_FOUND", "User session not found", r)
 			return
 		}
@@ -234,16 +256,12 @@ func main() {
 			}
 		}
 
-		log.Printf("STEP 2: Hydrating profiles for %d users", len(allUserIds))
-		tHydrateStart := time.Now()
-
-		profiles, err := sbRepo.FetchProfilesBatch(ctx, allUserIds, preResolved)
+		profiles, err := sbRepo.FetchProfilesBatch(ctx, userId, allUserIds, preResolved)
 		if err != nil {
-			log.Printf("Error: Profile hydration failed: %v", err)
+			logger.Error(requestId, userId, "PROFILE_HYDRATION_FAILED", 500, time.Since(startTime), err, nil)
 			auth.SendError(w, 500, "DATABASE_ERROR", "Failed to fetch profiles", r)
 			return
 		}
-		log.Printf("TIMER: Step 2 (Total Profile Hydration) took: %v", time.Since(tHydrateStart))
 
 		// Apply profiles to sessions
 		if p, ok := profiles[userId]; ok {
@@ -290,7 +308,6 @@ func main() {
 
 			// Check requester
 			if sess.Location.Lat != 0 || sess.Location.Lon != 0 {
-				log.Printf("Self-Healing: Checking session %s for coordinate update", reqId)
 				data, _ := json.Marshal(sess)
 				// Use 7 days TTL (parity with Web API default)
 				repo.SetCache(bgCtx, fmt.Sprintf("session:%s", reqId), string(data), 168*time.Hour)
@@ -298,9 +315,17 @@ func main() {
 		}(userId, userSession, validCandidates)
 
 		if userSession.StaticAttributes == nil {
-			log.Printf("Error: Requester %s has no profile in Supabase", userId)
+			logger.Error(requestId, userId, "REQUESTER_PROFILE_MISSING", 400, time.Since(startTime), fmt.Errorf("requester profile missing"), nil)
 			auth.SendError(w, 400, "BAD_REQUEST", "Requester profile missing", r)
 			return
+		}
+
+		// Pre-normalize requester and candidate attributes once before entering hot paths
+		userSession.StaticAttributes.PopulateNormalizedFields()
+		for i := range validCandidates {
+			if validCandidates[i].StaticAttributes != nil {
+				validCandidates[i].StaticAttributes.PopulateNormalizedFields()
+			}
 		}
 
 		// STEP 3: Parallel Logic (ML vs Rule-Based Feature Extraction)
@@ -310,9 +335,6 @@ func main() {
 		}
 
 		var mlResults []models.MLPredictionResult
-		var mlErr error
-		mlUsed := false
-		mlStartTime := time.Now()
 
 		// Cloud environment ML Timeout (1000ms)
 		mlCtx, mlCancel := context.WithTimeout(ctx, 1000*time.Millisecond)
@@ -321,18 +343,12 @@ func main() {
 		mlGroup, _ := errgroup.WithContext(mlCtx)
 		mlGroup.Go(func() error {
 			if len(featuresList) > 0 {
-				mlResults, mlErr = mlClient.ScoreBatch(mlCtx, featuresList)
-				if mlErr == nil {
-					mlUsed = true
-				} else {
-					log.Printf("ML Warning: ML fallback active: %v", mlErr)
-				}
+				mlResults, _ = mlClient.ScoreBatch(mlCtx, featuresList)
 			}
 			return nil
 		})
 
 		mlGroup.Wait()
-		mlLatency := time.Since(mlStartTime)
 
 		// STEP 4: Final Scoring & Blending
 		type ScoredMatch struct {
@@ -345,39 +361,158 @@ func main() {
 			EndDate          string             `json:"endDate"`
 			Budget           float64            `json:"budget"`
 			Destination      string             `json:"destination"`
+			Tier             int                `json:"tier"`
 		}
 
+		var filterDuration time.Duration
+		var scoringDuration time.Duration
+
+		userDestLower := strings.ToLower(userSession.Destination.Name)
+		isRequesterSearchingDest := userSession.Destination.Name != "" && 
+			!strings.EqualFold(userSession.Destination.Name, "Any") && 
+			!strings.EqualFold(userSession.Destination.Name, "Global")
+
+		// Parse explicit query filters
+		reqGender := getStringVal(req.Context, "gender")
+		ageMin := getIntVal(req.Context, "ageMin")
+		ageMax := getIntVal(req.Context, "ageMax")
+		reqSmoking := getStringVal(req.Context, "smoking")
+		reqDrinking := getStringVal(req.Context, "drinking")
+		reqLanguagesStr := getStringVal(req.Context, "languages")
+
+		var reqLanguages []string
+		if reqLanguagesStr != "" {
+			for _, lang := range strings.Split(reqLanguagesStr, ",") {
+				reqLanguages = append(reqLanguages, strings.ToLower(strings.TrimSpace(lang)))
+			}
+		}
+
+		seenCanonicalUserIds := make(map[string]bool)
 		finalMatches := make([]ScoredMatch, 0, len(validCandidates))
 		for i, match := range validCandidates {
+			// Skip if we have already processed this user under a different session ID format
+			if match.StaticAttributes != nil && match.StaticAttributes.UserID != "" {
+				if seenCanonicalUserIds[match.StaticAttributes.UserID] {
+					continue
+				}
+				seenCanonicalUserIds[match.StaticAttributes.UserID] = true
+			}
+
+			tFiltStart := time.Now()
 			var mlScore *float64
 			if mlResults != nil && i < len(mlResults) && mlResults[i].Success {
 				s := mlResults[i].Score
 				mlScore = &s
 			}
 
-			// If the user has a search destination, check compatibility
-			if userSession.Destination.Name != "" && 
-				!strings.EqualFold(userSession.Destination.Name, "Any") && 
-				!strings.EqualFold(userSession.Destination.Name, "Global") {
-				userDestLower := strings.ToLower(userSession.Destination.Name)
+			// Destination Match
+			hasDestinationMatch := true
+			if isRequesterSearchingDest {
 				matchDestLower := strings.ToLower(match.Destination.Name)
-				
 				hasSessionOverlap := matchDestLower != "" && (
 					strings.Contains(matchDestLower, userDestLower) || strings.Contains(userDestLower, matchDestLower))
 				
-				intentionScore := matching.CalculateIntentionOverlapScore(userSession.Destination, match.StaticAttributes.TravelIntentions)
+				intentionScore := matching.CalculateIntentionOverlapScore(userDestLower, match.StaticAttributes.TravelIntentions)
 				hasIntentionOverlap := intentionScore >= 0.8
 
-				log.Printf("[FILTER DEBUG] Requester searching: %q | Candidate: %s (going to %q) | Session overlap: %v | Intention overlap: %v (score: %.2f)", 
-					userSession.Destination.Name, match.StaticAttributes.Name, match.Destination.Name, hasSessionOverlap, hasIntentionOverlap, intentionScore)
+				hasDestinationMatch = hasSessionOverlap || hasIntentionOverlap
+			}
 
-				if !hasSessionOverlap && !hasIntentionOverlap {
-					log.Printf("[FILTER DEBUG] SKIPPING candidate %s (no overlap)", match.StaticAttributes.Name)
-					continue // Filter out candidate
+			// Demographic Filters Matching
+			totalDemographics := 0
+			matchedDemographics := 0
+
+			// Gender
+			if reqGender != "" && !strings.EqualFold(reqGender, "Any") {
+				totalDemographics++
+				if match.StaticAttributes != nil && strings.EqualFold(match.StaticAttributes.Gender, reqGender) {
+					matchedDemographics++
 				}
 			}
 
+			// Age Range
+			if ageMin > 0 || ageMax > 0 {
+				totalDemographics++
+				if match.StaticAttributes != nil {
+					ageOk := true
+					if ageMin > 0 && match.StaticAttributes.Age < ageMin {
+						ageOk = false
+					}
+					if ageMax > 0 && match.StaticAttributes.Age > ageMax {
+						ageOk = false
+					}
+					if ageOk {
+						matchedDemographics++
+					}
+				}
+			}
+
+			// Smoking
+			if reqSmoking != "" && !strings.EqualFold(reqSmoking, "Any") {
+				totalDemographics++
+				if match.StaticAttributes != nil && strings.EqualFold(match.StaticAttributes.Smoking, reqSmoking) {
+					matchedDemographics++
+				}
+			}
+
+			// Drinking
+			if reqDrinking != "" && !strings.EqualFold(reqDrinking, "Any") {
+				totalDemographics++
+				if match.StaticAttributes != nil && strings.EqualFold(match.StaticAttributes.Drinking, reqDrinking) {
+					matchedDemographics++
+				}
+			}
+
+			// Languages
+			if len(reqLanguages) > 0 {
+				totalDemographics++
+				if match.StaticAttributes != nil {
+					langMatch := false
+					for _, matchLang := range match.StaticAttributes.Languages {
+						cleanMatchLang := strings.ToLower(strings.TrimSpace(matchLang))
+						for _, reqLang := range reqLanguages {
+							if cleanMatchLang == reqLang {
+								langMatch = true
+								break
+							}
+						}
+						if langMatch {
+							break
+						}
+					}
+					if langMatch {
+						matchedDemographics++
+					}
+				}
+			}
+
+			// Classify Tiers (Graceful degradation: no candidates are skipped due to destination mismatch)
+			tier := 4
+			if hasDestinationMatch {
+				if totalDemographics == 0 || matchedDemographics == totalDemographics {
+					tier = 1 // Explicit filter match
+				} else {
+					tier = 2 // Partial filter match
+				}
+			} else {
+				if totalDemographics > 0 && matchedDemographics == totalDemographics {
+					tier = 2 // Partial filter match (matches demographics, fails destination)
+				} else if matchedDemographics > 0 {
+					tier = 3 // General Compatibility (some demographic matches, fails destination)
+				} else {
+					tier = 4 // Discovery Recommendation (pure fallback)
+				}
+			}
+
+			filterDuration += time.Since(tFiltStart)
+
+			if match.UserId == userId || (match.StaticAttributes != nil && (match.StaticAttributes.UserID == userId || match.StaticAttributes.ClerkUserId == userId)) {
+				continue
+			}
+
+			tScorStart := time.Now()
 			result := matching.CalculateFinalSoloScore(*userSession, match, mlScore, matchConfig)
+			scoringDuration += time.Since(tScorStart)
 			
 			finalMatches = append(finalMatches, ScoredMatch{
 				UserId: match.UserId,
@@ -414,14 +549,20 @@ func main() {
 					}
 					return userSession.Destination.Name
 				}(),
+				Tier:             tier,
 			})
 		}
-
-		sort.Slice(finalMatches, func(i, j int) bool { return finalMatches[i].Score > finalMatches[j].Score })
+		sort.SliceStable(finalMatches, func(i, j int) bool {
+			if finalMatches[i].Tier != finalMatches[j].Tier {
+				return finalMatches[i].Tier < finalMatches[j].Tier
+			}
+			if finalMatches[i].Score == finalMatches[j].Score {
+				return finalMatches[i].UserId < finalMatches[j].UserId
+			}
+			return finalMatches[i].Score > finalMatches[j].Score
+		})
 
 		latency := time.Since(startTime)
-		log.Printf("[MatchRequest] Requester:%s | Mode:%s | Candidates:%d | ML_USED:%v | ML_LATENCY:%v | Latency:%v",
-			userId, matchConfig.Mode, len(finalMatches), mlUsed, mlLatency, latency)
 
 		w.Header().Set("Content-Type", "application/json")
 		w.Header().Set("X-Response-Time", fmt.Sprintf("%dms", latency.Milliseconds()))
@@ -498,8 +639,8 @@ func main() {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/health", healthHandler)
 	mux.HandleFunc("/ready", readyHandler)
-	mux.HandleFunc("/v1/match/solo", auth.SecurityMiddleware(repo, soloHandler))
-	mux.HandleFunc("/v1/match/group", auth.SecurityMiddleware(repo, groupHandler))
+	mux.HandleFunc("/v1/match/solo", auth.SecurityMiddleware(repo, GzipMiddleware(soloHandler)))
+	mux.HandleFunc("/v1/match/group", auth.SecurityMiddleware(repo, GzipMiddleware(groupHandler)))
 
 	port := os.Getenv("PORT")
 	if port == "" {
@@ -535,4 +676,34 @@ func main() {
 		logger.Fatal("Graceful shutdown failed", err)
 	}
 	logger.Info("", "", "Service stopped clean.", 0, 0, nil)
+}
+
+func getStringVal(m map[string]interface{}, key string) string {
+	if m == nil {
+		return ""
+	}
+	if v, ok := m[key]; ok {
+		if s, ok := v.(string); ok {
+			return s
+		}
+	}
+	return ""
+}
+
+func getIntVal(m map[string]interface{}, key string) int {
+	if m == nil {
+		return 0
+	}
+	if v, ok := m[key]; ok {
+		switch val := v.(type) {
+		case string:
+			i, _ := strconv.Atoi(val)
+			return i
+		case float64:
+			return int(val)
+		case int:
+			return val
+		}
+	}
+	return 0
 }

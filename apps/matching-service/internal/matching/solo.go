@@ -1,9 +1,10 @@
 package matching
 
 import (
-	"fmt"
 	"math"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/kovari/matching-service/internal/models"
 )
@@ -13,7 +14,7 @@ const (
 	LocationMaxDistance  = 1500.0
 )
 
-func CalculateSoloDateOverlapScore(start1, end1, start2, end2 string) float64 {
+func CalculateSoloDateOverlapScore(start1, end1, start2, end2 time.Time) float64 {
 	overlapDays, tripDuration := CalculateDateOverlapSolo(start1, end1, start2, end2)
 	if overlapDays < 1 || tripDuration <= 0 {
 		return 0
@@ -58,12 +59,10 @@ func CalculateDestinationScore(dest1, dest2 models.Destination, maxDistanceKm fl
 	return math.Max(0, 1-distance/maxDistanceKm)
 }
 
-func CalculateLocationOriginScore(loc1, loc2 models.Coordinates, raw1, raw2 string) float64 {
+func CalculateLocationOriginScore(loc1, loc2 models.Coordinates, city1, city2 string) float64 {
 	// If coordinates are missing, fallback to string-based city comparison
 	if loc1.Lat == 0 || loc1.Lon == 0 || loc2.Lat == 0 || loc2.Lon == 0 {
-		if raw1 != "" && raw2 != "" {
-			city1 := strings.Split(strings.ToLower(strings.TrimSpace(raw1)), ",")[0]
-			city2 := strings.Split(strings.ToLower(strings.TrimSpace(raw2)), ",")[0]
+		if city1 != "" && city2 != "" {
 			if city1 == city2 {
 				return 1.0
 			}
@@ -80,12 +79,10 @@ func CalculateLocationOriginScore(loc1, loc2 models.Coordinates, raw1, raw2 stri
 	return 1.0 - math.Min(distance/maxDist, 1.0)
 }
 
-func CalculateLocationOriginScoreEnhanced(loc1, loc2 models.Coordinates, raw1, raw2 string) float64 {
+func CalculateLocationOriginScoreEnhanced(loc1, loc2 models.Coordinates, city1, city2 string) float64 {
 	// If coordinates are missing, fallback to string-based city comparison
 	if loc1.Lat == 0 || loc1.Lon == 0 || loc2.Lat == 0 || loc2.Lon == 0 {
-		if raw1 != "" && raw2 != "" {
-			city1 := strings.Split(strings.ToLower(strings.TrimSpace(raw1)), ",")[0]
-			city2 := strings.Split(strings.ToLower(strings.TrimSpace(raw2)), ",")[0]
+		if city1 != "" && city2 != "" {
 			if city1 == city2 {
 				return 1.0
 			}
@@ -123,16 +120,7 @@ func GetPersonalityCompatibility(p1, p2 string) float64 {
 	if p1 == "" || p2 == "" {
 		return 0.5
 	}
-	p1 = strings.ToLower(p1)
-	p2 = strings.ToLower(p2)
-
-	scores := map[string]map[string]float64{
-		"introvert": {"introvert": 1.0, "ambivert": 0.7, "extrovert": 0.4},
-		"ambivert":  {"introvert": 0.7, "ambivert": 1.0, "extrovert": 0.7},
-		"extrovert": {"introvert": 0.4, "ambivert": 0.7, "extrovert": 1.0},
-	}
-
-	if s, ok := scores[p1]; ok {
+	if s, ok := personalityScores[p1]; ok {
 		if v, ok := s[p2]; ok {
 			return v
 		}
@@ -140,10 +128,7 @@ func GetPersonalityCompatibility(p1, p2 string) float64 {
 	return 0
 }
 
-func CalculateReligionScore(rel1, rel2 string, enhanced bool) float64 {
-	r1 := strings.ToLower(strings.TrimSpace(rel1))
-	r2 := strings.ToLower(strings.TrimSpace(rel2))
-	
+func CalculateReligionScore(r1, r2 string, enhanced bool) float64 {
 	if r1 == "" || r2 == "" {
 		return 0.5
 	}
@@ -151,8 +136,7 @@ func CalculateReligionScore(rel1, rel2 string, enhanced bool) float64 {
 		return 1.0
 	}
 
-	neutral := []string{"agnostic", "atheist", "prefer_not_to_say", "prefer not to say", "none", "unknown", "any", "unspecified"}
-	for _, n := range neutral {
+	for _, n := range religionNeutral {
 		if r1 == n || r2 == n {
 			return 0.5
 		}
@@ -183,26 +167,25 @@ func CalculateAgeScore(age1, age2 int) float64 {
 
 func CalculateLifestyleScore(smoke1, drink1, smoke2, drink2 string) float64 {
 	smoke := 0.5
-	if strings.EqualFold(smoke1, smoke2) {
+	if smoke1 == smoke2 {
 		smoke = 1.0
 	}
 
 	drink := 0.5
-	if strings.EqualFold(drink1, drink2) {
+	if drink1 == drink2 {
 		drink = 1.0
 	}
 	return (smoke + drink) / 2
 }
 
-func CalculateIntentionOverlapScore(userDest models.Destination, matchIntentions []models.TravelIntention) float64 {
-	if len(matchIntentions) == 0 || userDest.Name == "" {
+func CalculateIntentionOverlapScore(userDestLower string, matchIntentions []models.TravelIntention) float64 {
+	if len(matchIntentions) == 0 || userDestLower == "" {
 		return 0.5 // Neutral
 	}
-	destLower := strings.ToLower(userDest.Name)
 	bestScore := 0.0
 	for _, intent := range matchIntentions {
-		intentDest := strings.ToLower(intent.Destination)
-		if strings.Contains(intentDest, destLower) || strings.Contains(destLower, intentDest) {
+		intentDest := intent.NormalizedDestination
+		if strings.Contains(intentDest, userDestLower) || strings.Contains(userDestLower, intentDest) {
 			score := 1.0
 			if score > bestScore {
 				bestScore = score
@@ -260,26 +243,28 @@ func CalculateFinalSoloScore(user, match models.SoloSession, mlScore *float64, c
 	// Improved logic gated by 'enhanced' mode
 	isEnhanced := config.Mode == "enhanced"
 	
-	relScore := CalculateReligionScore(uA.Religion, mA.Religion, isEnhanced)
+	relScore := CalculateReligionScore(uA.NormalizedReligion, mA.NormalizedReligion, isEnhanced)
 	var locScore float64
 	if isEnhanced {
-		locScore = CalculateLocationOriginScoreEnhanced(uA.Location, mA.Location, uA.RawLocation, mA.RawLocation)
+		locScore = CalculateLocationOriginScoreEnhanced(uA.Location, mA.Location, uA.NormalizedCity, mA.NormalizedCity)
 	} else {
-		locScore = CalculateLocationOriginScore(uA.Location, mA.Location, uA.RawLocation, mA.RawLocation)
+		locScore = CalculateLocationOriginScore(uA.Location, mA.Location, uA.NormalizedCity, mA.NormalizedCity)
 	}
+
+	userDestLower := strings.ToLower(user.Destination.Name)
 
 	// Calculate raw scores first
 	breakdown := Breakdown{
 		DestinationScore:    CalculateDestinationScore(user.Destination, match.Destination, DefaultMaxDistanceKm),
-		DateOverlapScore:    CalculateSoloDateOverlapScore(user.StartDate, user.EndDate, match.StartDate, match.EndDate),
+		DateOverlapScore:    CalculateSoloDateOverlapScore(user.ParsedStartDate, user.ParsedEndDate, match.ParsedStartDate, match.ParsedEndDate),
 		BudgetScore:         CalculateBudgetScore(user.Budget, match.Budget),
-		InterestScore:       CalculateJaccardSimilarity(uA.Interests, mA.Interests),
-		PersonalityScore:    GetPersonalityCompatibility(uA.Personality, mA.Personality),
+		InterestScore:       CalculateJaccardSimilarityOptimized(uA.NormalizedInterestsSet, mA.NormalizedInterestsSet),
+		PersonalityScore:    GetPersonalityCompatibility(uA.NormalizedPersonality, mA.NormalizedPersonality),
 		ReligionScore:       relScore,
 		AgeScore:            CalculateAgeScore(uA.Age, mA.Age),
-		LifestyleScore:      CalculateLifestyleScore(uA.Smoking, uA.Drinking, mA.Smoking, mA.Drinking),
+		LifestyleScore:      CalculateLifestyleScore(uA.NormalizedSmoking, uA.NormalizedDrinking, mA.NormalizedSmoking, mA.NormalizedDrinking),
 		LocationOriginScore: locScore,
-		IntentionScore:      CalculateIntentionOverlapScore(user.Destination, mA.TravelIntentions),
+		IntentionScore:      CalculateIntentionOverlapScore(userDestLower, mA.TravelIntentions),
 	}
 
 	weights := config.SoloWeights
@@ -321,9 +306,9 @@ func CalculateFinalSoloScore(user, match models.SoloSession, mlScore *float64, c
 		}
 		abs := math.Abs(diff)
 		if abs >= 1000 {
-			budgetDiffStr = fmt.Sprintf("%s%.1fk", sign, abs/1000)
+			budgetDiffStr = sign + strconv.FormatFloat(abs/1000, 'f', 1, 64) + "k"
 		} else {
-			budgetDiffStr = fmt.Sprintf("%s%.0f", sign, abs)
+			budgetDiffStr = sign + strconv.FormatFloat(abs, 'f', 0, 64)
 		}
 	}
 

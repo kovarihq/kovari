@@ -26,7 +26,12 @@ func NewMLClient() *MLClient {
 	return &MLClient{
 		BaseURL: baseURL,
 		HTTPClient: &http.Client{
-			Timeout: 1000 * time.Millisecond, // Overall safeguard
+			Timeout: 1000 * time.Millisecond,
+			Transport: &http.Transport{
+				MaxIdleConns:        100,
+				MaxIdleConnsPerHost: 100,
+				IdleConnTimeout:     90 * time.Second,
+			},
 		},
 	}
 }

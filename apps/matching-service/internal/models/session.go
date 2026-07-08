@@ -1,5 +1,10 @@
 package models
 
+import (
+	"strings"
+	"time"
+)
+
 type Coordinates struct {
 	Lat float64 `json:"lat"`
 	Lon float64 `json:"lon"`
@@ -9,6 +14,10 @@ type Destination struct {
 	Name string  `json:"name,omitempty"`
 	Lat  float64 `json:"lat"`
 	Lon  float64 `json:"lon"`
+}
+
+type DestinationToCoords interface {
+	ToCoords() Coordinates
 }
 
 func (d Destination) ToCoords() Coordinates {
@@ -37,12 +46,64 @@ type StaticAttributes struct {
 	GeoSource   string      `json:"geoSource,omitempty"`
 	FoodPreference string   `json:"foodPreference,omitempty"`
 	TravelIntentions []TravelIntention `json:"travel_intentions,omitempty"`
+
+	// Pre-normalized fields for runtime optimization
+	NormalizedInterestsSet map[string]bool `json:"-"`
+	NormalizedReligion     string          `json:"-"`
+	NormalizedPersonality  string          `json:"-"`
+	NormalizedSmoking      string          `json:"-"`
+	NormalizedDrinking     string          `json:"-"`
+	NormalizedCity         string          `json:"-"`
 }
 
 type TravelIntention struct {
-	Destination string `json:"destination"`
-	Timeframe   string `json:"timeframe"`
-	IsConfirmed bool   `json:"is_confirmed"`
+	Destination           string `json:"destination"`
+	NormalizedDestination string `json:"-"`
+	Timeframe             string `json:"timeframe"`
+	IsConfirmed           bool   `json:"is_confirmed"`
+}
+
+func parseDateLocal(s string) time.Time {
+	layouts := []string{time.RFC3339, "2006-01-02"}
+	for _, l := range layouts {
+		t, err := time.Parse(l, s)
+		if err == nil {
+			return t
+		}
+	}
+	return time.Time{}
+}
+
+func (s *StaticAttributes) PopulateNormalizedFields() {
+	if s == nil {
+		return
+	}
+	
+	// Caching religion, personality, smoking, drinking, and city
+	s.NormalizedReligion = strings.ToLower(strings.TrimSpace(s.Religion))
+	s.NormalizedPersonality = strings.ToLower(s.Personality)
+	s.NormalizedSmoking = strings.ToLower(s.Smoking)
+	s.NormalizedDrinking = strings.ToLower(s.Drinking)
+	
+	if s.RawLocation != "" {
+		s.NormalizedCity = strings.Split(strings.ToLower(strings.TrimSpace(s.RawLocation)), ",")[0]
+	}
+
+	// Caching interests map
+	if s.NormalizedInterestsSet == nil {
+		s.NormalizedInterestsSet = make(map[string]bool, len(s.Interests))
+		for _, interest := range s.Interests {
+			clean := strings.ToLower(strings.TrimSpace(interest))
+			if clean != "" {
+				s.NormalizedInterestsSet[clean] = true
+			}
+		}
+	}
+
+	// Caching travel intentions destinations
+	for i := range s.TravelIntentions {
+		s.TravelIntentions[i].NormalizedDestination = strings.ToLower(s.TravelIntentions[i].Destination)
+	}
 }
 
 type SoloSession struct {
@@ -58,6 +119,23 @@ type SoloSession struct {
 	GeoSource        string            `json:"geoSource,omitempty"`
 	StaticAttributes *StaticAttributes `json:"static_attributes,omitempty"`
 	Static           *StaticAttributes `json:"static,omitempty"`
+
+	// Pre-parsed time fields
+	ParsedStartDate time.Time `json:"-"`
+	ParsedEndDate   time.Time `json:"-"`
+}
+
+func (s *SoloSession) PopulateNormalizedFields() {
+	if s == nil {
+		return
+	}
+	if s.StaticAttributes != nil {
+		s.StaticAttributes.PopulateNormalizedFields()
+	} else if s.Static != nil {
+		s.Static.PopulateNormalizedFields()
+	}
+	s.ParsedStartDate = parseDateLocal(s.StartDate)
+	s.ParsedEndDate = parseDateLocal(s.EndDate)
 }
 
 type MatchingConfig struct {

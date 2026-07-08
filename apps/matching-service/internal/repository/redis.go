@@ -50,12 +50,9 @@ func (r *RedisRepository) FetchAllSessions(ctx context.Context, excludeUserId st
 	keys, err = r.client.SMembers(ctx, "sessions:index").Result()
 
 	if err != nil || len(keys) == 0 {
-		log.Printf("Repository: Index missing or empty (Total candidates: 0)")
-
 		var batch []string
 		batch, _, _ = r.client.Scan(ctx, 0, "session:*", 20).Result()
 		if len(batch) > 0 {
-			log.Printf("Repository: Shallow SCAN found %d initial keys", len(batch))
 			keys = batch
 		}
 
@@ -95,7 +92,7 @@ func (r *RedisRepository) FetchAllSessions(ctx context.Context, excludeUserId st
 		}
 	}
 
-	log.Printf("Repository: Processing %d candidate keys", len(keys))
+
 
 	if len(keys) > 0 {
 		var subKeys []string
@@ -109,6 +106,9 @@ func (r *RedisRepository) FetchAllSessions(ctx context.Context, excludeUserId st
 		}
 
 		if len(subKeys) > 0 {
+			if len(subKeys) > MaxCandidates {
+				subKeys = subKeys[:MaxCandidates]
+			}
 			values, err := r.client.MGet(ctx, subKeys...).Result()
 			if err != nil {
 				return nil, fmt.Errorf("mget failed: %w", err)
@@ -131,18 +131,16 @@ func (r *RedisRepository) FetchAllSessions(ctx context.Context, excludeUserId st
 		}
 	}
 
-	log.Printf("Repository: Successfully fetched %d filtered candidates", len(sessions))
+
 	return sessions, nil
 }
 
 func (r *RedisRepository) GetSession(ctx context.Context, userId string) (*models.SoloSession, error) {
 	key := "session:" + userId
-	log.Printf("Repository: Looking up exact session key: %s", key)
 
 	data, err := r.client.Get(ctx, key).Result()
 	if err != nil {
 		if err == redis.Nil {
-			log.Printf("Repository: Key %s not found", key)
 			return nil, nil
 		}
 		return nil, fmt.Errorf("get session failed: %w", err)
