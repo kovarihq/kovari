@@ -1,3 +1,4 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -22,9 +23,13 @@ class ChatInboxScreen extends ConsumerStatefulWidget {
   ConsumerState<ChatInboxScreen> createState() => _ChatInboxScreenState();
 }
 
-class _ChatInboxScreenState extends ConsumerState<ChatInboxScreen> {
+class _ChatInboxScreenState extends ConsumerState<ChatInboxScreen>
+    with AutomaticKeepAliveClientMixin {
   final TextEditingController _searchController = TextEditingController();
   String _searchQuery = '';
+
+  @override
+  bool get wantKeepAlive => true;
 
   @override
   void initState() {
@@ -48,29 +53,30 @@ class _ChatInboxScreenState extends ConsumerState<ChatInboxScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final conversations = ref.watch(conversationRuntimeStoreProvider);
+    super.build(context);
+    final chatIds = ref.watch(
+      conversationRuntimeStoreProvider.select((m) {
+        final sortedList = m.values.toList()
+          ..sort((a, b) {
+            final at = a.lastMessageAt;
+            final bt = b.lastMessageAt;
+            if (at == null && bt == null) return 0;
+            if (at == null) return 1;
+            if (bt == null) return -1;
+            return bt.compareTo(at);
+          });
+        return sortedList.map((c) => c.chatId).toList();
+      }),
+    );
     final isLoading = ref.watch(inboxLoadingProvider);
 
-    // Sort by lastMessageAt descending
-    final sorted = conversations.values.toList()
-      ..sort((a, b) {
-        final at = a.lastMessageAt;
-        final bt = b.lastMessageAt;
-        if (at == null && bt == null) return 0;
-        if (at == null) return 1;
-        if (bt == null) return -1;
-        return bt.compareTo(at);
-      });
-
     final filtered = _searchQuery.isEmpty
-        ? sorted
-        : sorted
-              .where(
-                (c) => (c.metadata?.displayName ?? '').toLowerCase().contains(
-                  _searchQuery.toLowerCase(),
-                ),
-              )
-              .toList();
+        ? chatIds
+        : chatIds.where((id) {
+            final c = ref.read(conversationRuntimeStoreProvider)[id];
+            final name = c?.metadata?.displayName ?? '';
+            return name.toLowerCase().contains(_searchQuery.toLowerCase());
+          }).toList();
 
     return Column(
       children: [
@@ -143,13 +149,14 @@ class _ChatInboxScreenState extends ConsumerState<ChatInboxScreen> {
                 .read(conversationRuntimeStoreProvider.notifier)
                 .fetchInbox(forceRefresh: true),
             child: CustomScrollView(
+              key: const PageStorageKey('chat_inbox_scroll'),
               physics: const BouncingScrollPhysics(
                 parent: AlwaysScrollableScrollPhysics(),
               ),
               keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
               slivers: [
                 // ── Loading Skeletons ─────────────────────────────────────
-                if (isLoading && conversations.isEmpty)
+                if (isLoading && chatIds.isEmpty)
                   SliverPadding(
                     padding: const EdgeInsets.symmetric(horizontal: 16.0),
                     sliver: SliverToBoxAdapter(
@@ -209,10 +216,10 @@ class _ChatInboxScreenState extends ConsumerState<ChatInboxScreen> {
                               for (int i = 0; i < filtered.length; i++) ...[
                                 RepaintBoundary(
                                   child: _ConversationTile(
-                                    state: filtered[i],
+                                    chatId: filtered[i],
                                     onTap: () {
                                       context.push(
-                                        '/chat/${filtered[i].chatId}',
+                                        '/chat/${filtered[i]}',
                                       );
                                     },
                                   ),
@@ -242,16 +249,29 @@ class _ChatInboxScreenState extends ConsumerState<ChatInboxScreen> {
 
 // ── Conversation Tile ────────────────────────────────────────────────────────
 
-class _ConversationTile extends StatelessWidget {
-  const _ConversationTile({required this.state, required this.onTap});
+class _ConversationTile extends ConsumerWidget {
+  const _ConversationTile({required this.chatId, required this.onTap});
 
-  final ConversationRuntimeState state;
+  final String chatId;
   final VoidCallback onTap;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final state = ref.watch(
+      conversationRuntimeStoreProvider.select((m) => m[chatId]),
+    );
+    if (state == null) return const SizedBox.shrink();
     final metadata = state.metadata;
     if (metadata == null) return const SizedBox.shrink();
+
+    final displayAvatar = metadata.displayAvatar;
+    if (displayAvatar != null && displayAvatar.isNotEmpty) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (context.mounted) {
+          precacheImage(CachedNetworkImageProvider(displayAvatar), context);
+        }
+      });
+    }
 
     return InkWell(
       onTap: onTap,
@@ -260,12 +280,15 @@ class _ConversationTile extends StatelessWidget {
         child: Row(
           children: [
             // ── Avatar + Presence Dot ──────────────────────────────────
-            KovariAvatar(
-              imageUrl: metadata.displayAvatar,
-              size: 40,
-              fullName: metadata.displayName,
-              isOnline: state.isPartnerOnline && !metadata.isGroup,
-              borderColor: AppColors.surface(context, level: 1),
+            Hero(
+              tag: 'avatar_${state.chatId}',
+              child: KovariAvatar(
+                imageUrl: metadata.displayAvatar,
+                size: 40,
+                fullName: metadata.displayName,
+                isOnline: state.isPartnerOnline && !metadata.isGroup,
+                borderColor: AppColors.surface(context, level: 1),
+              ),
             ),
             const SizedBox(width: 12),
 
@@ -306,7 +329,7 @@ class _ConversationTile extends StatelessWidget {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Expanded(child: _buildSubtitle(context)),
+                      Expanded(child: _buildSubtitle(context, state)),
                       if (state.unreadCount > 0)
                         Container(
                           margin: const EdgeInsets.only(left: 8),
@@ -345,7 +368,7 @@ class _ConversationTile extends StatelessWidget {
     );
   }
 
-  Widget _buildSubtitle(BuildContext context) {
+  Widget _buildSubtitle(BuildContext context, ConversationRuntimeState state) {
     final metadata = state.metadata;
     // Typing indicator (TTL-backed, auto-expires)
     final typingUsers = state.typingUserIds;

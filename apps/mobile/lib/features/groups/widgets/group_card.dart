@@ -1,3 +1,4 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:mobile/core/config/interaction_config.dart';
 import 'package:mobile/core/theme/app_colors.dart';
@@ -24,6 +25,14 @@ class GroupCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final coverImageUrl = UrlUtils.getFullImageUrl(group.coverImage);
+
+    if (coverImageUrl != null && coverImageUrl.isNotEmpty) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (context.mounted) {
+          precacheImage(CachedNetworkImageProvider(coverImageUrl), context);
+        }
+      });
+    }
 
     return InteractiveWrapper(
       onPressed: onAction,

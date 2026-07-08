@@ -22,18 +22,19 @@ final routerProvider = Provider<GoRouter>((ref) {
     debugLogDiagnostics: true,
     redirect: notifier.redirect,
     observers: [KovariNavObserver(ref)],
+    restorationScopeId: 'kovari_router',
     routes: [
       ...$appRoutes,
       GoRoute(
         path: '/chat/:chatId',
         name: 'chat_screen',
-        builder: (context, state) {
+        pageBuilder: (context, state) {
           final chatId = state.pathParameters['chatId']!;
-          // ValueKey ensures Flutter disposes + recreates the State when chatId
-          // changes. Without this, GoRouter reuses the same widget instance and
-          // initState never re-runs, leaving stale messages/scroll/subscriptions
-          // from the previous chat on screen.
-          return ChatScreen(key: ValueKey(chatId), chatId: chatId);
+          return platformPageRoute<void>(
+            context: context,
+            state: state,
+            child: ChatScreen(key: ValueKey(chatId), chatId: chatId),
+          );
         },
       ),
     ],
@@ -45,7 +46,7 @@ final routerProvider = Provider<GoRouter>((ref) {
   final appLinks = AppLinks();
 
   // Listen to incoming deep links (when app is in background/foreground)
-  appLinks.uriLinkStream.listen((uri) {
+  final appLinksSub = appLinks.uriLinkStream.listen((uri) {
     AppLogger.i('🔗 [DeepLink] Incoming Uri: $uri');
     var path = uri.path;
     if (path.isNotEmpty) {
@@ -80,7 +81,7 @@ final routerProvider = Provider<GoRouter>((ref) {
 
   // 🔔 [FCM] Notification tap routing
   // entity_type + entity_id are included in every FCM data payload by PushService.
-  FCMService.onNotificationEvent.listen((data) {
+  final fcmSub = FCMService.onNotificationEvent.listen((data) {
     // Foreground events are NOT routed — they are shown as toasts by the shell.
     final isForeground = data['__foreground'] == true;
     if (isForeground) return;
@@ -138,6 +139,11 @@ final routerProvider = Provider<GoRouter>((ref) {
         );
         router.push('/notifications');
     }
+  });
+
+  ref.onDispose(() {
+    appLinksSub.cancel();
+    fcmSub.cancel();
   });
 
   return router;

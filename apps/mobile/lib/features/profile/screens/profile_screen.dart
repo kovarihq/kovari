@@ -18,11 +18,21 @@ import 'package:mobile/shared/widgets/kovari_image_modal.dart';
 import 'package:mobile/shared/widgets/kovari_popover.dart';
 import 'package:mobile/shared/widgets/kovari_refresh_indicator.dart';
 
-class ProfileScreen extends ConsumerWidget {
+class ProfileScreen extends ConsumerStatefulWidget {
   const ProfileScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<ProfileScreen> createState() => _ProfileScreenState();
+}
+
+class _ProfileScreenState extends ConsumerState<ProfileScreen>
+    with AutomaticKeepAliveClientMixin {
+  @override
+  bool get wantKeepAlive => true;
+
+  @override
+  Widget build(BuildContext context) {
+    super.build(context);
     final profile = ref.watch(profileProvider);
 
     if (profile == null) {
@@ -34,6 +44,7 @@ class ProfileScreen extends ConsumerWidget {
         onRefresh: () =>
             ref.read(profileProvider.notifier).fetchProfile(ignoreCache: true),
         child: CustomScrollView(
+          key: const PageStorageKey('profile_scroll'),
           physics: const BouncingScrollPhysics(
             parent: AlwaysScrollableScrollPhysics(),
           ),
