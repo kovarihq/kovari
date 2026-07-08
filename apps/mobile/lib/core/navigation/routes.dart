@@ -1,3 +1,4 @@
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:mobile/features/app_shell/screens/app_shell_screen.dart';
@@ -113,12 +114,32 @@ class GroupsRouteData extends GoRouteData with $GroupsRouteData {
       const GroupsScreen();
 }
 
+Page<T> platformPageRoute<T>({
+  required BuildContext context,
+  required GoRouterState state,
+  required Widget child,
+}) {
+  final platform = Theme.of(context).platform;
+  if (platform == TargetPlatform.iOS || platform == TargetPlatform.macOS) {
+    return CupertinoPage<T>(
+      key: state.pageKey,
+      restorationId: state.pageKey.value,
+      child: child,
+    );
+  }
+  return MaterialPage<T>(
+    key: state.pageKey,
+    restorationId: state.pageKey.value,
+    child: child,
+  );
+}
+
 @TypedGoRoute<CreateGroupRouteData>(path: '/groups/create')
 class CreateGroupRouteData extends GoRouteData with $CreateGroupRouteData {
   const CreateGroupRouteData();
   @override
-  Widget build(BuildContext context, GoRouterState state) =>
-      const CreateGroupScreen();
+  Page<void> buildPage(BuildContext context, GoRouterState state) =>
+      platformPageRoute<void>(context: context, state: state, child: const CreateGroupScreen());
 }
 
 @TypedGoRoute<GroupDetailsRouteData>(path: '/groups/:groupId')
@@ -127,8 +148,8 @@ class GroupDetailsRouteData extends GoRouteData with $GroupDetailsRouteData {
   final String groupId;
 
   @override
-  Widget build(BuildContext context, GoRouterState state) =>
-      GroupDetailsScreen(groupId: groupId);
+  Page<void> buildPage(BuildContext context, GoRouterState state) =>
+      platformPageRoute<void>(context: context, state: state, child: GroupDetailsScreen(groupId: groupId));
 }
 
 @TypedGoRoute<GroupInviteRouteData>(path: '/groups/invite/:token')
@@ -136,40 +157,40 @@ class GroupInviteRouteData extends GoRouteData with $GroupInviteRouteData {
   const GroupInviteRouteData({required this.token});
   final String token;
   @override
-  Widget build(BuildContext context, GoRouterState state) =>
-      GroupInviteScreen(token: token);
+  Page<void> buildPage(BuildContext context, GoRouterState state) =>
+      platformPageRoute<void>(context: context, state: state, child: GroupInviteScreen(token: token));
 }
 
 @TypedGoRoute<EditProfileRouteData>(path: '/profile/edit')
 class EditProfileRouteData extends GoRouteData with $EditProfileRouteData {
   const EditProfileRouteData();
   @override
-  Widget build(BuildContext context, GoRouterState state) =>
-      const EditProfileScreen();
+  Page<void> buildPage(BuildContext context, GoRouterState state) =>
+      platformPageRoute<void>(context: context, state: state, child: const EditProfileScreen());
 }
 
 @TypedGoRoute<SettingsRouteData>(path: '/profile/settings')
 class SettingsRouteData extends GoRouteData with $SettingsRouteData {
   const SettingsRouteData();
   @override
-  Widget build(BuildContext context, GoRouterState state) =>
-      const SettingsScreen();
+  Page<void> buildPage(BuildContext context, GoRouterState state) =>
+      platformPageRoute<void>(context: context, state: state, child: const SettingsScreen());
 }
 
 @TypedGoRoute<SafetyRouteData>(path: '/profile/safety')
 class SafetyRouteData extends GoRouteData with $SafetyRouteData {
   const SafetyRouteData();
   @override
-  Widget build(BuildContext context, GoRouterState state) =>
-      const SafetyScreen();
+  Page<void> buildPage(BuildContext context, GoRouterState state) =>
+      platformPageRoute<void>(context: context, state: state, child: const SafetyScreen());
 }
 
 @TypedGoRoute<MyReportsRouteData>(path: '/profile/reports')
 class MyReportsRouteData extends GoRouteData with $MyReportsRouteData {
   const MyReportsRouteData();
   @override
-  Widget build(BuildContext context, GoRouterState state) =>
-      const MyReportsScreen();
+  Page<void> buildPage(BuildContext context, GoRouterState state) =>
+      platformPageRoute<void>(context: context, state: state, child: const MyReportsScreen());
 }
 
 @TypedGoRoute<ReportTargetSearchRouteData>(path: '/profile/reports/search')
@@ -178,8 +199,8 @@ class ReportTargetSearchRouteData extends GoRouteData
   const ReportTargetSearchRouteData({required this.targetType});
   final String targetType;
   @override
-  Widget build(BuildContext context, GoRouterState state) =>
-      ReportTargetSearchScreen(targetType: targetType);
+  Page<void> buildPage(BuildContext context, GoRouterState state) =>
+      platformPageRoute<void>(context: context, state: state, child: ReportTargetSearchScreen(targetType: targetType));
 }
 
 @TypedGoRoute<SubmitReportRouteData>(path: '/profile/reports/submit/:targetId')
@@ -194,10 +215,14 @@ class SubmitReportRouteData extends GoRouteData with $SubmitReportRouteData {
   final String targetName;
 
   @override
-  Widget build(BuildContext context, GoRouterState state) => SubmitReportScreen(
-    targetType: targetType,
-    targetId: targetId,
-    targetName: targetName,
+  Page<void> buildPage(BuildContext context, GoRouterState state) => platformPageRoute<void>(
+    context: context,
+    state: state,
+    child: SubmitReportScreen(
+      targetType: targetType,
+      targetId: targetId,
+      targetName: targetName,
+    ),
   );
 }
 
@@ -213,10 +238,14 @@ class ConnectionsRouteData extends GoRouteData with $ConnectionsRouteData {
   final String? initialTab;
 
   @override
-  Widget build(BuildContext context, GoRouterState state) => ConnectionsScreen(
-    userId: userId,
-    username: username,
-    initialTab: initialTab ?? 'followers',
+  Page<void> buildPage(BuildContext context, GoRouterState state) => platformPageRoute<void>(
+    context: context,
+    state: state,
+    child: ConnectionsScreen(
+      userId: userId,
+      username: username,
+      initialTab: initialTab ?? 'followers',
+    ),
   );
 }
 
@@ -232,24 +261,24 @@ class ProfileRouteData extends GoRouteData with $ProfileRouteData {
 class LoginRouteData extends GoRouteData with $LoginRouteData {
   const LoginRouteData();
   @override
-  Widget build(BuildContext context, GoRouterState state) =>
-      const LoginScreen();
+  Page<void> buildPage(BuildContext context, GoRouterState state) =>
+      platformPageRoute<void>(context: context, state: state, child: const LoginScreen());
 }
 
 @TypedGoRoute<OnboardingRouteData>(path: '/onboarding')
 class OnboardingRouteData extends GoRouteData with $OnboardingRouteData {
   const OnboardingRouteData();
   @override
-  Widget build(BuildContext context, GoRouterState state) =>
-      const OnboardingScreen();
+  Page<void> buildPage(BuildContext context, GoRouterState state) =>
+      platformPageRoute<void>(context: context, state: state, child: const OnboardingScreen());
 }
 
 @TypedGoRoute<BannedRouteData>(path: '/banned')
 class BannedRouteData extends GoRouteData with $BannedRouteData {
   const BannedRouteData();
   @override
-  Widget build(BuildContext context, GoRouterState state) =>
-      const BannedScreen();
+  Page<void> buildPage(BuildContext context, GoRouterState state) =>
+      platformPageRoute<void>(context: context, state: state, child: const BannedScreen());
 }
 
 @TypedGoRoute<ResetPasswordRouteData>(path: '/reset-password')
@@ -258,16 +287,16 @@ class ResetPasswordRouteData extends GoRouteData with $ResetPasswordRouteData {
   final String? token;
 
   @override
-  Widget build(BuildContext context, GoRouterState state) =>
-      ResetPasswordScreen(token: token ?? '');
+  Page<void> buildPage(BuildContext context, GoRouterState state) =>
+      platformPageRoute<void>(context: context, state: state, child: ResetPasswordScreen(token: token ?? ''));
 }
 
 @TypedGoRoute<SignUpRouteData>(path: '/sign-up')
 class SignUpRouteData extends GoRouteData with $SignUpRouteData {
   const SignUpRouteData();
   @override
-  Widget build(BuildContext context, GoRouterState state) =>
-      const SignUpScreen();
+  Page<void> buildPage(BuildContext context, GoRouterState state) =>
+      platformPageRoute<void>(context: context, state: state, child: const SignUpScreen());
 }
 
 @TypedGoRoute<VerifyEmailRouteData>(path: '/verify-email')
@@ -276,8 +305,8 @@ class VerifyEmailRouteData extends GoRouteData with $VerifyEmailRouteData {
   final String email;
 
   @override
-  Widget build(BuildContext context, GoRouterState state) =>
-      VerifyEmailScreen(email: email);
+  Page<void> buildPage(BuildContext context, GoRouterState state) =>
+      platformPageRoute<void>(context: context, state: state, child: VerifyEmailScreen(email: email));
 }
 
 @TypedGoRoute<ForgotPasswordRouteData>(path: '/forgot-password')
@@ -285,16 +314,16 @@ class ForgotPasswordRouteData extends GoRouteData
     with $ForgotPasswordRouteData {
   const ForgotPasswordRouteData();
   @override
-  Widget build(BuildContext context, GoRouterState state) =>
-      const ForgotPasswordScreen();
+  Page<void> buildPage(BuildContext context, GoRouterState state) =>
+      platformPageRoute<void>(context: context, state: state, child: const ForgotPasswordScreen());
 }
 
 @TypedGoRoute<SearchRouteData>(path: '/search')
 class SearchRouteData extends GoRouteData with $SearchRouteData {
   const SearchRouteData();
   @override
-  Widget build(BuildContext context, GoRouterState state) =>
-      const SearchScreen();
+  Page<void> buildPage(BuildContext context, GoRouterState state) =>
+      platformPageRoute<void>(context: context, state: state, child: const SearchScreen());
 }
 
 // 🔔 [Overlay Routes] - Slide over the shell without affecting bottom nav
@@ -302,16 +331,16 @@ class SearchRouteData extends GoRouteData with $SearchRouteData {
 class NotificationsRouteData extends GoRouteData with $NotificationsRouteData {
   const NotificationsRouteData();
   @override
-  Widget build(BuildContext context, GoRouterState state) =>
-      const NotificationsScreen();
+  Page<void> buildPage(BuildContext context, GoRouterState state) =>
+      platformPageRoute<void>(context: context, state: state, child: const NotificationsScreen());
 }
 
 @TypedGoRoute<RequestsRouteData>(path: '/requests')
 class RequestsRouteData extends GoRouteData with $RequestsRouteData {
   const RequestsRouteData();
   @override
-  Widget build(BuildContext context, GoRouterState state) =>
-      const RequestsScreen();
+  Page<void> buildPage(BuildContext context, GoRouterState state) =>
+      platformPageRoute<void>(context: context, state: state, child: const RequestsScreen());
 }
 
 @TypedGoRoute<PublicProfileRouteData>(path: '/user/:userId')
@@ -320,6 +349,6 @@ class PublicProfileRouteData extends GoRouteData with $PublicProfileRouteData {
   final String userId;
 
   @override
-  Widget build(BuildContext context, GoRouterState state) =>
-      PublicProfileScreen(userId: userId);
+  Page<void> buildPage(BuildContext context, GoRouterState state) =>
+      platformPageRoute<void>(context: context, state: state, child: PublicProfileScreen(userId: userId));
 }

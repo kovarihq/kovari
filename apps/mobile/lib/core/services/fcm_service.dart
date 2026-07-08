@@ -70,9 +70,15 @@ class FCMService {
 
   // The stream that the router/shell listens to for notification taps and
   // foreground toasts. Emits FCM data payload on each event.
-  static final _tapBroadcast = _SimpleBroadcast<Map<String, dynamic>>();
+  static final _SimpleBroadcast<Map<String, dynamic>> _tapBroadcast =
+      _SimpleBroadcast<Map<String, dynamic>>();
   static Stream<Map<String, dynamic>> get onNotificationEvent =>
       _tapBroadcast.stream;
+
+  /// Exposes a way to trigger notifications in tests.
+  static void triggerNotificationEventForTesting(Map<String, dynamic> data) {
+    _tapBroadcast.emit(data);
+  }
 
   // -------------------------------------------------------------------------
   // init — call once after Firebase.initializeApp()

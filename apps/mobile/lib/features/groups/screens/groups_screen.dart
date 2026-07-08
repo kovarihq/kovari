@@ -13,11 +13,21 @@ import 'package:mobile/features/groups/widgets/group_card.dart';
 import 'package:mobile/shared/widgets/app_card.dart';
 import 'package:mobile/shared/widgets/kovari_refresh_indicator.dart';
 
-class GroupsScreen extends ConsumerWidget {
+class GroupsScreen extends ConsumerStatefulWidget {
   const GroupsScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<GroupsScreen> createState() => _GroupsScreenState();
+}
+
+class _GroupsScreenState extends ConsumerState<GroupsScreen>
+    with AutomaticKeepAliveClientMixin {
+  @override
+  bool get wantKeepAlive => true;
+
+  @override
+  Widget build(BuildContext context) {
+    super.build(context);
     final groupState = ref.watch(myGroupsStoreProvider);
 
     return Column(
@@ -59,6 +69,7 @@ class GroupsScreen extends ConsumerWidget {
           child: KovariRefreshIndicator(
             onRefresh: () => ref.read(myGroupsStoreProvider.notifier).refresh(),
             child: CustomScrollView(
+              key: const PageStorageKey('groups_scroll'),
               physics: const BouncingScrollPhysics(
                 parent: AlwaysScrollableScrollPhysics(),
               ),

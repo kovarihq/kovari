@@ -11,6 +11,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
+import 'package:go_router/go_router.dart';
 import 'package:mobile/core/navigation/routes.dart';
 import 'package:mobile/core/providers/auth_provider.dart';
 import 'package:mobile/core/realtime/realtime_coordinator.dart';
@@ -62,24 +63,40 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   bool _showScrollToBottom = false;
   bool _showNewMessageBanner = false;
 
+  @visibleForTesting
+  ScrollController get debugScrollController => _scrollController;
+  @visibleForTesting
+  TextEditingController get debugInputController => _inputController;
+  @visibleForTesting
+  FocusNode get debugFocusNode => _focusNode;
+
+  late final RealtimeCoordinator _realtimeCoordinator;
+  late final ActiveConversationNotifier _activeConversation;
+  late final MemberStore _memberStore;
+  String? _activeChatId;
+
   String get _chatId => widget.chatId;
   bool get _isCompact => widget.isCompact || widget.hideHeader;
 
   @override
   void initState() {
     super.initState();
+    _realtimeCoordinator = ref.read(realtimeCoordinatorProvider.notifier);
+    _activeConversation = ref.read(activeConversationProvider.notifier);
+    _memberStore = ref.read(memberStoreProvider.notifier);
+
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
 
       Future.microtask(() {
         if (!mounted) return;
-        ref.read(activeConversationProvider.notifier).set(_chatId);
+        _activeConversation.set(_chatId);
       });
-      ref.read(realtimeCoordinatorProvider.notifier).joinChat(_chatId);
+      _realtimeCoordinator.joinChat(_chatId);
 
       final isGroup = _chatId.split('_').length != 2;
       if (isGroup) {
-        ref.read(memberStoreProvider.notifier).subscribe(_chatId);
+        _memberStore.subscribe(_chatId);
       }
     });
 
@@ -105,14 +122,13 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
 
   @override
   void dispose() {
-    ref.read(realtimeCoordinatorProvider.notifier).leaveChat(_chatId);
-    final activeId = ref.read(activeConversationProvider);
-    if (activeId == _chatId) {
-      ref.read(activeConversationProvider.notifier).set(null);
+    _realtimeCoordinator.leaveChat(_chatId);
+    if (_activeChatId == _chatId) {
+      Future.microtask(() => _activeConversation.set(null));
     }
     final isGroup = _chatId.split('_').length != 2;
     if (isGroup) {
-      ref.read(memberStoreProvider.notifier).unsubscribe(_chatId);
+      _memberStore.unsubscribe(_chatId);
     }
     _inputController.dispose();
     _scrollController.dispose();
@@ -126,14 +142,13 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     if (oldWidget.chatId == widget.chatId) return;
 
     // ─── Tear down old chat ───────────────────────────────────────────────
-    ref.read(realtimeCoordinatorProvider.notifier).leaveChat(oldWidget.chatId);
-    final activeId = ref.read(activeConversationProvider);
-    if (activeId == oldWidget.chatId) {
-      ref.read(activeConversationProvider.notifier).set(null);
+    _realtimeCoordinator.leaveChat(oldWidget.chatId);
+    if (_activeChatId == oldWidget.chatId) {
+      Future.microtask(() => _activeConversation.set(null));
     }
     final wasGroup = oldWidget.chatId.split('_').length != 2;
     if (wasGroup) {
-      ref.read(memberStoreProvider.notifier).unsubscribe(oldWidget.chatId);
+      _memberStore.unsubscribe(oldWidget.chatId);
     }
 
     // ─── Reset all local UI state ─────────────────────────────────────────
@@ -153,12 +168,12 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       if (!mounted) return;
       Future.microtask(() {
         if (!mounted) return;
-        ref.read(activeConversationProvider.notifier).set(widget.chatId);
+        _activeConversation.set(widget.chatId);
       });
-      ref.read(realtimeCoordinatorProvider.notifier).joinChat(widget.chatId);
+      _realtimeCoordinator.joinChat(widget.chatId);
       final isGroup = widget.chatId.split('_').length != 2;
       if (isGroup) {
-        ref.read(memberStoreProvider.notifier).subscribe(widget.chatId);
+        _memberStore.subscribe(widget.chatId);
       }
     });
   }
@@ -248,6 +263,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
 
   @override
   Widget build(BuildContext context) {
+    _activeChatId = ref.watch(activeConversationProvider);
     AppLogger.d('📺 [ChatScreen] Building for ID: $_chatId');
     final runtimeState = ref.watch(conversationRuntimeProvider(_chatId));
     final conversation = runtimeState?.metadata;
@@ -328,86 +344,60 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       },
     );
 
-    return Scaffold(
-      backgroundColor: widget.hideHeader
-          ? Colors.transparent
-          : AppColors.backgroundColor(context),
-      resizeToAvoidBottomInset: true,
-      body: Stack(
-        children: [
-          // Layer 1: Messages (Full Height)
-          (visibleMessages.isEmpty && msgState.isHydrating)
-              ? SizedBox(
-                  width: MediaQuery.of(context).size.width,
-                  height: MediaQuery.of(context).size.height,
-                  child: Center(
-                    child: CircularProgressIndicator(
-                      strokeWidth: 3,
-                      color: AppColors.primary,
+    return PopScope(
+      canPop: true,
+      onPopInvoked: (didPop) {
+        if (didPop) {
+          FocusManager.instance.primaryFocus?.unfocus();
+        }
+      },
+      child: Scaffold(
+        backgroundColor: widget.hideHeader
+            ? Colors.transparent
+            : AppColors.backgroundColor(context),
+        resizeToAvoidBottomInset: true,
+        body: Stack(
+          children: [
+            // Layer 1: Messages (Full Height)
+            (visibleMessages.isEmpty && msgState.isHydrating)
+                ? SizedBox(
+                    width: MediaQuery.of(context).size.width,
+                    height: MediaQuery.of(context).size.height,
+                    child: Center(
+                      child: CircularProgressIndicator(
+                        strokeWidth: 3,
+                        color: AppColors.primary,
+                      ),
                     ),
+                  )
+                : (visibleMessages.isEmpty && !msgState.isHydrating)
+                ? _EmptyState(isDark: isDark)
+                : _MessageList(
+                    messages: visibleMessages,
+                    currentUserId: currentUserId,
+                    scrollController: _scrollController,
+                    isDark: isDark,
+                    isGroup: _chatId.split('_').length != 2,
+                    lastRead:
+                        runtimeState?.lastReadSequence ??
+                        conversation?.lastSeenSequence ??
+                        0,
+                    hideHeader: widget.hideHeader,
+                    isCompact: _isCompact,
                   ),
-                )
-              : (visibleMessages.isEmpty && !msgState.isHydrating)
-              ? _EmptyState(isDark: isDark)
-              : _MessageList(
-                  messages: visibleMessages,
-                  currentUserId: currentUserId,
-                  scrollController: _scrollController,
-                  isDark: isDark,
-                  isGroup: _chatId.split('_').length != 2,
-                  lastRead:
-                      runtimeState?.lastReadSequence ??
-                      conversation?.lastSeenSequence ??
-                      0,
-                  hideHeader: widget.hideHeader,
-                  isCompact: _isCompact,
-                ),
 
-          // Layer 2: Bottom Content Mask Gradient (Absolute Sync with KovariBottomNav)
-          Positioned(
-            left: 0,
-            right: 0,
-            bottom: 0,
-            height: 90 + MediaQuery.of(context).padding.bottom,
-            child: IgnorePointer(
-              child: Container(
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                    stops: const [0.0, 0.3, 0.6, 0.85, 1.0],
-                    colors: [
-                      Colors.transparent,
-                      AppColors.backgroundColor(
-                        context,
-                      ).withValues(alpha: isDark ? 0.08 : 0.05),
-                      AppColors.backgroundColor(
-                        context,
-                      ).withValues(alpha: isDark ? 0.3 : 0.25),
-                      AppColors.backgroundColor(
-                        context,
-                      ).withValues(alpha: isDark ? 0.75 : 0.7),
-                      AppColors.backgroundColor(context),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          ),
-
-          // Layer 2 (Top): Top Content Mask Gradient to prevent text colliding with header pods
-          if (!widget.hideHeader)
+            // Layer 2: Bottom Content Mask Gradient (Absolute Sync with KovariBottomNav)
             Positioned(
               left: 0,
               right: 0,
-              top: 0,
-              height: MediaQuery.of(context).padding.top + 75,
+              bottom: 0,
+              height: 90 + MediaQuery.of(context).padding.bottom,
               child: IgnorePointer(
                 child: Container(
                   decoration: BoxDecoration(
                     gradient: LinearGradient(
-                      begin: Alignment.bottomCenter,
-                      end: Alignment.topCenter,
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
                       stops: const [0.0, 0.3, 0.6, 0.85, 1.0],
                       colors: [
                         Colors.transparent,
@@ -428,181 +418,157 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
               ),
             ),
 
-          // Layer 3: Floating Triple-Pod Header
-          if (!widget.hideHeader)
-            Positioned(
-              top: MediaQuery.of(context).padding.top + 8,
-              left: 16,
-              right: 16,
-              child: SizedBox(
-                height: 40,
-                child: Stack(
-                  children: [
-                    // Left: Back Action
-                    Align(
-                      alignment: Alignment.centerLeft,
-                      child: _ActionPod(
-                        icon: LucideIcons.chevronLeft,
-                        onPressed: () => Navigator.of(context).pop(),
-                        backgroundColor: AppColors.cardColor(
-                          context,
-                        ).withValues(alpha: 0.5),
-                        iconColor: AppColors.text(context, isMuted: true),
-                        iconSize: 20,
+            // Layer 2 (Top): Top Content Mask Gradient to prevent text colliding with header pods
+            if (!widget.hideHeader)
+              Positioned(
+                left: 0,
+                right: 0,
+                top: 0,
+                height: MediaQuery.of(context).padding.top + 75,
+                child: IgnorePointer(
+                  child: Container(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.bottomCenter,
+                        end: Alignment.topCenter,
+                        stops: const [0.0, 0.3, 0.6, 0.85, 1.0],
+                        colors: [
+                          Colors.transparent,
+                          AppColors.backgroundColor(
+                            context,
+                          ).withValues(alpha: isDark ? 0.08 : 0.05),
+                          AppColors.backgroundColor(
+                            context,
+                          ).withValues(alpha: isDark ? 0.3 : 0.25),
+                          AppColors.backgroundColor(
+                            context,
+                          ).withValues(alpha: isDark ? 0.75 : 0.7),
+                          AppColors.backgroundColor(context),
+                        ],
                       ),
                     ),
-
-                    // Center: Title Pod (Absolute Center)
-                    Align(
-                      alignment: Alignment.center,
-                      child: _ChatAppBar(
-                        conversation: conversation,
-                        chatId: _chatId,
-                      ),
-                    ),
-
-                    // Right: Profile/Partner Action
-                    Align(
-                      alignment: Alignment.centerRight,
-                      child: _AvatarPod(
-                        conversation: conversation,
-                        chatId: _chatId,
-                        onPressed: () {
-                          if (conversation?.isGroup == true) {
-                            // TODO: Navigate to group details
-                            return;
-                          }
-
-                          final clerkId = conversation?.partnerClerkId;
-                          final userId = conversation?.partnerUserId;
-
-                          final targetId =
-                              (clerkId != null && clerkId.isNotEmpty)
-                              ? clerkId
-                              : ((userId != null && userId.isNotEmpty)
-                                    ? userId
-                                    : null);
-
-                          AppLogger.d(
-                            '👤 [ChatScreen] Redirecting to profile. targetId: $targetId, partnerClerkId: ${conversation?.partnerClerkId}, partnerUserId: ${conversation?.partnerUserId}',
-                          );
-
-                          if (targetId != null && targetId.isNotEmpty) {
-                            PublicProfileRouteData(
-                              userId: targetId,
-                            ).push(context);
-                          } else {
-                            AppLogger.w(
-                              '⚠️ [ChatScreen] Cannot redirect: targetId is null or empty',
-                            );
-                          }
-                        },
-                      ),
-                    ),
-                  ],
+                  ),
                 ),
               ),
-            ),
 
-          // Scroll Anchor Button & New Messages Banner
-          Positioned(
-            bottom: 80,
-            right: 16,
-            child: IgnorePointer(
-              ignoring: !(_showScrollToBottom || _showNewMessageBanner),
-              child: AnimatedScale(
-                scale: (_showScrollToBottom || _showNewMessageBanner)
-                    ? 1.0
-                    : 0.0,
-                duration: const Duration(milliseconds: 250),
-                curve: Curves.easeOutBack, // Fluid pop-in
-                child: AnimatedOpacity(
-                  opacity: (_showScrollToBottom || _showNewMessageBanner)
-                      ? 1.0
-                      : 0.0,
-                  duration: const Duration(milliseconds: 200),
+            // Layer 3: Floating Triple-Pod Header
+            if (!widget.hideHeader)
+              Positioned(
+                top: MediaQuery.of(context).padding.top + 8,
+                left: 16,
+                right: 16,
+                child: SizedBox(
+                  height: 40,
                   child: Stack(
-                    clipBehavior: Clip.none,
                     children: [
-                      _ActionPod(
-                        icon: LucideIcons.arrowDown,
-                        onPressed: () {
-                          _scrollToBottom();
-                          setState(() {
-                            _showNewMessageBanner = false;
-                          });
-                        },
-                        backgroundColor: AppColors.cardColor(
-                          context,
-                        ).withValues(alpha: 0.5),
-                        iconColor: AppColors.text(context, isMuted: true),
-                        iconSize: 20,
-                      ),
-                      if (_showNewMessageBanner)
-                        Positioned(
-                          right: -2,
-                          top: -2,
-                          child: Container(
-                            width: 8,
-                            height: 8,
-                            decoration: const BoxDecoration(
-                              color: Colors.red,
-                              shape: BoxShape.circle,
-                            ),
-                          ),
+                      // Left: Back Action
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: _ActionPod(
+                          icon: LucideIcons.chevronLeft,
+                          onPressed: () {
+                            FocusManager.instance.primaryFocus?.unfocus();
+                            Navigator.of(context).pop();
+                          },
+                          backgroundColor: AppColors.cardColor(
+                            context,
+                          ).withValues(alpha: 0.5),
+                          iconColor: AppColors.text(context, isMuted: true),
+                          iconSize: 20,
                         ),
+                      ),
+
+                      // Center: Title Pod (Absolute Center)
+                      Align(
+                        alignment: Alignment.center,
+                        child: _ChatAppBar(
+                          conversation: conversation,
+                          chatId: _chatId,
+                        ),
+                      ),
+
+                      // Right: Profile/Partner Action
+                      Align(
+                        alignment: Alignment.centerRight,
+                        child: _AvatarPod(
+                          conversation: conversation,
+                          chatId: _chatId,
+                          onPressed: () {
+                            ref
+                                .read(realtimeCoordinatorProvider.notifier)
+                                .leaveChat(_chatId);
+                            final isGroup = _chatId.split('_').length != 2;
+                            if (isGroup) {
+                              context.push('/groups/$_chatId');
+                            } else {
+                              final current = ref.read(authProvider).user;
+                              if (current != null) {
+                                final currentUuid = current.resolvedUuid ?? '';
+                                final partnerId = directChatPartnerId(
+                                  _chatId,
+                                  current.id,
+                                  myUserUuid: currentUuid,
+                                );
+                                if (partnerId != null) {
+                                  context.push('/user/$partnerId');
+                                }
+                              }
+                            }
+                          },
+                        ),
+                      ),
                     ],
                   ),
                 ),
               ),
-            ),
-          ),
 
-          if (_showNewMessageBanner)
+            // Floating Scroll-To-Bottom Pod
             Positioned(
-              bottom: 80,
-              left: 0,
-              right: 0,
-              child: Center(
-                child: GestureDetector(
-                  onTap: () {
-                    _scrollToBottom();
-                    setState(() {
-                      _showNewMessageBanner = false;
-                    });
-                  },
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 8,
-                    ),
-                    decoration: BoxDecoration(
-                      color: AppColors.primary,
-                      borderRadius: BorderRadius.circular(20),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withValues(alpha: 0.2),
-                          blurRadius: 6,
-                          offset: const Offset(0, 3),
-                        ),
-                      ],
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
+              bottom: 96,
+              right: 16,
+              child: IgnorePointer(
+                ignoring: !(_showScrollToBottom || _showNewMessageBanner),
+                child: AnimatedScale(
+                  scale: (_showScrollToBottom || _showNewMessageBanner)
+                      ? 1.0
+                      : 0.0,
+                  duration: const Duration(milliseconds: 250),
+                  curve: Curves.easeOutBack, // Fluid pop-in
+                  child: AnimatedOpacity(
+                    opacity: (_showScrollToBottom || _showNewMessageBanner)
+                        ? 1.0
+                        : 0.0,
+                    duration: const Duration(milliseconds: 200),
+                    child: Stack(
+                      clipBehavior: Clip.none,
                       children: [
-                        const Icon(
-                          LucideIcons.arrowDown,
-                          size: 14,
-                          color: Colors.white,
+                        _ActionPod(
+                          icon: LucideIcons.arrowDown,
+                          onPressed: () {
+                            _scrollToBottom();
+                            setState(() {
+                              _showNewMessageBanner = false;
+                            });
+                          },
+                          backgroundColor: AppColors.cardColor(
+                            context,
+                          ).withValues(alpha: 0.5),
+                          iconColor: AppColors.text(context, isMuted: true),
+                          iconSize: 20,
                         ),
-                        const SizedBox(width: 6),
-                        Text(
-                          'New Messages',
-                          style: AppTextStyles.bodySmall.copyWith(
-                            color: Colors.white,
-                            fontWeight: FontWeight.bold,
+                        if (_showNewMessageBanner)
+                          Positioned(
+                            right: -2,
+                            top: -2,
+                            child: Container(
+                              width: 8,
+                              height: 8,
+                              decoration: const BoxDecoration(
+                                color: Colors.red,
+                                shape: BoxShape.circle,
+                              ),
+                            ),
                           ),
-                        ),
                       ],
                     ),
                   ),
@@ -610,40 +576,93 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
               ),
             ),
 
-          // Layer 3: Floating UI (Bottom Aligned)
-          Align(
-            alignment: Alignment.bottomCenter,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                _InputBar(
-                  chatId: _chatId,
-                  controller: _inputController,
-                  focusNode: _focusNode,
-                  isComposing: _isComposing,
-                  isSending: _isSending,
-                  onChanged: (val) {
-                    final composing = val.trim().isNotEmpty;
-                    if (composing != _isComposing) {
-                      setState(() => _isComposing = composing);
-                      if (composing) {
-                        ref
-                            .read(realtimeCoordinatorProvider.notifier)
-                            .startTyping(_chatId);
-                      } else {
-                        ref
-                            .read(realtimeCoordinatorProvider.notifier)
-                            .stopTyping(_chatId);
-                      }
-                    }
-                  },
-                  onSend: _sendMessage,
-                  isCompact: _isCompact,
+            if (_showNewMessageBanner)
+              Positioned(
+                bottom: 80,
+                left: 0,
+                right: 0,
+                child: Center(
+                  child: GestureDetector(
+                    onTap: () {
+                      _scrollToBottom();
+                      setState(() {
+                        _showNewMessageBanner = false;
+                      });
+                    },
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 8,
+                      ),
+                      decoration: BoxDecoration(
+                        color: AppColors.primary,
+                        borderRadius: BorderRadius.circular(20),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.2),
+                            blurRadius: 6,
+                            offset: const Offset(0, 3),
+                          ),
+                        ],
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(
+                            LucideIcons.arrowDown,
+                            size: 14,
+                            color: Colors.white,
+                          ),
+                          const SizedBox(width: 6),
+                          Text(
+                            'New Messages',
+                            style: AppTextStyles.bodySmall.copyWith(
+                              color: Colors.white,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
                 ),
-              ],
+              ),
+
+            // Layer 3: Floating UI (Bottom Aligned)
+            Align(
+              alignment: Alignment.bottomCenter,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  _InputBar(
+                    chatId: _chatId,
+                    controller: _inputController,
+                    focusNode: _focusNode,
+                    isComposing: _isComposing,
+                    isSending: _isSending,
+                    onChanged: (val) {
+                      final composing = val.trim().isNotEmpty;
+                      if (composing != _isComposing) {
+                        setState(() => _isComposing = composing);
+                        if (composing) {
+                          ref
+                              .read(realtimeCoordinatorProvider.notifier)
+                              .startTyping(_chatId);
+                        } else {
+                          ref
+                              .read(realtimeCoordinatorProvider.notifier)
+                              .stopTyping(_chatId);
+                        }
+                      }
+                    },
+                    onSend: _sendMessage,
+                    isCompact: _isCompact,
+                  ),
+                ],
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -844,14 +863,17 @@ class _AvatarPod extends ConsumerWidget {
               ),
             ),
             child: Center(
-              child: KovariAvatar(
-                imageUrl: conversation?.displayAvatar,
-                fullName: conversation?.displayName ?? '?',
-                size: 34,
-                isOnline: false,
-                borderColor: AppColors.cardColor(
-                  context,
-                ).withValues(alpha: 0.8),
+              child: Hero(
+                tag: 'avatar_$chatId',
+                child: KovariAvatar(
+                  imageUrl: conversation?.displayAvatar,
+                  fullName: conversation?.displayName ?? '?',
+                  size: 34,
+                  isOnline: false,
+                  borderColor: AppColors.cardColor(
+                    context,
+                  ).withValues(alpha: 0.8),
+                ),
               ),
             ),
           ),
@@ -933,6 +955,21 @@ class _MessageList extends ConsumerWidget {
         .toList()
         .reversed
         .toList();
+
+    final newestMediaMessages = displayMessages
+        .where((m) => m.localFilePath != null || m.mediaUrl != null)
+        .take(5)
+        .toList();
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (context.mounted) {
+        for (final msg in newestMediaMessages) {
+          if (msg.mediaUrl != null && msg.mediaUrl!.isNotEmpty) {
+            precacheImage(CachedNetworkImageProvider(msg.mediaUrl!), context);
+          }
+        }
+      }
+    });
 
     return ListView.builder(
       key: PageStorageKey(

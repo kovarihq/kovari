@@ -36,25 +36,35 @@ class _GroupDetailsScreenState extends ConsumerState<GroupDetailsScreen> {
   bool _isEditingNotes = false;
   int _activeTabIndex = 0;
 
+  late final GroupStore _groupStore;
+  late final MembershipStore _membershipStore;
+  late final MemberStore _memberStore;
+  late final ItineraryStore _itineraryStore;
+
   @override
   void initState() {
     super.initState();
+    _groupStore = ref.read(groupStoreProvider.notifier);
+    _membershipStore = ref.read(membershipStoreProvider.notifier);
+    _memberStore = ref.read(memberStoreProvider.notifier);
+    _itineraryStore = ref.read(itineraryStoreProvider.notifier);
+
     // 🛡️ [Hard Architectural Law] Subscribe to runtime state on mount
     Future.microtask(() {
-      ref.read(groupStoreProvider.notifier).subscribe(widget.groupId);
-      ref.read(membershipStoreProvider.notifier).subscribe(widget.groupId);
-      ref.read(memberStoreProvider.notifier).subscribe(widget.groupId);
-      ref.read(itineraryStoreProvider.notifier).subscribe(widget.groupId);
+      _groupStore.subscribe(widget.groupId);
+      _membershipStore.subscribe(widget.groupId);
+      _memberStore.subscribe(widget.groupId);
+      _itineraryStore.subscribe(widget.groupId);
     });
   }
 
   @override
   void dispose() {
     // GC: Cleanup subscriptions
-    ref.read(groupStoreProvider.notifier).unsubscribe(widget.groupId);
-    ref.read(membershipStoreProvider.notifier).unsubscribe(widget.groupId);
-    ref.read(memberStoreProvider.notifier).unsubscribe(widget.groupId);
-    ref.read(itineraryStoreProvider.notifier).unsubscribe(widget.groupId);
+    _groupStore.unsubscribe(widget.groupId);
+    _membershipStore.unsubscribe(widget.groupId);
+    _memberStore.unsubscribe(widget.groupId);
+    _itineraryStore.unsubscribe(widget.groupId);
     _notesController.dispose();
     super.dispose();
   }
