@@ -67,7 +67,9 @@ class RouterNotifier extends ChangeNotifier {
 
     // 2. Auth Guard
     if (!auth.isAuthenticated) {
-      if (auth.user?.isActivelyBanned == true) {
+      if (auth.isBanned ||
+          auth.user?.banned == true ||
+          auth.user?.isActivelyBanned == true) {
         return state.matchedLocation == '/banned' ? null : '/banned';
       }
 
@@ -89,13 +91,15 @@ class RouterNotifier extends ChangeNotifier {
     }
 
     // 3. Ban Guard
-    if (auth.user?.isActivelyBanned == true) {
+    if (auth.isBanned ||
+        auth.user?.banned == true ||
+        auth.user?.isActivelyBanned == true) {
       return state.matchedLocation == '/banned' ? null : '/banned';
     }
 
     // 4. Onboarding Guard
-    // Note: We only redirect to onboarding if the profile is loaded and the username is missing
-    final isProfileComplete = (profile?.username ?? '').isNotEmpty;
+    // Check the explicit onboardingCompleted flag from the server
+    final isProfileComplete = profile?.onboardingCompleted ?? false;
 
     if (!isProfileComplete && profile != null) {
       // Don't loop if already on onboarding

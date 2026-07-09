@@ -532,6 +532,12 @@ class _PublicProfileScreenState extends ConsumerState<PublicProfileScreen> {
             _buildChipsSection('LANGUAGES', profile.languages),
           ],
         ],
+        if (profile.travelIntentions.isNotEmpty) ...[
+          const SizedBox(height: 20),
+          Divider(height: 1, color: AppColors.borderColor(context)),
+          const SizedBox(height: 20),
+          _buildTravelIntentionsSection(profile.travelIntentions),
+        ],
       ],
     ),
   );
@@ -609,4 +615,49 @@ class _PublicProfileScreenState extends ConsumerState<PublicProfileScreen> {
       ),
     ],
   );
+  Widget _buildTravelIntentionsSection(List<TravelIntention> intentions) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'TRAVEL PLANS',
+          style: TextStyle(
+            fontSize: 10,
+            color: AppColors.text(context, isMuted: true),
+            fontWeight: FontWeight.w600,
+            letterSpacing: 0.5,
+          ),
+        ),
+        const SizedBox(height: 10),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: intentions.map((intent) {
+            final details = intent.destinationDetails;
+            if (details != null) {
+              debugPrint(
+                '📍 [PublicProfile] ${intent.destination} '
+                '— lat: ${details.lat}, lon: ${details.lon}',
+              );
+            }
+            return Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+              decoration: BoxDecoration(
+                color: AppColors.secondaryColor(context),
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Text(
+                intent.destination,
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w500,
+                  color: AppColors.text(context),
+                ),
+              ),
+            );
+          }).toList(),
+        ),
+      ],
+    );
+  }
 }

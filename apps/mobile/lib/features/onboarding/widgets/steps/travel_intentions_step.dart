@@ -15,12 +15,14 @@ class TravelIntentionsStep extends ConsumerStatefulWidget {
   const TravelIntentionsStep({super.key});
 
   @override
-  ConsumerState<TravelIntentionsStep> createState() => _TravelIntentionsStepState();
+  ConsumerState<TravelIntentionsStep> createState() =>
+      _TravelIntentionsStepState();
 }
 
 class _TravelIntentionsStepState extends ConsumerState<TravelIntentionsStep> {
   final TextEditingController _destinationController = TextEditingController();
   GeoapifyResult? _selectedDetails;
+  String? _travelIntentError;
 
   @override
   void dispose() {
@@ -71,7 +73,10 @@ class _TravelIntentionsStepState extends ConsumerState<TravelIntentionsStep> {
               children: List.generate(state.travelIntents.length, (index) {
                 final intent = state.travelIntents[index];
                 return Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 6,
+                  ),
                   decoration: BoxDecoration(
                     color: AppColors.primary.withValues(alpha: 0.08),
                     border: Border.all(
@@ -136,17 +141,19 @@ class _TravelIntentionsStepState extends ConsumerState<TravelIntentionsStep> {
                         shape: RoundedRectangleBorder(
                           borderRadius: AppRadius.large,
                         ),
-                        side: BorderSide(
-                          color: AppColors.borderColor(context),
-                        ),
+                        side: BorderSide(color: AppColors.borderColor(context)),
                         padding: const EdgeInsets.symmetric(horizontal: 16),
                       ),
                       onPressed: () {
                         final val = _destinationController.text.trim();
                         if (val.isEmpty) return;
 
-                        ref.read(onboardingProvider.notifier).addTravelIntent(
-                              _selectedDetails?.city ?? _selectedDetails?.formatted.split(',')[0] ?? val,
+                        ref
+                            .read(onboardingProvider.notifier)
+                            .addTravelIntent(
+                              _selectedDetails?.city ??
+                                  _selectedDetails?.formatted.split(',')[0] ??
+                                  val,
                               details: _selectedDetails,
                             );
 
@@ -188,46 +195,59 @@ class _TravelIntentionsStepState extends ConsumerState<TravelIntentionsStep> {
               child: Wrap(
                 spacing: 8,
                 runSpacing: 8,
-                children: suggestions.map((dest) => InkWell(
-                      onTap: () {
-                        ref
-                            .read(onboardingProvider.notifier)
-                            .addTravelIntent(dest);
-                      },
-                      borderRadius: BorderRadius.circular(20),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 6,
-                        ),
-                        decoration: BoxDecoration(
-                          border: Border.all(
-                            color: AppColors.borderColor(context),
+                children: suggestions
+                    .map(
+                      (dest) => InkWell(
+                        onTap: () {
+                          ref
+                              .read(onboardingProvider.notifier)
+                              .addTravelIntent(dest);
+                        },
+                        borderRadius: BorderRadius.circular(20),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 6,
                           ),
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                        child: Text(
-                          dest,
-                          style: AppTextStyles.bodySmall.copyWith(
-                            color: AppColors.text(context, isMuted: true),
+                          decoration: BoxDecoration(
+                            border: Border.all(
+                              color: AppColors.borderColor(context),
+                            ),
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          child: Text(
+                            dest,
+                            style: AppTextStyles.bodySmall.copyWith(
+                              color: AppColors.text(context, isMuted: true),
+                            ),
                           ),
                         ),
                       ),
-                    )).toList(),
+                    )
+                    .toList(),
               ),
             ),
             const SizedBox(height: AppSpacing.md),
           ],
 
           Text(
-            state.travelIntents.isEmpty
-                ? 'You can skip this and add destinations later from your profile.'
-                : '${state.travelIntents.length}/3 added',
+            '${state.travelIntents.length}/3 added',
             style: AppTextStyles.bodySmall.copyWith(
               color: AppColors.mutedForeground,
             ),
             textAlign: TextAlign.center,
           ),
+          if (_travelIntentError != null) ...[
+            const SizedBox(height: 8),
+            Text(
+              _travelIntentError!,
+              style: AppTextStyles.bodySmall.copyWith(
+                color: AppColors.destructive,
+                fontWeight: FontWeight.w500,
+              ),
+              textAlign: TextAlign.center,
+            ),
+          ],
           const SizedBox(height: AppSpacing.lg),
 
           // Navigation buttons
@@ -245,8 +265,16 @@ class _TravelIntentionsStepState extends ConsumerState<TravelIntentionsStep> {
               const SizedBox(width: AppSpacing.sm),
               Expanded(
                 child: PrimaryButton(
-                  text: state.travelIntents.isNotEmpty ? 'Continue' : 'Skip for now',
+                  text: 'Continue',
                   onPressed: () {
+                    if (state.travelIntents.isEmpty) {
+                      setState(() {
+                        _travelIntentError =
+                            'Please add at least one travel destination to continue.';
+                      });
+                      return;
+                    }
+                    setState(() => _travelIntentError = null);
                     ref.read(onboardingProvider.notifier).setStep(8);
                   },
                   icon: LucideIcons.chevronRight,

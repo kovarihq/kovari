@@ -835,13 +835,53 @@ class DioApiClient implements ApiClient {
         if (e.response?.data is Map) {
           final data = e.response!.data as Map;
           final errorField = data['error'];
-          final code = (errorField is Map ? errorField['code'] : errorField) ?? data['code'];
-          if (code == 'BANNED_USER') {
-            final String reason = ((errorField is Map ? errorField['message'] : null) ?? data['message'] ?? 'Account has been banned').toString();
-            return ApiResponse.fallback(
-              reason: 'BANNED_USER',
-              requestId: requestId,
-              error: ApiError(message: reason, code: 'BANNED_USER'),
+
+          // Backend sends error as either a string or a nested { message, code, details } object
+          String? code;
+          String? message;
+          Map<String, dynamic>? details;
+          if (errorField is Map) {
+            code = errorField['code']?.toString();
+            message = errorField['message']?.toString();
+            // details lives at the error level for formatErrorResponse format
+            final d = errorField['details'];
+            if (d is Map<String, dynamic>) details = d;
+          } else if (errorField is String) {
+            message = errorField;
+          }
+          code ??= data['code']?.toString();
+          message ??= data['message']?.toString();
+
+          // banExpiresAt/banReason can also be at root level (used by /api/auth/login raw format)
+          final banExpiresAt =
+              details?['banExpiresAt']?.toString() ??
+              data['banExpiresAt']?.toString();
+          final banReason =
+              details?['banReason']?.toString() ??
+              data['banReason']?.toString();
+
+          // Detect ban: either via explicit BANNED_USER code (used by /api/auth/me, /refresh, /login)
+          // or via FORBIDDEN code with a ban message (used by /api/auth/google)
+          final isBannedUser =
+              code == 'BANNED_USER' ||
+              (code == 'FORBIDDEN' &&
+                  (message?.toLowerCase().contains('ban') == true));
+
+          if (isBannedUser) {
+            final reason = message ?? 'Account has been banned';
+            // Encode ban metadata into the error string so auth_provider can parse it
+            final errorPayload = [
+              'BANNED_USER',
+              reason,
+              banExpiresAt ?? '',
+              banReason ?? '',
+            ].join('||');
+            throw DioException(
+              requestOptions: e.requestOptions,
+              response: e.response,
+              type: DioExceptionType.badResponse,
+              error: errorPayload,
+              message: 'BANNED_USER',
             );
           }
         }

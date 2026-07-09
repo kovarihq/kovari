@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mobile/core/network/api_client.dart';
 import 'package:mobile/core/network/cloudinary_service.dart';
 import 'package:mobile/core/network/location_service.dart';
+import 'package:mobile/core/providers/profile_provider.dart';
 import 'package:mobile/features/onboarding/data/profile_service.dart';
 
 const Object _sentinel = Object();
@@ -166,14 +167,23 @@ class OnboardingNotifier extends Notifier<OnboardingState> {
     _debounceTimer?.cancel();
     state = state.copyWith(isUsernameChecking: true);
     _debounceTimer = Timer(const Duration(milliseconds: 500), () async {
-      final available = await _profileService.checkUsernameAvailable(
-        username,
-        cancelToken: _cancelToken,
-      );
-      state = state.copyWith(
-        isUsernameAvailable: available,
-        isUsernameChecking: false,
-      );
+      try {
+        final available = await _profileService.checkUsernameAvailable(
+          username,
+          cancelToken: _cancelToken,
+        );
+        state = state.copyWith(
+          isUsernameAvailable: available,
+          isUsernameChecking: false,
+          errorMessage: null,
+        );
+      } catch (e) {
+        state = state.copyWith(
+          isUsernameAvailable: null,
+          isUsernameChecking: false,
+          errorMessage: 'Check failed: Network connection issue',
+        );
+      }
     });
   }
 
@@ -234,9 +244,7 @@ class OnboardingNotifier extends Notifier<OnboardingState> {
     final current = List<Map<String, dynamic>>.from(state.travelIntents);
     if (current.length >= 3) return;
 
-    final Map<String, dynamic> newIntent = {
-      'destination': destination,
-    };
+    final Map<String, dynamic> newIntent = {'destination': destination};
     if (details != null) {
       newIntent['destination_details'] = {
         'city': details.city,
@@ -336,17 +344,21 @@ class OnboardingNotifier extends Notifier<OnboardingState> {
             : null,
         'languages': state.languages,
         'nationality': state.nationality ?? 'Indian',
-        'job': state.jobType,
+        'job': state.jobType ?? '',
         'religion': state.religion ?? 'Prefer not to say',
         'smoking': state.smoking ?? 'No',
         'drinking': state.drinking ?? 'No',
         'personality': state.personality ?? 'Ambivert',
         'food_preference': state.foodPreference ?? 'Veg',
         'interests': state.interests,
-        'travel_intentions': state.travelIntents.map((intent) => {
-          'destination': intent['destination'],
-          'destination_details': intent['destination_details'] ?? null,
-        }).toList(),
+        'travel_intentions': state.travelIntents
+            .map(
+              (intent) => {
+                'destination': intent['destination'],
+                'destination_details': intent['destination_details'] ?? null,
+              },
+            )
+            .toList(),
       };
 
       // 2.5 Remove null values from payload
@@ -364,6 +376,11 @@ class OnboardingNotifier extends Notifier<OnboardingState> {
         privacyVersion: '1.0',
         guidelinesVersion: '1.0',
         cancelToken: _cancelToken,
+      );
+
+      // 5. Refresh profile state so GoRouter onboardingCompleted is updated
+      unawaited(
+        ref.read(profileProvider.notifier).fetchProfile(ignoreCache: true),
       );
 
       setStep(9);

@@ -62,7 +62,10 @@ export async function POST(request: NextRequest) {
     }
 
     if (isActiveBan(user)) {
-      return formatErrorResponse(BAN_ERROR_MESSAGE, ApiErrorCode.FORBIDDEN, requestId, 403);
+      return formatErrorResponse(BAN_ERROR_MESSAGE, ApiErrorCode.FORBIDDEN, requestId, 403, {
+        banExpiresAt: user.ban_expires_at ?? null,
+        banReason: user.ban_reason ?? null,
+      });
     }
 
     // 4. Generate Tokens

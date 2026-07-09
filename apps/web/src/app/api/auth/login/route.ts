@@ -51,7 +51,7 @@ export async function POST(request: NextRequest) {
       }
 
       if (isActiveBan(user)) {
-        return NextResponse.json({ error: BAN_ERROR_MESSAGE, code: "BANNED_USER" }, { status: 403 });
+        return NextResponse.json({ error: BAN_ERROR_MESSAGE, code: "BANNED_USER", banExpiresAt: user.ban_expires_at ?? null, banReason: user.ban_reason ?? null }, { status: 403 });
       }
 
       const refreshToken = generateRefreshToken(user.id, user.email);

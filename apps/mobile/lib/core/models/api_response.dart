@@ -3,14 +3,13 @@ enum ContractState { clean, filtered, degraded }
 
 /// 🛡️ API Error Shape
 class ApiError {
-
   const ApiError({required this.message, required this.code, this.requestId});
 
   factory ApiError.fromJson(Map<String, dynamic> json) => ApiError(
-      message: (json['message'] ?? 'Unknown error').toString(),
-      code: (json['code'] ?? 'UNKNOWN').toString(),
-      requestId: json['requestId']?.toString(),
-    );
+    message: (json['message'] ?? 'Unknown error').toString(),
+    code: (json['code'] ?? 'UNKNOWN').toString(),
+    requestId: json['requestId']?.toString(),
+  );
   final String message;
   final String code;
   final String? requestId;
@@ -18,7 +17,6 @@ class ApiError {
 
 /// 🛡️ API Meta Shape
 class ApiMeta {
-
   const ApiMeta({
     this.degraded = false,
     this.contractState = ContractState.clean,
@@ -41,10 +39,10 @@ class ApiMeta {
   }
 
   factory ApiMeta.degraded({String reason = 'unknown'}) => ApiMeta(
-      degraded: true,
-      contractState: ContractState.degraded,
-      reason: reason,
-    );
+    degraded: true,
+    contractState: ContractState.degraded,
+    reason: reason,
+  );
   final bool degraded;
   final ContractState contractState;
   final String reason;
@@ -53,7 +51,6 @@ class ApiMeta {
 
 /// 🛡️ Standardized API Response
 class ApiResponse<T> {
-
   const ApiResponse({
     required this.success,
     required this.meta,
@@ -113,12 +110,12 @@ class ApiResponse<T> {
     dynamic raw,
     ApiError? error,
   }) => ApiResponse(
-      success: true, // flow continues safely
-      raw: raw,
-      meta: ApiMeta.degraded(reason: reason),
-      error: error,
-      requestId: requestId,
-    );
+    success: true, // flow continues safely
+    raw: raw,
+    meta: ApiMeta.degraded(reason: reason),
+    error: error,
+    requestId: requestId,
+  );
   final bool success;
   final T? data;
   final dynamic raw;

@@ -21,12 +21,22 @@ class AuthState {
     this.isDegraded = false,
     this.isRefreshing = false,
     this.isBootstrapping = true,
+    this.isBanned = false,
+    this.banExpiresAt,
+    this.banReason,
   });
   final KovariUser? user;
   final bool isAuthenticated;
   final bool isDegraded;
   final bool isRefreshing;
   final bool isBootstrapping;
+  /// True when the account is actively banned — used to show BannedScreen
+  /// even when no KovariUser object is available (e.g. during a fresh banned login).
+  final bool isBanned;
+  /// ISO-8601 string of when the suspension expires. Null means permanent ban.
+  final String? banExpiresAt;
+  /// Human-readable ban reason from the backend.
+  final String? banReason;
 
   AuthState copyWith({
     KovariUser? user,
@@ -34,12 +44,18 @@ class AuthState {
     bool? isDegraded,
     bool? isRefreshing,
     bool? isBootstrapping,
+    bool? isBanned,
+    String? banExpiresAt,
+    String? banReason,
   }) => AuthState(
     user: user ?? this.user,
     isAuthenticated: isAuthenticated ?? this.isAuthenticated,
     isDegraded: isDegraded ?? this.isDegraded,
     isRefreshing: isRefreshing ?? this.isRefreshing,
     isBootstrapping: isBootstrapping ?? this.isBootstrapping,
+    isBanned: isBanned ?? this.isBanned,
+    banExpiresAt: banExpiresAt ?? this.banExpiresAt,
+    banReason: banReason ?? this.banReason,
   );
 }
 
@@ -105,9 +121,9 @@ class AuthNotifier extends Notifier<AuthState> {
     });
   }
 
-  /// Poll server for current ban status (cold launch, resume, mid-session).
   Future<void> syncBanStatus() async {
-    if (!state.isAuthenticated) return;
+    // If not authenticated, we still want to run if we have a cached user or if we explicitly catch a Banned exception during login.
+    // So we remove the early return guard to let Banned exceptions trigger the flow.
 
     try {
       final apiClient = ref.read(apiClientProvider);
@@ -119,7 +135,8 @@ class AuthNotifier extends Notifier<AuthState> {
 
       if (response.success && response.data != null) {
         final raw = response.data!;
-        final userMap = (raw['user'] as Map<String, dynamic>?) ??
+        final userMap =
+            (raw['user'] as Map<String, dynamic>?) ??
             (raw['data']?['user'] as Map<String, dynamic>?);
         if (userMap == null) return;
 
@@ -135,7 +152,9 @@ class AuthNotifier extends Notifier<AuthState> {
         state = state.copyWith(user: user);
       }
     } catch (e) {
-      if (e.toString().contains('BANNED_USER') || (e is DioException && (e.response?.statusCode == 403 || e.message == 'BANNED_USER'))) {
+      if (e.toString().contains('BANNED_USER') ||
+          (e is DioException &&
+              (e.response?.statusCode == 403 || e.message == 'BANNED_USER'))) {
         KovariUser? bannedUser;
         if (e is DioException && e.response?.data is Map) {
           final data = e.response!.data as Map;
@@ -151,9 +170,16 @@ class AuthNotifier extends Notifier<AuthState> {
     }
   }
 
-  Future<void> _handleBannedSession(KovariUser? user) async {
+  Future<void> _handleBannedSession(
+    KovariUser? user, {
+    String? banExpiresAt,
+    String? banReason,
+  }) async {
     final bannedUser = user ?? state.user;
-    if (bannedUser == null) return;
+    // Prefer explicit expiry; fall back to what's already on the user object
+    final resolvedExpiry = (banExpiresAt?.isNotEmpty == true)
+        ? banExpiresAt
+        : bannedUser?.banExpiresAt;
 
     try {
       await ref.read(localCacheProvider).clearAll();
@@ -163,16 +189,61 @@ class AuthNotifier extends Notifier<AuthState> {
       ref.read(socketServiceProvider.notifier).disconnect();
     } catch (_) {}
 
-    final storage = TokenStorage();
-    await storage.saveUserData(jsonEncode(bannedUser.toJson()));
+    // Save user data locally if we have it (for cold start BannedScreen to read ban status)
+    if (bannedUser != null) {
+      final storage = TokenStorage();
+      await storage.saveUserData(jsonEncode(bannedUser.toJson()));
+    }
 
-    final repo = ref.read(authRepositoryProvider);
-    await repo.logout(reason: 'BANNED');
+    // Terminate the authenticated session state
+    final session = ref.read(sessionManagerProvider);
+    session.setAuthenticated(false);
+    session.setDisableRefresh(true);
 
+    // Set isBanned=true so the router redirects to /banned even when there is no user object
+    // (e.g. during a fresh login attempt with a banned account)
     state = AuthState(
       user: bannedUser,
       isAuthenticated: false,
       isBootstrapping: false,
+      isBanned: true,
+      banExpiresAt: resolvedExpiry,
+      banReason: (banReason?.isNotEmpty == true) ? banReason : bannedUser?.banReason,
+    );
+  }
+
+  /// Explicitly triggers ban screen navigation state from a caught exception (e.g. during login).
+  /// Parses the pipe-encoded payload from api_client: 'BANNED_USER||reason||banExpiresAt||banReason'
+  Future<void> handleBannedException(dynamic error) async {
+    KovariUser? bannedUser;
+    String? banExpiresAt;
+    String? banReason;
+
+    if (error is DioException) {
+      // Parse pipe-separated ban metadata encoded by api_client._safeRequest
+      final rawError = error.error?.toString() ?? '';
+      final parts = rawError.split('||');
+      if (parts.length >= 3) {
+        banExpiresAt = parts[2].isNotEmpty ? parts[2] : null;
+      }
+      if (parts.length >= 4) {
+        banReason = parts[3].isNotEmpty ? parts[3] : null;
+      }
+
+      // Also try to find user object in the response body
+      if (error.response?.data is Map) {
+        final data = error.response!.data as Map;
+        final userMap = data['user'] ?? data['data']?['user'];
+        if (userMap is Map<String, dynamic>) {
+          bannedUser = KovariUser.fromAuthResponse(userMap);
+        }
+      }
+    }
+
+    await _handleBannedSession(
+      bannedUser ?? state.user,
+      banExpiresAt: banExpiresAt,
+      banReason: banReason,
     );
   }
 
@@ -212,10 +283,14 @@ class AuthNotifier extends Notifier<AuthState> {
     final currentUser = state.user;
     if (currentUser != null) {
       try {
-        final cacheRepo = ref.read(conversationCacheRepositoryProvider(currentUser.id));
+        final cacheRepo = ref.read(
+          conversationCacheRepositoryProvider(currentUser.id),
+        );
         await cacheRepo.deleteCache();
         await cacheRepo.close();
-        AppLogger.i('Cleaned and closed cache boxes for logging out user: ${currentUser.id}');
+        AppLogger.i(
+          'Cleaned and closed cache boxes for logging out user: ${currentUser.id}',
+        );
       } catch (e) {
         AppLogger.e('Failed to clean cache boxes during logout: $e');
       }

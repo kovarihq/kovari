@@ -104,12 +104,30 @@ class _LocationAutocompleteState extends ConsumerState<LocationAutocomplete> {
             _fieldKey.currentContext?.findRenderObject() as RenderBox?;
         final size = renderBox?.size ?? Size.zero;
 
+        // Calculate available space below to dynamically show above or below keyboard
+        double availableSpaceBelow = 300;
+        final mediaQuery = MediaQuery.of(context);
+        final screenHeight = mediaQuery.size.height;
+        final keyboardHeight = mediaQuery.viewInsets.bottom;
+
+        if (renderBox != null && renderBox.hasSize) {
+          final position = renderBox.localToGlobal(Offset.zero);
+          availableSpaceBelow =
+              screenHeight - keyboardHeight - (position.dy + size.height);
+        }
+
+        const maxOverlayHeight = 240.0;
+        final showAbove = availableSpaceBelow < (maxOverlayHeight + 10);
+        final offset = showAbove
+            ? Offset(0, -maxOverlayHeight - 8)
+            : Offset(0, size.height + 4);
+
         return Positioned(
           width: size.width,
           child: CompositedTransformFollower(
             link: _layerLink,
             showWhenUnlinked: false,
-            offset: Offset(0, size.height + 4),
+            offset: offset,
             child: TapRegion(
               groupId: 'location_autocomplete',
               child: Material(
@@ -118,7 +136,9 @@ class _LocationAutocompleteState extends ConsumerState<LocationAutocomplete> {
                 color: AppColors.surface(context, level: 2),
                 shadowColor: Colors.black.withValues(alpha: 0.1),
                 child: Container(
-                  constraints: const BoxConstraints(maxHeight: 240),
+                  constraints: const BoxConstraints(
+                    maxHeight: maxOverlayHeight,
+                  ),
                   decoration: BoxDecoration(
                     border: Border.all(color: AppColors.borderColor(context)),
                     borderRadius: AppRadius.large,

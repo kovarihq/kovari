@@ -33,6 +33,7 @@ export interface UserProfileDTO {
   
   // Verification
   verified: boolean;
+  is_internal: boolean;
 
   travel_intentions: any[];
 }

@@ -90,6 +90,7 @@ export const profileMapper = {
       
       // Verification
       verified: !!p.verified,
+      is_internal: !!(u.is_internal ?? p.is_internal ?? false),
       
       travel_intentions: Array.isArray(parsedTravelIntentions) ? parsedTravelIntentions : [],
     };

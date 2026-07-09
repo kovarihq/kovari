@@ -4,7 +4,6 @@ import 'package:mobile/core/network/api_endpoints.dart';
 import 'package:mobile/core/utils/api_error_handler.dart';
 
 class ProfileService {
-
   ProfileService(this._apiClient);
   final ApiClient _apiClient;
 
@@ -110,21 +109,17 @@ class ProfileService {
     CancelToken? cancelToken,
   }) async {
     if (username.trim().length < 3) return false;
-    try {
-      final response = await _apiClient.post<bool>(
-        'check-username',
-        data: {'username': username},
-        cancelToken: cancelToken,
-        parser: (data) {
-          if (data is Map<String, dynamic>) {
-            return data['available'] == true;
-          }
-          return false;
-        },
-      );
-      return response.data ?? false;
-    } catch (e) {
-      return false;
-    }
+    final response = await _apiClient.post<bool>(
+      'check-username',
+      data: {'username': username},
+      cancelToken: cancelToken,
+      parser: (data) {
+        if (data is Map<String, dynamic>) {
+          return data['available'] == true;
+        }
+        return false;
+      },
+    );
+    return response.success && response.data == true;
   }
 }

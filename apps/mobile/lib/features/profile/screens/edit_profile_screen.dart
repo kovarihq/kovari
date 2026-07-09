@@ -11,6 +11,7 @@ import 'package:intl/intl.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:mobile/core/network/api_client.dart';
 import 'package:mobile/core/network/cloudinary_service.dart';
+import 'package:mobile/core/network/location_service.dart';
 import 'package:mobile/core/providers/profile_provider.dart';
 import 'package:mobile/core/theme/app_colors.dart';
 import 'package:mobile/core/theme/app_spacing.dart';
@@ -54,6 +55,9 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
   String _foodPreference = '';
   List<String> _interests = [];
   List<String> _languages = [];
+  List<TravelIntention> _travelIntentions = [];
+  final TextEditingController _destinationController = TextEditingController();
+  GeoapifyResult? _selectedDestinationDetails;
 
   bool _isLoading = false;
 
@@ -94,6 +98,7 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
     _foodPreference = profile.foodPreference;
     _interests = List.from(profile.interests);
     _languages = List.from(profile.languages);
+    _travelIntentions = List.from(profile.travelIntentions);
   }
 
   void _debounceUsernameCheck(String username) {
@@ -305,6 +310,7 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
     _usernameController.dispose();
     _bioController.dispose();
     _professionController.dispose();
+    _destinationController.dispose();
     super.dispose();
   }
 
@@ -363,6 +369,7 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
         'languages': _languages,
         'profile_photo': finalProfilePicUrl,
         'avatar': finalProfilePicUrl, // Alias for mobile consistency
+        'travel_intentions': _travelIntentions.map((t) => t.toJson()).toList(),
       };
 
       await profileService.updateProfile(updatedData);
@@ -382,7 +389,9 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
 
       if (mounted) {
         KovariSnackbar.success(context, 'Profile updated successfully');
-        context.pop();
+        context.go('/profile');
+        // Trigger background network refresh to sync all cached data smoothly
+        ref.read(profileProvider.notifier).fetchProfile(ignoreCache: true);
       }
     } catch (e) {
       if (mounted) {
@@ -769,6 +778,147 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
                         : _languages.add(val),
                   ),
                 ),
+              ],
+            ),
+          ),
+          const SizedBox(height: AppSpacing.lg),
+
+          // 4. Travel Intentions
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
+            child: ProfileSectionCard(
+              title: 'Travel Plans',
+              subtitle: 'Add up to 3 destinations you want to visit.',
+              children: [
+                // Added destinations chips
+                if (_travelIntentions.isNotEmpty) ...[
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: List.generate(_travelIntentions.length, (index) {
+                      final intent = _travelIntentions[index];
+                      return Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 6,
+                        ),
+                        decoration: BoxDecoration(
+                          color: AppColors.secondaryColor(context),
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              intent.destination,
+                              style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w500,
+                                color: AppColors.text(context),
+                              ),
+                            ),
+                            const SizedBox(width: 6),
+                            GestureDetector(
+                              onTap: () => setState(
+                                () => _travelIntentions.removeAt(index),
+                              ),
+                              child: Icon(
+                                LucideIcons.x,
+                                size: 14,
+                                color: AppColors.text(context, isMuted: true),
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    }),
+                  ),
+                  const SizedBox(height: AppSpacing.md),
+                ],
+
+                // Destination input — only when < 3 added
+                if (_travelIntentions.length < 3)
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Expanded(
+                        child: LocationAutocomplete(
+                          label: 'Add Destination',
+                          controller: _destinationController,
+                          hintText: 'Enter your destination',
+                          fillColor: AppColors.surface(context, level: 2),
+                          onSelect: (result) {
+                            _selectedDestinationDetails = result;
+                          },
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 2),
+                        child: SizedBox(
+                          height: 44,
+                          child: OutlinedButton(
+                            style: OutlinedButton.styleFrom(
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              side: BorderSide(
+                                color: AppColors.borderColor(context),
+                              ),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 18,
+                              ),
+                            ),
+                            onPressed: () {
+                              final val = _destinationController.text.trim();
+                              if (val.isEmpty) return;
+                              final details = _selectedDestinationDetails;
+                              final label =
+                                  details?.city ??
+                                  details?.formatted.split(',')[0].trim() ??
+                                  val;
+                              setState(() {
+                                _travelIntentions.add(
+                                  TravelIntention(
+                                    destination: label,
+                                    destinationDetails: details != null
+                                        ? DestinationDetails(
+                                            city: details.city,
+                                            country: details.country,
+                                            lat: details.lat,
+                                            lon: details.lon,
+                                          )
+                                        : null,
+                                  ),
+                                );
+                              });
+                              _destinationController.clear();
+                              _selectedDestinationDetails = null;
+                            },
+                            child: Text(
+                              'Add',
+                              style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                                color: AppColors.text(context),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+
+                if (_travelIntentions.isEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 8),
+                    child: Text(
+                      'No destinations added yet.',
+                      style: AppTextStyles.bodySmall.copyWith(
+                        color: AppColors.text(context, isMuted: true),
+                      ),
+                    ),
+                  ),
               ],
             ),
           ),

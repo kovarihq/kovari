@@ -43,8 +43,9 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
       body: Stack(
         children: [
           KovariRefreshIndicator(
-            onRefresh: () =>
-                ref.read(profileProvider.notifier).fetchProfile(ignoreCache: true),
+            onRefresh: () => ref
+                .read(profileProvider.notifier)
+                .fetchProfile(ignoreCache: true),
             child: CustomScrollView(
               key: const PageStorageKey('profile_scroll'),
               physics: const BouncingScrollPhysics(
@@ -82,12 +83,19 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
                 decoration: BoxDecoration(
                   color: AppColors.primary.withOpacity(0.15),
                   borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: AppColors.primary.withOpacity(0.4), width: 1),
+                  border: Border.all(
+                    color: AppColors.primary.withOpacity(0.4),
+                    width: 1,
+                  ),
                 ),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(LucideIcons.shieldAlert, size: 12, color: AppColors.primary),
+                    Icon(
+                      LucideIcons.shieldAlert,
+                      size: 12,
+                      color: AppColors.primary,
+                    ),
                     const SizedBox(width: 4),
                     Text(
                       'Test Mode',
@@ -441,6 +449,12 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
             _buildChipsSection(context, 'LANGUAGES', profile.languages),
           ],
         ],
+        if (profile.travelIntentions.isNotEmpty) ...[
+          const SizedBox(height: 20),
+          Divider(height: 1, color: AppColors.borderColor(context)),
+          const SizedBox(height: 20),
+          _buildTravelIntentionsSection(context, profile.travelIntentions),
+        ],
       ],
     ),
   );
@@ -477,6 +491,56 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
       Expanded(child: item2),
     ],
   );
+
+  Widget _buildTravelIntentionsSection(
+    BuildContext context,
+    List<TravelIntention> intentions,
+  ) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'TRAVEL PLANS',
+          style: TextStyle(
+            fontSize: 10,
+            color: AppColors.text(context, isMuted: true),
+            fontWeight: FontWeight.w600,
+            letterSpacing: 0.5,
+          ),
+        ),
+        const SizedBox(height: 10),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: intentions.map((intent) {
+            final details = intent.destinationDetails;
+            // Log coordinate parsing for Scenario 3 validation
+            if (details != null) {
+              debugPrint(
+                '📍 [TravelIntentions] ${intent.destination} '
+                '— lat: ${details.lat}, lon: ${details.lon}',
+              );
+            }
+            return Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+              decoration: BoxDecoration(
+                color: AppColors.secondaryColor(context),
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Text(
+                intent.destination,
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w500,
+                  color: AppColors.text(context),
+                ),
+              ),
+            );
+          }).toList(),
+        ),
+      ],
+    );
+  }
 
   Widget _buildChipsSection(
     BuildContext context,

@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:mobile/core/navigation/routes.dart';
 import 'package:mobile/core/providers/auth_provider.dart';
+import 'package:mobile/core/providers/profile_provider.dart';
 import 'package:mobile/core/theme/app_colors.dart';
 import 'package:mobile/core/theme/app_radius.dart';
 import 'package:mobile/core/theme/app_spacing.dart';
@@ -41,7 +42,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
   Widget build(BuildContext context) {
     final state = ref.watch(onboardingProvider);
     const totalSteps = 8;
-    final isComplete = state.currentStep > totalSteps;
+    final bool isComplete = state.currentStep > totalSteps;
 
     // Synchronize PageView with currentStep state (only for active steps)
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -67,6 +68,9 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
       TravelIntentionsStep(),
       PolicyStep(),
     ];
+
+    final profile = ref.watch(profileProvider);
+    final bool isInternalUser = profile?.isInternal ?? false;
 
     return Scaffold(
       backgroundColor: AppColors.surface(context),
@@ -98,7 +102,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                         children: [
                           GestureDetector(
                             onLongPress: () {
-                              if (kDebugMode) {
+                              if (isInternalUser) {
                                 showDialog<void>(
                                   context: context,
                                   builder: (context) => AlertDialog(

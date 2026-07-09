@@ -38,109 +38,112 @@ class _MediaBioStepState extends ConsumerState<MediaBioStep> {
   }
 
   void _showImageSourceModal() {
-    unawaited(showModalBottomSheet<void>(
-      context: context,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (context) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const SizedBox(height: 8),
-            Container(
-              width: 40,
-              height: 4,
-              decoration: BoxDecoration(
-                color: AppColors.borderColor(context),
-                borderRadius: BorderRadius.circular(2),
-              ),
-            ),
-            const SizedBox(height: 24),
-            Text(
-              'Profile Picture',
-              style: AppTextStyles.h3.copyWith(fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 16),
-            ListTile(
-              visualDensity: VisualDensity.compact,
-              dense: true,
-              leading: Container(
-                padding: const EdgeInsets.all(6),
-                child: const Icon(
-                  LucideIcons.camera,
-                  size: 22,
-                  color: AppColors.mutedForeground,
+    unawaited(
+      showModalBottomSheet<void>(
+        context: context,
+        backgroundColor: AppColors.surface(context, level: 1),
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        builder: (context) => SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const SizedBox(height: 8),
+              Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: AppColors.borderColor(context),
+                  borderRadius: BorderRadius.circular(2),
                 ),
               ),
-              title: Text(
-                'Take Photo',
-                style: AppTextStyles.bodyMedium.copyWith(
-                  fontWeight: FontWeight.w600,
-                  color: AppColors.mutedForeground,
-                ),
+              const SizedBox(height: 24),
+              Text(
+                'Profile Picture',
+                style: AppTextStyles.h3.copyWith(fontWeight: FontWeight.bold),
               ),
-              onTap: () {
-                context.pop();
-                _pickImage(ImageSource.camera);
-              },
-            ),
-            ListTile(
-              visualDensity: VisualDensity.compact,
-              dense: true,
-              leading: Container(
-                padding: const EdgeInsets.all(6),
-                child: const Icon(
-                  LucideIcons.image,
-                  size: 22,
-                  color: AppColors.mutedForeground,
-                ),
-              ),
-              title: Text(
-                'Choose from Gallery',
-                style: AppTextStyles.bodyMedium.copyWith(
-                  fontWeight: FontWeight.w600,
-                  color: AppColors.mutedForeground,
-                ),
-              ),
-              onTap: () {
-                context.pop();
-                _pickImage(ImageSource.gallery);
-              },
-            ),
-            if (ref.read(onboardingProvider).localProfilePicPath != null ||
-                ref.read(onboardingProvider).profilePicUrl != null)
+              const SizedBox(height: 16),
               ListTile(
                 visualDensity: VisualDensity.compact,
                 dense: true,
                 leading: Container(
                   padding: const EdgeInsets.all(6),
                   child: const Icon(
-                    LucideIcons.trash2,
+                    LucideIcons.camera,
                     size: 22,
-                    color: AppColors.destructive,
+                    color: AppColors.mutedForeground,
                   ),
                 ),
                 title: Text(
-                  'Remove Photo',
+                  'Take Photo',
                   style: AppTextStyles.bodyMedium.copyWith(
-                    color: AppColors.destructive,
                     fontWeight: FontWeight.w600,
+                    color: AppColors.mutedForeground,
                   ),
                 ),
                 onTap: () {
                   context.pop();
-                  ref
-                      .read(onboardingProvider.notifier)
-                      .updateMediaBio(url: null, localPath: null);
-                  setState(() => _photoError = null);
+                  _pickImage(ImageSource.camera);
                 },
               ),
-            const SizedBox(height: 16),
-          ],
+              ListTile(
+                visualDensity: VisualDensity.compact,
+                dense: true,
+                leading: Container(
+                  padding: const EdgeInsets.all(6),
+                  child: const Icon(
+                    LucideIcons.image,
+                    size: 22,
+                    color: AppColors.mutedForeground,
+                  ),
+                ),
+                title: Text(
+                  'Choose from Gallery',
+                  style: AppTextStyles.bodyMedium.copyWith(
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.mutedForeground,
+                  ),
+                ),
+                onTap: () {
+                  context.pop();
+                  _pickImage(ImageSource.gallery);
+                },
+              ),
+              if (ref.read(onboardingProvider).localProfilePicPath != null ||
+                  ref.read(onboardingProvider).profilePicUrl != null)
+                ListTile(
+                  visualDensity: VisualDensity.compact,
+                  dense: true,
+                  leading: Container(
+                    padding: const EdgeInsets.all(6),
+                    child: const Icon(
+                      LucideIcons.trash2,
+                      size: 22,
+                      color: AppColors.destructive,
+                    ),
+                  ),
+                  title: Text(
+                    'Remove Photo',
+                    style: AppTextStyles.bodyMedium.copyWith(
+                      color: AppColors.destructive,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  onTap: () {
+                    context.pop();
+                    ref
+                        .read(onboardingProvider.notifier)
+                        .updateMediaBio(url: null, localPath: null);
+                    setState(() => _photoError = null);
+                  },
+                ),
+              const SizedBox(height: 16),
+            ],
+          ),
         ),
       ),
-    ));
+    );
   }
 
   Future<void> _pickImage(ImageSource source) async {
@@ -234,9 +237,7 @@ class _MediaBioStepState extends ConsumerState<MediaBioStep> {
                   decoration: BoxDecoration(
                     color: AppColors.surface(context),
                     shape: BoxShape.circle,
-                    border: Border.all(
-                      color: AppColors.borderColor(context),
-                    ),
+                    border: Border.all(color: AppColors.borderColor(context)),
                     image: state.localProfilePicPath != null
                         ? DecorationImage(
                             image: FileImage(File(state.localProfilePicPath!)),
@@ -244,7 +245,9 @@ class _MediaBioStepState extends ConsumerState<MediaBioStep> {
                           )
                         : state.profilePicUrl != null
                         ? DecorationImage(
-                            image: CachedNetworkImageProvider(state.profilePicUrl!),
+                            image: CachedNetworkImageProvider(
+                              state.profilePicUrl!,
+                            ),
                             fit: BoxFit.cover,
                           )
                         : null,
@@ -288,29 +291,6 @@ class _MediaBioStepState extends ConsumerState<MediaBioStep> {
           ),
           const SizedBox(height: 8),
 
-          // Skip photo for now text button
-          TextButton(
-            onPressed: () {
-              ref
-                  .read(onboardingProvider.notifier)
-                  .updateMediaBio(url: null, localPath: null);
-              setState(() => _photoError = null);
-              ref.read(onboardingProvider.notifier).setStep(3);
-            },
-            style: TextButton.styleFrom(
-              minimumSize: Size.zero,
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-            ),
-            child: Text(
-              'Skip photo for now',
-              style: AppTextStyles.bodySmall.copyWith(
-                color: AppColors.mutedForeground,
-                decoration: TextDecoration.underline,
-              ),
-            ),
-          ),
-
           if (_photoError != null) ...[
             const SizedBox(height: 8),
             Text(
@@ -350,12 +330,12 @@ class _MediaBioStepState extends ConsumerState<MediaBioStep> {
                 child: PrimaryButton(
                   text: 'Continue',
                   onPressed: () {
-                    final hasPhoto = state.localProfilePicPath != null ||
+                    final hasPhoto =
+                        state.localProfilePicPath != null ||
                         state.profilePicUrl != null;
                     if (!hasPhoto) {
                       setState(() {
-                        _photoError =
-                            "Please add a profile photo to continue, or tap 'Skip photo for now'.";
+                        _photoError = "Please add a profile photo to continue.";
                       });
                       return;
                     }

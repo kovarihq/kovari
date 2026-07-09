@@ -32,7 +32,7 @@ const schema = z.object({
   location_details: z.any().optional().nullable(),
   languages: z.array(z.string()),
   nationality: z.string(),
-  job: z.string(),
+  job: z.string().optional().default(""),
   religion: z.string().min(1),
   smoking: z.string().min(1),
   drinking: z.string().min(1),
@@ -67,8 +67,76 @@ export async function POST(req: NextRequest) {
     }
 
     const body = await req.json();
+    const supabase = createAdminSupabaseClient();
+
+    // Check if profile already exists
+    const { data: existing } = await supabase
+        .from("profiles")
+        .select("id")
+        .eq("user_id", authUser.id)
+        .maybeSingle();
+
+    if (existing) {
+      // Validate with partial schema for updates (allows blank/omitted fields during edits)
+      const result = schema.partial().safeParse(body);
+      if (!result.success) {
+        return formatErrorResponse("Validation failed", ApiErrorCode.BAD_REQUEST, requestId, 400, result.error.flatten());
+      }
+
+      // SECURITY: Profanity filter on write
+      try {
+        if (result.data.name) assertNoProfanity(result.data.name, "Name");
+        if (result.data.bio) assertNoProfanity(result.data.bio, "Bio");
+      } catch (err: any) {
+        return formatErrorResponse(err.message, ApiErrorCode.BAD_REQUEST, requestId, 400);
+      }
+
+      const { firstName, lastName, ...dbFields } = result.data;
+      const updatePayload = {
+        ...dbFields,
+        ...(dbFields.travel_intentions ? { travel_intentions: dbFields.travel_intentions } : {}),
+      };
+
+      const { error: updateError } = await supabase
+        .from("profiles")
+        .update(updatePayload)
+        .eq("user_id", authUser.id);
+
+      if (updateError) {
+        console.error("Profile update failed in create fallback:", updateError);
+        return formatErrorResponse("Profile update failed", ApiErrorCode.INTERNAL_SERVER_ERROR, requestId, 500);
+      }
+
+      // Finalize Onboarding Status for existing profile flow
+      const { error: flagError } = await supabase
+        .from("users")
+        .update({ onboarding_completed: true })
+        .eq("id", authUser.id);
+
+      if (flagError) {
+        console.error("Failed to update onboarding flag in create fallback:", flagError);
+      }
+
+      const transformRes = safeTransform(profileTransformer, {
+        user_id: authUser.id,
+        email: authUser.email,
+        ...updatePayload,
+      });
+
+      if (!transformRes.ok) {
+        return formatErrorResponse("Contract violation", ApiErrorCode.INTERNAL_SERVER_ERROR, requestId, 500);
+      }
+      const latencyMs = Date.now() - start;
+
+      return formatStandardResponse(
+        { profile: transformRes.data },
+        {},
+        { requestId, latencyMs }
+      );
+    }
+
+    // Otherwise, validate with strict schema for first-time creation
     const result = schema.safeParse(body);
-    
     if (!result.success) {
       return formatErrorResponse("Validation failed", ApiErrorCode.BAD_REQUEST, requestId, 400, result.error.flatten());
     }
@@ -81,9 +149,6 @@ export async function POST(req: NextRequest) {
       return formatErrorResponse(err.message, ApiErrorCode.BAD_REQUEST, requestId, 400);
     }
 
-    const supabase = createAdminSupabaseClient();
-
-    // 🛡️ ENFORCE NO DUMMY DATA: All fields from schema must be present
     // Strip firstName and lastName as they are NOT in the database schema
     const { firstName, lastName, ...dbFields } = result.data;
     
@@ -94,17 +159,6 @@ export async function POST(req: NextRequest) {
       travel_intentions: dbFields.travel_intentions ?? [],
       created_at: new Date().toISOString(),
     };
-
-    // 🔒 ATOMIC INSERT (Fail if already exists)
-    const { data: existing } = await supabase
-        .from("profiles")
-        .select("id")
-        .eq("user_id", authUser.id)
-        .maybeSingle();
-    
-    if (existing) {
-        return formatErrorResponse("Profile already exists. Use PATCH to update.", ApiErrorCode.BAD_REQUEST, requestId, 400);
-    }
 
     const { error: insertError } = await supabase.from("profiles").insert(profileData);
     

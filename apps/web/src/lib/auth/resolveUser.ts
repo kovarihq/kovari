@@ -93,20 +93,40 @@ async function _resolveUser(
 
     let identity: { id: string; email: string; provider: 'jwt' | 'clerk'; dbUuid?: string } | null = null;
 
+    let isMobileToken = false;
     const authHeader = req.headers.get("authorization");
     if (authHeader?.startsWith("Bearer ")) {
       const jwtStart = performance.now();
       const token = authHeader.substring(7);
+      
+      // Check if it's a mobile token (HS256)
+      try {
+        const parts = token.split(".");
+        if (parts.length === 3) {
+          const headerStr = Buffer.from(parts[0], "base64").toString("utf8");
+          const header = JSON.parse(headerStr);
+          if (header.alg === "HS256") {
+            isMobileToken = true;
+          }
+        }
+      } catch (e) {}
+
       const payload = verifyAccessToken(token);
       logPerformanceMetric("resolveUser_jwt_lookup_ms", performance.now() - jwtStart, { requestId: resolveRequestId });
       if (payload) {
         identity = { id: payload.sub, email: payload.email, provider: 'jwt', dbUuid: payload.sub };
       } else {
-        logger.warn(requestId, "Invalid Mobile JWT token presented (falling back to Clerk check)");
+        logger.warn(requestId, "Invalid Mobile JWT token presented");
+        if (isMobileToken) {
+          return { ok: false, reason: 'INVALID_TOKEN', message: "Invalid or expired JWT token", requestId };
+        }
       }
     }
 
     if (!identity) {
+      if (isMobileToken) {
+        return { ok: false, reason: 'INVALID_TOKEN', message: "Authorization required", requestId };
+      }
       const authObj = await auth();
       const clerkUserId = authObj.userId;
 
