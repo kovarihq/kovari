@@ -258,6 +258,7 @@ class _InterestCardState extends ConsumerState<_InterestCard> {
                             style: AppTextStyles.bodyMedium.copyWith(
                               fontWeight: FontWeight.w600,
                               fontSize: 14,
+                              color: AppColors.text(context),
                             ),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
@@ -306,6 +307,7 @@ class _InterestCardState extends ConsumerState<_InterestCard> {
                 style: AppTextStyles.bodyMedium.copyWith(
                   fontWeight: FontWeight.w600,
                   fontSize: 14,
+                  color: AppColors.text(context),
                 ),
               ),
             ],
@@ -475,6 +477,7 @@ class _InvitationCardState extends ConsumerState<_InvitationCard> {
                             style: AppTextStyles.bodyMedium.copyWith(
                               fontWeight: FontWeight.w600,
                               fontSize: 14,
+                              color: AppColors.text(context),
                             ),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
@@ -523,6 +526,7 @@ class _InvitationCardState extends ConsumerState<_InvitationCard> {
                 style: AppTextStyles.bodyMedium.copyWith(
                   fontWeight: FontWeight.w600,
                   fontSize: 14,
+                  color: AppColors.text(context),
                 ),
               ),
             ],

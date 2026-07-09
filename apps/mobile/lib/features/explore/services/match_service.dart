@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mobile/core/network/api_client.dart';
 import 'package:mobile/core/providers/contract_provider.dart';
@@ -29,11 +31,30 @@ class MatchService {
           searchData.destination != 'Any') {
         queryParams['destination'] = searchData.destination;
       }
+      // 🏛️ CONTRACT FIX: Serialize destinationDetails as JSON string.
+      // The backend fast-paths session init when lat/lon are present,
+      // skipping an expensive geocoding round-trip. Web sends:
+      //   ?destinationDetails={"lat":28.7,"lon":77.1,"name":"Delhi","formatted":"Delhi, India"}
+      if (searchData.destinationDetails != null) {
+        final details = searchData.destinationDetails!;
+        final lat = details['lat'];
+        final lon = details['lon'];
+        if (lat != null && lon != null) {
+          final destMap = <String, dynamic>{
+            'lat': lat,
+            'lon': lon,
+            if (details['city'] != null) 'name': details['city'].toString(),
+            if (searchData.destination.trim().isNotEmpty)
+              'formatted': searchData.destination,
+          };
+          queryParams['destinationDetails'] = jsonEncode(destMap);
+        }
+      }
       queryParams['budget'] = searchData.budget.toString();
-      queryParams['startDate'] = searchData.startDate.toIso8601String().split(
+      queryParams['dateStart'] = searchData.startDate.toIso8601String().split(
         'T',
       )[0];
-      queryParams['endDate'] = searchData.endDate.toIso8601String().split(
+      queryParams['dateEnd'] = searchData.endDate.toIso8601String().split(
         'T',
       )[0];
     }
@@ -41,11 +62,19 @@ class MatchService {
     if (filters != null) {
       queryParams['ageMin'] = filters.ageRange[0].toString();
       queryParams['ageMax'] = filters.ageRange[1].toString();
-      queryParams['gender'] = filters.gender;
-      queryParams['personality'] = filters.personality;
+      // Omit 'Any' values — backend treats absent keys as "no filter applied"
+      if (filters.gender != 'Any') queryParams['gender'] = filters.gender;
+      if (filters.personality != 'Any') {
+        queryParams['personality'] = filters.personality.toLowerCase();
+      }
+      if (filters.religion != 'Any') {
+        queryParams['religion'] = filters.religion.toLowerCase();
+      }
+      if (filters.nationality != 'Any') {
+        queryParams['nationality'] = filters.nationality;
+      }
       queryParams['smoking'] = filters.smoking.toLowerCase();
       queryParams['drinking'] = filters.drinking.toLowerCase();
-      queryParams['nationality'] = filters.nationality;
       if (filters.interests.isNotEmpty) {
         queryParams['interests'] = filters.interests.join(',');
       }
@@ -85,6 +114,7 @@ class MatchService {
     return response.data ?? MatchResult.empty();
   }
 
+  @Deprecated('Use getMatches or specific group discovery endpoints')
   Future<MatchResult> getGroupMatches({
     int page = 1,
     int limit = 20,

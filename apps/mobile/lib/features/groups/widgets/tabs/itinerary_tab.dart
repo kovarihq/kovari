@@ -9,13 +9,13 @@ import 'package:mobile/features/groups/models/group.dart';
 import 'package:mobile/features/groups/providers/entity_stores.dart';
 import 'package:mobile/features/groups/providers/group_details_provider.dart';
 import 'package:mobile/features/groups/widgets/modals/itinerary_form_modal.dart';
+import 'package:mobile/features/groups/models/hydrated_state.dart';
 import 'package:mobile/shared/widgets/kovari_avatar.dart';
 import 'package:mobile/shared/widgets/kovari_confirm_dialog.dart';
 import 'package:mobile/shared/widgets/kovari_popover.dart';
 import 'package:mobile/shared/widgets/kovari_refresh_indicator.dart';
 
 class ItineraryTab extends ConsumerStatefulWidget {
-
   const ItineraryTab({super.key, required this.group});
   final GroupModel group;
 
@@ -36,6 +36,9 @@ class _ItineraryTabState extends ConsumerState<ItineraryTab>
     );
     final membersState = ref.watch(
       memberStoreProvider.select((s) => s[widget.group.id]),
+    );
+    final membershipState = ref.watch(
+      membershipStoreProvider.select((s) => s[widget.group.id]),
     );
     final optimisticStore = ref.watch(optimisticStoreProvider);
     final optimisticItinerary = optimisticStore[widget.group.id];
@@ -91,6 +94,7 @@ class _ItineraryTabState extends ConsumerState<ItineraryTab>
                   todo,
                   const Color(0xFFF59E0B),
                   members,
+                  membershipState,
                 ),
                 _buildItinerarySection(
                   context,
@@ -100,6 +104,7 @@ class _ItineraryTabState extends ConsumerState<ItineraryTab>
                   inProgress,
                   const Color(0xFF007AFF),
                   members,
+                  membershipState,
                 ),
                 _buildItinerarySection(
                   context,
@@ -109,6 +114,7 @@ class _ItineraryTabState extends ConsumerState<ItineraryTab>
                   done,
                   const Color(0xFF34C759),
                   members,
+                  membershipState,
                 ),
                 _buildItinerarySection(
                   context,
@@ -118,6 +124,7 @@ class _ItineraryTabState extends ConsumerState<ItineraryTab>
                   cancelled,
                   const Color(0xFFF31260),
                   members,
+                  membershipState,
                 ),
               ]),
             ),
@@ -135,103 +142,102 @@ class _ItineraryTabState extends ConsumerState<ItineraryTab>
     List<ItineraryItem> items,
     Color dotColor,
     List<GroupMember> groupMembers,
+    HydratedState<MembershipInfo>? membershipState,
   ) => DragTarget<ItineraryItem>(
-      onWillAcceptWithDetails: (details) => details.data.status != targetStatus,
-      onAcceptWithDetails: (details) async {
-        final item = details.data;
-        final messenger = ScaffoldMessenger.of(context);
-        try {
-          await ref
-              .read(groupActionsProvider(widget.group.id))
-              .updateItineraryStatus(item, targetStatus);
-        } catch (e) {
-          var errorMessage = 'Failed to update item';
-          if (e is DioException) {
-            final data = e.response?.data;
-            if (data is Map && data.containsKey('error')) {
-              errorMessage = "${data['error']}";
-            } else {
-              errorMessage = e.message ?? errorMessage;
-            }
+    onWillAcceptWithDetails: (details) => details.data.status != targetStatus,
+    onAcceptWithDetails: (details) async {
+      final item = details.data;
+      final messenger = ScaffoldMessenger.of(context);
+      try {
+        await ref
+            .read(groupActionsProvider(widget.group.id))
+            .updateItineraryStatus(item, targetStatus);
+      } catch (e) {
+        var errorMessage = 'Failed to update item';
+        if (e is DioException) {
+          final data = e.response?.data;
+          if (data is Map && data.containsKey('error')) {
+            errorMessage = "${data['error']}";
+          } else {
+            errorMessage = e.message ?? errorMessage;
           }
-          messenger.showSnackBar(
-            SnackBar(
-              content: Text(errorMessage),
-              backgroundColor: Colors.redAccent,
-              behavior: SnackBarBehavior.floating,
-            ),
-          );
         }
-      },
-      builder: (context, candidateData, rejectedData) {
-        final isOver = candidateData.isNotEmpty;
-        return Container(
-          margin: const EdgeInsets.only(bottom: 20),
-          decoration: BoxDecoration(
-            color: AppColors.surface(context, level: 1),
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(
-              color: isOver
-                  ? AppColors.primary
-                  : AppColors.borderColor(context),
-              width: isOver ? 2 : 1,
-            ),
+        messenger.showSnackBar(
+          SnackBar(
+            content: Text(errorMessage),
+            backgroundColor: Colors.redAccent,
+            behavior: SnackBarBehavior.floating,
           ),
-          clipBehavior: Clip.antiAlias,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 16,
+        );
+      }
+    },
+    builder: (context, candidateData, rejectedData) {
+      final isOver = candidateData.isNotEmpty;
+      return Container(
+        margin: const EdgeInsets.only(bottom: 20),
+        decoration: BoxDecoration(
+          color: AppColors.surface(context, level: 1),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: isOver ? AppColors.primary : AppColors.borderColor(context),
+            width: isOver ? 2 : 1,
+          ),
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              decoration: BoxDecoration(
+                color: AppColors.surface(context, level: 1),
+                border: Border(
+                  bottom: BorderSide(color: AppColors.borderColor(context)),
                 ),
-                decoration: BoxDecoration(
-                  color: AppColors.surface(context, level: 1),
-                  border: Border(
-                    bottom: BorderSide(color: AppColors.borderColor(context)),
-                  ),
-                  borderRadius: const BorderRadius.only(
-                    topLeft: Radius.circular(20),
-                    topRight: Radius.circular(20),
-                  ),
+                borderRadius: const BorderRadius.only(
+                  topLeft: Radius.circular(20),
+                  topRight: Radius.circular(20),
                 ),
-                child: Row(
-                  children: [
-                    Container(
-                      width: 8,
-                      height: 8,
-                      decoration: BoxDecoration(
-                        color: dotColor,
-                        shape: BoxShape.circle,
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    width: 8,
+                    height: 8,
+                    decoration: BoxDecoration(
+                      color: dotColor,
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    title,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 14,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                    decoration: BoxDecoration(
+                      color: AppColors.primary.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Text(
+                      '${items.length}',
+                      style: TextStyle(
+                        color: AppColors.text(context, isMuted: true),
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
                       ),
                     ),
-                    const SizedBox(width: 8),
-                    Text(
-                      title,
-                      style: const TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 14,
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                      ),
-                      decoration: BoxDecoration(
-                        color: AppColors.primary.withValues(alpha: 0.1),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Text(
-                        '${items.length}',
-                        style: TextStyle(
-                          color: AppColors.text(context, isMuted: true),
-                          fontSize: 11,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ),
-                    const Spacer(),
+                  ),
+                  const Spacer(),
+                  if (membershipState?.data?.isCreator == true ||
+                      membershipState?.data?.isAdmin == true ||
+                      (membershipState?.data?.isMember == true &&
+                          membershipState?.data?.hasPendingRequest != true))
                     IconButton(
                       icon: const Icon(LucideIcons.plus, size: 18),
                       color: AppColors.text(context, isMuted: true),
@@ -250,63 +256,84 @@ class _ItineraryTabState extends ConsumerState<ItineraryTab>
                         );
                       },
                     ),
-                  ],
-                ),
+                ],
               ),
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 8),
-                child: Column(
-                  children: [
-                    if (items.isEmpty)
-                      const SizedBox(height: 12)
-                    else
-                      ...items.map(
-                        (item) => Padding(
-                          padding: const EdgeInsets.fromLTRB(14, 8, 14, 8),
-                          child: _buildDraggableItineraryItem(
-                            context,
-                            ref,
-                            item,
-                            groupMembers,
-                          ),
+            ),
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              child: Column(
+                children: [
+                  if (items.isEmpty)
+                    const SizedBox(height: 12)
+                  else
+                    ...items.map(
+                      (item) => Padding(
+                        padding: const EdgeInsets.fromLTRB(14, 8, 14, 8),
+                        child: _buildDraggableItineraryItem(
+                          context,
+                          ref,
+                          item,
+                          groupMembers,
+                          membershipState,
                         ),
                       ),
-                  ],
-                ),
+                    ),
+                ],
               ),
-            ],
-          ),
-        );
-      },
-    );
+            ),
+          ],
+        ),
+      );
+    },
+  );
 
   Widget _buildDraggableItineraryItem(
     BuildContext context,
     WidgetRef ref,
     ItineraryItem item,
     List<GroupMember> groupMembers,
+    HydratedState<MembershipInfo>? membershipState,
   ) => LongPressDraggable<ItineraryItem>(
-      data: item,
-      feedback: SizedBox(
-        width: 300, // Approximate width of the card
-        child: Material(
-          elevation: 3.0,
-          borderRadius: BorderRadius.circular(16),
-          child: _buildItineraryItemCard(context, ref, item, groupMembers),
+    data: item,
+    feedback: SizedBox(
+      width: 300, // Approximate width of the card
+      child: Material(
+        elevation: 3.0,
+        borderRadius: BorderRadius.circular(16),
+        child: _buildItineraryItemCard(
+          context,
+          ref,
+          item,
+          groupMembers,
+          membershipState,
         ),
       ),
-      childWhenDragging: Opacity(
-        opacity: 0.4,
-        child: _buildItineraryItemCard(context, ref, item, groupMembers),
+    ),
+    childWhenDragging: Opacity(
+      opacity: 0.4,
+      child: _buildItineraryItemCard(
+        context,
+        ref,
+        item,
+        groupMembers,
+        membershipState,
       ),
-      child: _buildItineraryItemCard(context, ref, item, groupMembers),
-    );
+    ),
+    child: _buildItineraryItemCard(
+      context,
+      ref,
+      item,
+      groupMembers,
+      membershipState,
+    ),
+  );
 
   Widget _buildItineraryItemCard(
     BuildContext context,
     WidgetRef ref,
     ItineraryItem item,
     List<GroupMember> groupMembers,
+    HydratedState<MembershipInfo>? membershipState,
   ) {
     final dt = DateTime.parse(item.datetime).toLocal();
     final daySuffix = _getOrdinalSuffix(dt.day);
@@ -341,62 +368,68 @@ class _ItineraryTabState extends ConsumerState<ItineraryTab>
                     _buildPriorityBadge(context, item.priority),
                   ],
                 ),
-                KovariPopover(
-                  width: 120,
-                  offset: const Offset(-102, 24),
-                  items: [
-                    KovariMenuAction(
-                      icon: LucideIcons.pencil,
-                      label: 'Edit',
-                      labelFontSize: 14,
-                      onTap: () {
-                        showModalBottomSheet<void>(
-                          context: context,
-                          isScrollControlled: true,
-                          backgroundColor: Colors.transparent,
-                          useRootNavigator: true,
-                          builder: (context) => ItineraryFormModal(
-                            groupId: widget.group.id,
-                            initialItem: item,
-                          ),
-                        );
-                      },
+                if (membershipState?.data?.isCreator == true ||
+                    membershipState?.data?.isAdmin == true ||
+                    (membershipState?.data?.isMember == true &&
+                        membershipState?.data?.hasPendingRequest != true))
+                  KovariPopover(
+                    width: 120,
+                    offset: const Offset(-102, 24),
+                    items: [
+                      KovariMenuAction(
+                        icon: LucideIcons.pencil,
+                        label: 'Edit',
+                        labelFontSize: 14,
+                        onTap: () {
+                          showModalBottomSheet<void>(
+                            context: context,
+                            isScrollControlled: true,
+                            backgroundColor: Colors.transparent,
+                            useRootNavigator: true,
+                            builder: (context) => ItineraryFormModal(
+                              groupId: widget.group.id,
+                              initialItem: item,
+                            ),
+                          );
+                        },
+                      ),
+                      KovariMenuAction(
+                        icon: LucideIcons.trash2,
+                        label: 'Delete',
+                        labelFontSize: 14,
+                        isDestructive: true,
+                        onTap: () {
+                          showKovariConfirmDialog(
+                            context: context,
+                            title: 'Delete itinerary item?',
+                            content:
+                                'Are you sure you want to delete "${item.title}"? This action cannot be undone.',
+                            confirmLabel: 'Delete',
+                            isDestructive: true,
+                            onConfirm: () async {
+                              try {
+                                await ref
+                                    .read(groupActionsProvider(widget.group.id))
+                                    .deleteItineraryItem(item.id);
+                              } catch (e) {
+                                if (!context.mounted) return;
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text('Failed to delete: $e'),
+                                  ),
+                                );
+                              }
+                            },
+                          );
+                        },
+                      ),
+                    ],
+                    child: Icon(
+                      LucideIcons.ellipsis,
+                      size: 18,
+                      color: AppColors.text(context, isMuted: true),
                     ),
-                    KovariMenuAction(
-                      icon: LucideIcons.trash2,
-                      label: 'Delete',
-                      labelFontSize: 14,
-                      isDestructive: true,
-                      onTap: () {
-                        showKovariConfirmDialog(
-                          context: context,
-                          title: 'Delete itinerary item?',
-                          content:
-                              'Are you sure you want to delete "${item.title}"? This action cannot be undone.',
-                          confirmLabel: 'Delete',
-                          isDestructive: true,
-                          onConfirm: () async {
-                            try {
-                              await ref
-                                  .read(groupActionsProvider(widget.group.id))
-                                  .deleteItineraryItem(item.id);
-                            } catch (e) {
-                              if (!context.mounted) return;
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(content: Text('Failed to delete: $e')),
-                              );
-                            }
-                          },
-                        );
-                      },
-                    ),
-                  ],
-                  child: Icon(
-                    LucideIcons.ellipsis,
-                    size: 18,
-                    color: AppColors.text(context, isMuted: true),
                   ),
-                ),
               ],
             ),
             const SizedBox(height: 10),

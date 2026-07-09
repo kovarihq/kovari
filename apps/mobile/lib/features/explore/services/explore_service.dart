@@ -45,6 +45,7 @@ class ExploreService {
     );
   }
 
+  @Deprecated('Use MatchService.getMatches instead')
   Future<MatchResult> matchSolo(
     String userId,
     ExploreFilters filters,
@@ -57,7 +58,7 @@ class ExploreService {
       'personality': filters.personality,
       'smoking': filters.smoking.toLowerCase(),
       'drinking': filters.drinking.toLowerCase(),
-      'nationality': filters.nationality,
+      if (filters.nationality != 'Any') 'nationality': filters.nationality,
     };
 
     if (filters.interests.isNotEmpty) {
@@ -102,9 +103,7 @@ class ExploreService {
       'interests': filters.interests,
       'smoking': filters.smoking == 'Yes',
       'drinking': filters.drinking == 'Yes',
-      'nationality': filters.nationality != 'Any'
-          ? filters.nationality
-          : 'Unknown',
+      if (filters.nationality != 'Any') 'nationality': filters.nationality,
     };
 
     if (searchData.destination.trim().isNotEmpty && searchData.destination != 'Any') {

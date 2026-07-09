@@ -261,6 +261,30 @@ class _ExploreFiltersSheetState extends ConsumerState<ExploreFiltersSheet> {
                     ),
                   ),
                   const SizedBox(height: 24),
+                  _buildSectionTitle(context, 'Religion'),
+                  SelectField<String>(
+                    label: '',
+                    value: _filters.religion,
+                    hintText: 'Select religion',
+                    options: const [
+                      'Any',
+                      'Hindu',
+                      'Muslim',
+                      'Christian',
+                      'Sikh',
+                      'Buddhist',
+                      'Jain',
+                      'Agnostic',
+                      'Other',
+                    ],
+                    itemLabelBuilder: (val) => val,
+                    onChanged: (val) => setState(
+                      () => _filters = _filters.copyWith(
+                        religion: val ?? 'Any',
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 24),
                 ],
                 _buildSectionTitle(context, 'Languages'),
                 _buildChips(

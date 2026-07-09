@@ -47,6 +47,7 @@ class ExploreFilters {
     required this.drinking,
     required this.nationality,
     required this.languages,
+    required this.religion,
   });
 
   factory ExploreFilters.initial() => ExploreFilters(
@@ -60,6 +61,7 @@ class ExploreFilters {
       drinking: 'No',
       nationality: 'Any',
       languages: [],
+      religion: 'Any',
     );
   final List<int> ageRange;
   final String gender;
@@ -71,6 +73,7 @@ class ExploreFilters {
   final String drinking;
   final String nationality;
   final List<String> languages;
+  final String religion;
 
   ExploreFilters copyWith({
     List<int>? ageRange,
@@ -83,6 +86,7 @@ class ExploreFilters {
     String? drinking,
     String? nationality,
     List<String>? languages,
+    String? religion,
   }) => ExploreFilters(
       ageRange: ageRange ?? this.ageRange,
       gender: gender ?? this.gender,
@@ -94,6 +98,7 @@ class ExploreFilters {
       drinking: drinking ?? this.drinking,
       nationality: nationality ?? this.nationality,
       languages: languages ?? this.languages,
+      religion: religion ?? this.religion,
     );
 }
 

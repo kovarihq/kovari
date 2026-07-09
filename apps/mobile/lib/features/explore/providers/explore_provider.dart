@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mobile/core/providers/auth_provider.dart';
 import 'package:mobile/core/providers/cache_provider.dart';
@@ -141,12 +142,9 @@ class ExploreNotifier extends Notifier<ExploreState> {
       var newHasMore = state.hasMore;
       var newPage = state.page;
 
-      if (!isLoadMore) {
-        await ref.read(localCacheProvider).clearSeenUsers();
-      }
-
       // Load the local seen-ledger once per fetch for O(1) lookups below.
       final seenIds = ref.read(localCacheProvider).getSeenUsers();
+      debugPrint('DEBUG: performSearch loaded seenIds: $seenIds');
 
       if (mode == TravelMode.solo) {
         if (!isLoadMore) {
@@ -160,17 +158,21 @@ class ExploreNotifier extends Notifier<ExploreState> {
         );
 
         List<MatchUser> fetchedMatches = result.matches.cast<MatchUser>();
+        debugPrint('DEBUG: fetchedMatches before dedup: ${fetchedMatches.map((m) => m.id).toList()}');
 
         // Client-side dedup: strip any user that is in our seen ledger.
         // This is the same defense-in-depth approach Hinge uses to handle
         // the window between a swipe and the server cache being invalidated.
         if (seenIds.isNotEmpty) {
           fetchedMatches = fetchedMatches.where((m) {
-            return !seenIds.contains(m.id);
+            final isSeen = seenIds.contains(m.id);
+            if (isSeen) {
+              debugPrint('DEBUG: Filtering out seen user: ${m.id}');
+            }
+            return !isSeen;
           }).toList();
         }
-
-        fetchedMatches.sort((a, b) => (b.score ?? 0).compareTo(a.score ?? 0));
+        debugPrint('DEBUG: fetchedMatches after dedup: ${fetchedMatches.map((m) => m.id).toList()}');
 
         if (isLoadMore) {
           matches.addAll(fetchedMatches);
@@ -217,10 +219,7 @@ class ExploreNotifier extends Notifier<ExploreState> {
     }
   }
 
-  /// Remove a swiped card from the in-memory deck and record it in the
-  /// persistent seen-users ledger so it never resurfaces — even after an
-  /// app restart. This is the core of the Hinge/Bumble dedup mechanism.
-  void _removeMatchAndSyncLedger(String matchId) {
+  Future<void> _removeMatchAndSyncLedger(String matchId) async {
     final updatedMatches = List<dynamic>.from(state.matches);
     updatedMatches.removeWhere((m) {
       if (m is MatchUser) {
@@ -268,14 +267,14 @@ class ExploreNotifier extends Notifier<ExploreState> {
 
     // Persist to seen-users ledger — the source of truth for dedup.
     final cache = ref.read(localCacheProvider);
-    unawaited(cache.addSeenUsers(idsToRecord));
+    await cache.addSeenUsers(idsToRecord);
 
     // Auto-load more when the deck is running low (solo only).
     if (state.searchData.travelMode == TravelMode.solo &&
         updatedMatches.length - newIndex <= 3 &&
         state.hasMore &&
         !state.isFetchingNextPage) {
-      performSearch(isLoadMore: true);
+      unawaited(performSearch(isLoadMore: true));
     }
   }
 
@@ -286,15 +285,17 @@ class ExploreNotifier extends Notifier<ExploreState> {
     _pendingSwipes.add(matchId);
 
     final prevState = state;
-    _removeMatchAndSyncLedger(matchId);
+    await _removeMatchAndSyncLedger(matchId);
 
     try {
       await _service.skipMatch(
         skipperId: _userId!,
-        skippedUserId:
-            state.searchData.travelMode == TravelMode.solo ? matchId : null,
-        skippedGroupId:
-            state.searchData.travelMode == TravelMode.group ? matchId : null,
+        skippedUserId: state.searchData.travelMode == TravelMode.solo
+            ? matchId
+            : null,
+        skippedGroupId: state.searchData.travelMode == TravelMode.group
+            ? matchId
+            : null,
         destinationId: state.searchData.destination,
         isSolo: state.searchData.travelMode == TravelMode.solo,
       );
@@ -312,22 +313,22 @@ class ExploreNotifier extends Notifier<ExploreState> {
 
     final prevState = state;
     // Optimistically remove card instantly from the deck
-    _removeMatchAndSyncLedger(matchId);
+    await _removeMatchAndSyncLedger(matchId);
 
     try {
       await _service.sendInterest(
         fromUserId: _userId!,
-        toUserId:
-            state.searchData.travelMode == TravelMode.solo ? matchId : null,
-        toGroupId:
-            state.searchData.travelMode == TravelMode.group ? matchId : null,
+        toUserId: state.searchData.travelMode == TravelMode.solo
+            ? matchId
+            : null,
+        toGroupId: state.searchData.travelMode == TravelMode.group
+            ? matchId
+            : null,
         destinationId: state.searchData.destination,
         isSolo: state.searchData.travelMode == TravelMode.solo,
       );
     } catch (e) {
-      state = prevState.copyWith(
-        error: 'Failed to express interest: $e',
-      );
+      state = prevState.copyWith(error: 'Failed to express interest: $e');
     } finally {
       _pendingSwipes.remove(matchId);
     }
