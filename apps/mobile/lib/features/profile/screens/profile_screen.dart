@@ -40,36 +40,68 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
     }
 
     return Scaffold(
-      body: KovariRefreshIndicator(
-        onRefresh: () =>
-            ref.read(profileProvider.notifier).fetchProfile(ignoreCache: true),
-        child: CustomScrollView(
-          key: const PageStorageKey('profile_scroll'),
-          physics: const BouncingScrollPhysics(
-            parent: AlwaysScrollableScrollPhysics(),
-          ),
-          keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-          slivers: [
-            SliverToBoxAdapter(
-              child: Padding(
-                padding: EdgeInsets.fromLTRB(
-                  AppSpacing.md,
-                  MediaQuery.of(context).padding.top + AppSpacing.sm,
-                  AppSpacing.md,
-                  AppSpacing.sm,
+      body: Stack(
+        children: [
+          KovariRefreshIndicator(
+            onRefresh: () =>
+                ref.read(profileProvider.notifier).fetchProfile(ignoreCache: true),
+            child: CustomScrollView(
+              key: const PageStorageKey('profile_scroll'),
+              physics: const BouncingScrollPhysics(
+                parent: AlwaysScrollableScrollPhysics(),
+              ),
+              keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+              slivers: [
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: EdgeInsets.fromLTRB(
+                      AppSpacing.md,
+                      MediaQuery.of(context).padding.top + AppSpacing.sm,
+                      AppSpacing.md,
+                      AppSpacing.sm,
+                    ),
+                    child: Column(
+                      children: [
+                        _buildHeaderCard(context, ref, profile),
+                        const SizedBox(height: AppSpacing.mds),
+                        _buildContentCard(context, profile),
+                      ],
+                    ),
+                  ),
                 ),
-                child: Column(
+                const SliverToBoxAdapter(child: SizedBox(height: 110)),
+              ],
+            ),
+          ),
+          if (profile.isInternal)
+            Positioned(
+              top: MediaQuery.of(context).padding.top + 4,
+              right: 16,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: AppColors.primary.withOpacity(0.15),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: AppColors.primary.withOpacity(0.4), width: 1),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    _buildHeaderCard(context, ref, profile),
-                    const SizedBox(height: AppSpacing.mds),
-                    _buildContentCard(context, profile),
+                    Icon(LucideIcons.shieldAlert, size: 12, color: AppColors.primary),
+                    const SizedBox(width: 4),
+                    Text(
+                      'Test Mode',
+                      style: AppTextStyles.bodySmall.copyWith(
+                        color: AppColors.primary,
+                        fontWeight: FontWeight.w600,
+                        fontSize: 10,
+                      ),
+                    ),
                   ],
                 ),
               ),
             ),
-            const SliverToBoxAdapter(child: SizedBox(height: 110)),
-          ],
-        ),
+        ],
       ),
     );
   }

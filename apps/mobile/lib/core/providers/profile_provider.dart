@@ -7,12 +7,17 @@ import 'package:mobile/core/providers/connectivity_provider.dart';
 import 'package:mobile/core/utils/app_logger.dart';
 import 'package:mobile/features/profile/models/user_profile.dart';
 
+import 'package:mobile/core/telemetry/telemetry_service.dart';
+
 class ProfileNotifier extends Notifier<UserProfile?> {
   @override
   UserProfile? build() {
     final user = ref.watch(authStateProvider);
 
-    if (user == null) return null;
+    if (user == null) {
+      TelemetryService().setInternalUser(false);
+      return null;
+    }
 
     // 1. Instant Boot: Try to return cached profile immediately as the initial state.
     // NOTE: Do NOT read `state` inside build() — build() IS the initialization.
@@ -24,6 +29,7 @@ class ProfileNotifier extends Notifier<UserProfile?> {
       final cachedProfile = UserProfile.fromJson(cachedData);
       if (cachedProfile.userId == user.id) {
         initialProfile = cachedProfile;
+        TelemetryService().setInternalUser(cachedProfile.isInternal);
         AppLogger.d('🚀 [BOOT] Profile seeded from cache instantly');
       }
     }
@@ -55,12 +61,14 @@ class ProfileNotifier extends Notifier<UserProfile?> {
         ignoreCache: ignoreCache,
         parser: (data) {
           if (data is! Map<String, dynamic>) return null;
-          final actualData = (data['profile'] as Map<String, dynamic>?) ?? data;
+          final envelope = (data['data'] ?? data) as Map<String, dynamic>;
+          final actualData = (envelope['profile'] ?? envelope['user'] ?? envelope) as Map<String, dynamic>;
           return UserProfile.fromJson(actualData);
         },
         onUpdate: (updatedProfile) {
           if (updatedProfile != null) {
             state = updatedProfile;
+            TelemetryService().setInternalUser(updatedProfile.isInternal);
             cache.setProfile(updatedProfile.toJson());
           }
         },
@@ -68,6 +76,7 @@ class ProfileNotifier extends Notifier<UserProfile?> {
 
       if (profile != null) {
         state = profile;
+        TelemetryService().setInternalUser(profile.isInternal);
         cache.setProfile(profile.toJson());
       }
     } catch (e) {

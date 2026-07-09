@@ -134,20 +134,20 @@ class AuthNotifier extends Notifier<AuthState> {
 
         state = state.copyWith(user: user);
       }
-    } on DioException catch (e) {
-      if (e.response?.statusCode == 403) {
-        final data = e.response?.data;
+    } catch (e) {
+      if (e.toString().contains('BANNED_USER') || (e is DioException && (e.response?.statusCode == 403 || e.message == 'BANNED_USER'))) {
         KovariUser? bannedUser;
-        if (data is Map) {
-          final userMap = data['user'];
+        if (e is DioException && e.response?.data is Map) {
+          final data = e.response!.data as Map;
+          final userMap = data['user'] ?? data['data']?['user'];
           if (userMap is Map<String, dynamic>) {
             bannedUser = KovariUser.fromAuthResponse(userMap);
           }
         }
         await _handleBannedSession(bannedUser ?? state.user);
+      } else {
+        AppLogger.e('🛡️ [AuthNotifier] Ban status sync failed', error: e);
       }
-    } catch (e) {
-      AppLogger.e('🛡️ [AuthNotifier] Ban status sync failed', error: e);
     }
   }
 

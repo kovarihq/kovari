@@ -111,10 +111,12 @@ class ApiResponse<T> {
     String reason = 'network',
     String? requestId,
     dynamic raw,
+    ApiError? error,
   }) => ApiResponse(
       success: true, // flow continues safely
       raw: raw,
       meta: ApiMeta.degraded(reason: reason),
+      error: error,
       requestId: requestId,
     );
   final bool success;

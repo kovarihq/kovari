@@ -7,6 +7,7 @@ class KovariUser {
     this.banned = false,
     this.banReason,
     this.banExpiresAt,
+    this.isInternal = false,
   });
 
   factory KovariUser.fromAuthResponse(Map<String, dynamic> json) => KovariUser(
@@ -17,6 +18,7 @@ class KovariUser {
     banned: json['banned'] as bool? ?? false,
     banReason: (json['banReason'] ?? json['ban_reason']) as String?,
     banExpiresAt: (json['banExpiresAt'] ?? json['ban_expires_at']) as String?,
+    isInternal: (json['is_internal'] as bool?) ?? (json['isInternal'] as bool?) ?? false,
   );
 
   factory KovariUser.fromJson(Map<String, dynamic> json) => KovariUser(
@@ -27,6 +29,7 @@ class KovariUser {
     banned: json['banned'] as bool? ?? false,
     banReason: (json['banReason'] ?? json['ban_reason']) as String?,
     banExpiresAt: (json['banExpiresAt'] ?? json['ban_expires_at']) as String?,
+    isInternal: (json['is_internal'] as bool?) ?? (json['isInternal'] as bool?) ?? false,
   );
   final String id;
   final String? uuid;
@@ -35,6 +38,7 @@ class KovariUser {
   final bool banned;
   final String? banReason;
   final String? banExpiresAt;
+  final bool isInternal;
 
   /// True when the user has an active ban or non-expired suspension.
   bool get isActivelyBanned {
@@ -65,5 +69,6 @@ class KovariUser {
     'banned': banned,
     'banReason': banReason,
     'banExpiresAt': banExpiresAt,
+    'isInternal': isInternal,
   };
 }

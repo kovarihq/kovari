@@ -149,6 +149,7 @@ class DioApiClient implements ApiClient {
 
           options.headers['X-Request-Id'] = requestId;
           options.headers['X-Trace-Id'] = traceId;
+          options.headers['x-kovari-client'] = 'mobile';
           options.extra['requestId'] = requestId;
           options.extra['traceId'] = traceId;
 
@@ -828,6 +829,22 @@ class DioApiClient implements ApiClient {
       if (onFailure != null) {
         final fallback = await onFailure();
         if (fallback != null) return fallback;
+      }
+
+      if (e.response?.statusCode == 403) {
+        if (e.response?.data is Map) {
+          final data = e.response!.data as Map;
+          final errorField = data['error'];
+          final code = (errorField is Map ? errorField['code'] : errorField) ?? data['code'];
+          if (code == 'BANNED_USER') {
+            final String reason = ((errorField is Map ? errorField['message'] : null) ?? data['message'] ?? 'Account has been banned').toString();
+            return ApiResponse.fallback(
+              reason: 'BANNED_USER',
+              requestId: requestId,
+              error: ApiError(message: reason, code: 'BANNED_USER'),
+            );
+          }
+        }
       }
 
       if (e.error is DegradedModeException ||

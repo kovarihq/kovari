@@ -20,8 +20,14 @@ class TelemetryService {
 
   final String _sessionId = const Uuid().v4();
   String? _currentTraceId;
+  bool _isInternalUser = false;
 
   static final TelemetryService _instance = TelemetryService._internal();
+
+  void setInternalUser(bool isInternal) {
+    _isInternalUser = isInternal;
+    AppLogger.i('📊 [Telemetry] Internal testing status configured: $isInternal');
+  }
 
   Future<void> init() async {
     try {
@@ -53,13 +59,16 @@ class TelemetryService {
     Sentry.configureScope((scope) => scope.setTag('session_id', _sessionId));
   }
 
-  /// 🛰️ Tracks a user journey or business event.
   Future<void> logEvent(
     String name, {
     Map<String, dynamic>? parameters,
     TelemetryPriority priority = TelemetryPriority.normal,
     String? journeyId,
   }) async {
+    if (_isInternalUser) {
+      debugPrint('📊 [Telemetry] Suppressed internal test user event: $name');
+      return;
+    }
     if (!SamplingPolicies.shouldSample(priority)) return;
     if (!TelemetryBudget.canProcessEvent(_queue.length, priority)) return;
 

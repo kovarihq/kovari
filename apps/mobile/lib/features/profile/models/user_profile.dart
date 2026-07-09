@@ -1,3 +1,52 @@
+class DestinationDetails {
+  DestinationDetails({
+    this.city,
+    this.country,
+    this.lat,
+    this.lon,
+  });
+
+  factory DestinationDetails.fromJson(Map<String, dynamic> json) => DestinationDetails(
+        city: json['city'] as String?,
+        country: json['country'] as String?,
+        lat: json['lat'] is num ? (json['lat'] as num).toDouble() : null,
+        lon: json['lon'] is num ? (json['lon'] as num).toDouble() : null,
+      );
+  final String? city;
+  final String? country;
+  final double? lat;
+  final double? lon;
+
+  Map<String, dynamic> toJson() => {
+        'city': city,
+        'country': country,
+        'lat': lat,
+        'lon': lon,
+      };
+}
+
+class TravelIntention {
+  TravelIntention({
+    required this.destination,
+    this.destinationDetails,
+  });
+
+  factory TravelIntention.fromJson(Map<String, dynamic> json) => TravelIntention(
+        destination: (json['destination'] as String?) ?? '',
+        destinationDetails: json['destination_details'] != null
+            ? DestinationDetails.fromJson(
+                Map<String, dynamic>.from(json['destination_details'] as Map))
+            : null,
+      );
+  final String destination;
+  final DestinationDetails? destinationDetails;
+
+  Map<String, dynamic> toJson() => {
+        'destination': destination,
+        'destination_details': destinationDetails?.toJson(),
+      };
+}
+
 class UserProfile {
 
   UserProfile({
@@ -12,7 +61,6 @@ class UserProfile {
     required this.bio,
     required this.followers,
     required this.following,
-    required this.likes,
     required this.coverImage,
     required this.profileImage,
     required this.posts,
@@ -30,9 +78,18 @@ class UserProfile {
     required this.email,
     this.isVerified = false,
     this.createdAt = '',
+    required this.travelIntentions,
+    this.onboardingCompleted = false,
+    this.isInternal = false,
   });
 
-  factory UserProfile.fromJson(Map<String, dynamic> json) => UserProfile(
+  factory UserProfile.fromJson(Map<String, dynamic> json) {
+    var rawIntentions = json['travel_intentions'] as List? ?? [];
+    List<TravelIntention> intentionsList = rawIntentions
+        .map((x) => TravelIntention.fromJson(Map<String, dynamic>.from(x as Map)))
+        .toList();
+
+    return UserProfile(
       name: (json['name'] as String?) ?? '',
       username: (json['username'] as String?) ?? '',
       age: json['age']?.toString() ?? '',
@@ -44,7 +101,6 @@ class UserProfile {
       bio: (json['bio'] as String?) ?? '',
       followers: json['followers']?.toString() ?? '0',
       following: json['following']?.toString() ?? '0',
-      likes: json['likes']?.toString() ?? '0',
       coverImage: (json['cover_image'] as String?) ?? '',
       profileImage: (json['profileImage'] as String?) ??
           (json['avatar'] as String?) ??
@@ -72,7 +128,11 @@ class UserProfile {
       email: (json['email'] as String?) ?? '',
       isVerified: (json['verified'] as bool?) ?? (json['is_verified'] as bool?) ?? false,
       createdAt: (json['created_at'] as String?) ?? '',
+      travelIntentions: intentionsList,
+      onboardingCompleted: (json['onboardingCompleted'] as bool?) ?? false,
+      isInternal: (json['is_internal'] as bool?) ?? (json['isInternal'] as bool?) ?? false,
     );
+  }
   final String name;
   final String username;
   final String age;
@@ -84,7 +144,6 @@ class UserProfile {
   final String bio;
   final String followers;
   final String following;
-  final String likes;
   final String coverImage;
   final String profileImage;
   final List<UserPost> posts;
@@ -102,6 +161,9 @@ class UserProfile {
   final String email;
   final bool isVerified;
   final String createdAt;
+  final List<TravelIntention> travelIntentions;
+  final bool onboardingCompleted;
+  final bool isInternal;
 
   Map<String, dynamic> toJson() => {
       'name': name,
@@ -115,7 +177,6 @@ class UserProfile {
       'bio': bio,
       'followers': followers,
       'following': following,
-      'likes': likes,
       'cover_image': coverImage,
       'avatar': profileImage,
       'isFollowing': isFollowing,
@@ -130,6 +191,9 @@ class UserProfile {
       'birthday': birthday,
       'user_id': userId,
       'email': email,
+      'travel_intentions': travelIntentions.map((x) => x.toJson()).toList(),
+      'onboardingCompleted': onboardingCompleted,
+      'isInternal': isInternal,
     };
 
   UserProfile copyWith({
@@ -144,7 +208,6 @@ class UserProfile {
     String? bio,
     String? followers,
     String? following,
-    String? likes,
     String? coverImage,
     String? profileImage,
     List<UserPost>? posts,
@@ -162,6 +225,9 @@ class UserProfile {
     String? email,
     bool? isVerified,
     String? createdAt,
+    List<TravelIntention>? travelIntentions,
+    bool? onboardingCompleted,
+    bool? isInternal,
   }) => UserProfile(
       name: name ?? this.name,
       username: username ?? this.username,
@@ -174,7 +240,6 @@ class UserProfile {
       bio: bio ?? this.bio,
       followers: followers ?? this.followers,
       following: following ?? this.following,
-      likes: likes ?? this.likes,
       coverImage: coverImage ?? this.coverImage,
       profileImage: profileImage ?? this.profileImage,
       posts: posts ?? this.posts,
@@ -192,6 +257,9 @@ class UserProfile {
       email: email ?? this.email,
       isVerified: isVerified ?? this.isVerified,
       createdAt: createdAt ?? this.createdAt,
+      travelIntentions: travelIntentions ?? this.travelIntentions,
+      onboardingCompleted: onboardingCompleted ?? this.onboardingCompleted,
+      isInternal: isInternal ?? this.isInternal,
     );
 }
 
