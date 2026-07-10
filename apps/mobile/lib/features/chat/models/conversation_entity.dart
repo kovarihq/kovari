@@ -20,6 +20,8 @@ class ConversationEntity {
     this.partnerClerkId,
     this.isPartnerOnline = false,
     this.partnerLastSeen,
+    this.iBlockedThem = false,
+    this.theyBlockedMe = false,
   });
 
   final String chatId;
@@ -54,9 +56,12 @@ class ConversationEntity {
   final bool isPartnerOnline;
   final DateTime? partnerLastSeen;
 
-  String get displayName => isGroup
-      ? (groupName ?? 'Group Chat')
-      : (partnerName ?? 'User');
+  // --- Block Status ---
+  final bool iBlockedThem;
+  final bool theyBlockedMe;
+
+  String get displayName =>
+      isGroup ? (groupName ?? 'Group Chat') : (partnerName ?? 'User');
 
   String? get displayAvatar => isGroup ? groupAvatar : partnerAvatar;
 
@@ -70,6 +75,8 @@ class ConversationEntity {
     DateTime? partnerLastSeen,
     String? partnerName,
     String? partnerAvatar,
+    bool? iBlockedThem,
+    bool? theyBlockedMe,
   }) {
     return ConversationEntity(
       chatId: chatId,
@@ -88,6 +95,8 @@ class ConversationEntity {
       partnerClerkId: partnerClerkId,
       isPartnerOnline: isPartnerOnline ?? this.isPartnerOnline,
       partnerLastSeen: partnerLastSeen ?? this.partnerLastSeen,
+      iBlockedThem: iBlockedThem ?? this.iBlockedThem,
+      theyBlockedMe: theyBlockedMe ?? this.theyBlockedMe,
     );
   }
 }

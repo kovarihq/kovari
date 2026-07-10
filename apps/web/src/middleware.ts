@@ -521,7 +521,10 @@ export default async function middleware(req: NextRequest, evt: any) {
       const token = authHeader.substring(7);
       const parts = token.split(".");
       if (parts.length === 3) {
-        const headerStr = Buffer.from(parts[0], "base64").toString("utf8");
+        // Use web-standard atob instead of Node's Buffer for Base64 decoding in Edge runtime
+        const base64Url = parts[0];
+        const base64 = base64Url.replace(/-/g, "+").replace(/_/g, "/");
+        const headerStr = atob(base64);
         const header = JSON.parse(headerStr);
         if (header.alg === "HS256") {
           isMobileToken = true;

@@ -5,6 +5,8 @@ import * as Sentry from "@sentry/nextjs";
 import { createAdminSupabaseClient } from "@kovari/api";
 import { sendSecurityAlert } from "@/lib/alerts/security";
 
+import { getAuthenticatedUser } from "@/lib/auth/get-user";
+
 /**
  * POST /api/flags
  * Public endpoint for creating flags (reports)
@@ -24,14 +26,11 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    // Validate authentication
-    const { userId: clerkUserId } = await auth();
-    if (process.env.NODE_ENV !== "production") {
-      console.log("Clerk User ID:", clerkUserId);
-    }
+    // Validate authentication using unified mobile-safe helper
+    const authUser = await getAuthenticatedUser(req);
 
-    if (!clerkUserId) {
-      console.error("❌ Unauthorized - no Clerk user ID");
+    if (!authUser) {
+      console.error("❌ Unauthorized - no valid user session");
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
@@ -85,23 +84,7 @@ export async function POST(req: NextRequest) {
 
     // Create Supabase client
     const supabase = createAdminSupabaseClient();
-
-    // Get current user's UUID from Clerk userId
-    const { data: currentUserRow, error: currentUserError } = await supabase
-      .from("users")
-      .select("id")
-      .eq("clerk_user_id", clerkUserId)
-      .single();
-
-    if (currentUserError || !currentUserRow) {
-      console.error("Error finding current user:", currentUserError);
-      return NextResponse.json(
-        { error: "Current user not found" },
-        { status: 404 }
-      );
-    }
-
-    const reporterId = currentUserRow.id;
+    const reporterId = authUser.id;
 
     // PHASE 7: Prevent self-reporting
     if (targetType === "user" && targetId === reporterId) {

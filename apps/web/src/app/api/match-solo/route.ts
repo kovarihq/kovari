@@ -714,7 +714,7 @@ export async function GET(request: NextRequest) {
     
     if (canUseGoService) {
       if (process.env.NODE_ENV === "development" && request.headers.has("X-Reset-Circuit-Breaker")) {
-        await matchingServiceBreaker.reset();
+        await matchingServiceBreaker.recordSuccess();
       }
       const cbStart = Date.now();
       const circuitAllowed = await matchingServiceBreaker.shouldAllowRequest();
@@ -830,9 +830,7 @@ export async function GET(request: NextRequest) {
         }
       } else {
         // Circuit breaker is open
-        const totalRouteTime = Date.now() - start;
-        logPerformanceMetric("match_solo_route_total_execution_ms", totalRouteTime, { requestId, cbOpen: true });
-        return formatErrorResponse("Service Unavailable", ApiErrorCode.SERVICE_UNAVAILABLE, requestId, 503);
+        logger.warn(requestId, "Circuit breaker is open for Go matching service - falling back to DB matching");
       }
     }
 

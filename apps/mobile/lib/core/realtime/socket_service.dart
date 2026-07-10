@@ -311,7 +311,11 @@ class SocketService extends Notifier<SocketState> {
       _socket = null;
       // Only set to disconnected if we aren't about to immediately reconnect/initialize
       if (!_isInitializing) {
-        state = SocketState.disconnected;
+        Future.microtask(() {
+          try {
+            state = SocketState.disconnected;
+          } catch (_) {}
+        });
       }
     }
   }

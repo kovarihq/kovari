@@ -10,8 +10,30 @@ import 'package:mobile/core/network/api_endpoints.dart';
 import 'package:mobile/core/utils/app_logger.dart';
 import 'package:mobile/shared/models/kovari_user.dart';
 
-class AuthService {
+/// Decodes the `exp` Unix timestamp (seconds) from a JWT access token.
+/// Falls back to now + 15 minutes if decoding fails.
+int _parseJwtExpiry(String accessToken) {
+  try {
+    final parts = accessToken.split('.');
+    if (parts.length != 3) throw FormatException('Not a JWT');
+    var payload = parts[1].replaceAll('-', '+').replaceAll('_', '/');
+    while (payload.length % 4 != 0) {
+      payload += '=';
+    }
+    final decoded = utf8.decode(base64Decode(payload));
+    final map = jsonDecode(decoded) as Map<String, dynamic>;
+    final exp = map['exp'] as int?;
+    if (exp == null) throw FormatException('No exp claim');
+    return exp * 1000; // JWT exp is seconds; convert to ms
+  } catch (e) {
+    AppLogger.w(
+      '[AuthService] Failed to parse JWT exp: $e. Using 15-min fallback.',
+    );
+    return DateTime.now().millisecondsSinceEpoch + (15 * 60 * 1000);
+  }
+}
 
+class AuthService {
   AuthService(this._apiClient, this._sessionManager);
   final ApiClient _apiClient;
   final TokenStorage _storage = TokenStorage();
@@ -165,9 +187,12 @@ class AuthService {
 
     final accessToken = data['accessToken'] as String;
     final refreshToken = data['refreshToken'] as String;
-    final expiry =
-        data['expiry'] as int? ??
-        (DateTime.now().millisecondsSinceEpoch + 3600000);
+    // Parse the real expiry from the JWT exp claim.
+    // The backend does NOT send an 'expiry' field, so data['expiry'] is always null.
+    final expiry = _parseJwtExpiry(accessToken);
+    AppLogger.i(
+      '[AuthService] Token expiry parsed: ${DateTime.fromMillisecondsSinceEpoch(expiry)}',
+    );
 
     await _storage.saveTokens(
       accessToken: accessToken,

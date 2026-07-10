@@ -324,26 +324,6 @@ const GeneralSection: React.FC<GeneralSectionProps> = ({
                   </span>
                 )}
               </Button>
-              <Button
-                className="mt-6 px-3 py-1 bg-secondary border border-border shadow-none rounded-lg text-destructive transition-all duration-300"
-                aria-label="Delete avatar"
-                onClick={handleAvatarDelete}
-                disabled={
-                  avatarDeleteLoading ||
-                  avatarUploadLoading ||
-                  !form.watch("avatar")
-                }
-              >
-                {avatarDeleteLoading ? (
-                  <Spinner
-                    variant="spinner"
-                    size="sm"
-                    classNames={{ spinnerBars: "bg-destructive" }}
-                  />
-                ) : (
-                  <Trash2 className="w-3 h-3" />
-                )}
-              </Button>
             </div>
 
             {/* Hidden file input */}
@@ -375,31 +355,10 @@ const GeneralSection: React.FC<GeneralSectionProps> = ({
             />
             <Button
               size="sm"
-              className="ml-auto border bg-secondary border-border rounded-lg px-3 py-1 text-destructive transition-all duration-300 disabled:opacity-50"
-              aria-label="Delete avatar"
-              onClick={handleAvatarDelete}
-              disabled={
-                avatarDeleteLoading ||
-                avatarUploadLoading ||
-                !form.watch("avatar")
-              }
-            >
-              {avatarDeleteLoading ? (
-                <Spinner
-                  variant="spinner"
-                  size="sm"
-                  classNames={{ spinnerBars: "bg-destructive" }}
-                />
-              ) : (
-                <Trash2 className="w-3 h-3" />
-              )}
-            </Button>
-            <Button
-              size="sm"
-              className="bg-secondary border border-border rounded-lg px-3 py-1 transition-all duration-300 disabled:opacity-50"
+              className="ml-auto bg-secondary border border-border rounded-lg px-3 py-1 transition-all duration-300 disabled:opacity-50"
               aria-label="Upload avatar"
               onClick={handleUploadClick}
-              disabled={avatarUploadLoading || avatarDeleteLoading}
+              disabled={avatarUploadLoading}
             >
               {avatarUploadLoading ? (
                 <Spinner

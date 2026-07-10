@@ -12,9 +12,16 @@ import 'package:mobile/core/telemetry/telemetry_service.dart';
 class ProfileNotifier extends Notifier<UserProfile?> {
   @override
   UserProfile? build() {
-    final user = ref.watch(authStateProvider);
+    // Watch ONLY the userId so this provider does NOT rebuild when the user's
+    // metadata (name, uuid, bio etc.) is refreshed by syncProfile().
+    // Watching the full KovariUser caused an infinite rebuild loop:
+    //   setUser → syncProfile updates state.user → authStateProvider emits →
+    //   profileProvider rebuilds → state resets to null → skeleton forever.
+    final userId = ref.watch(
+      authProvider.select((s) => s.user?.id),
+    );
 
-    if (user == null) {
+    if (userId == null) {
       TelemetryService().setInternalUser(false);
       return null;
     }
@@ -27,7 +34,7 @@ class ProfileNotifier extends Notifier<UserProfile?> {
 
     if (cachedData != null) {
       final cachedProfile = UserProfile.fromJson(cachedData);
-      if (cachedProfile.userId == user.id) {
+      if (cachedProfile.userId == userId) {
         initialProfile = cachedProfile;
         TelemetryService().setInternalUser(cachedProfile.isInternal);
         AppLogger.d('🚀 [BOOT] Profile seeded from cache instantly');
@@ -51,36 +58,45 @@ class ProfileNotifier extends Notifier<UserProfile?> {
   // Allow setting the profile externally (e.g., during login or onboarding)
   void setProfile(UserProfile? profile) => state = profile;
 
-  Future<void> fetchProfile({bool ignoreCache = false}) async {
-    try {
-      final syncEngine = ref.read(syncEngineProvider);
-      final cache = ref.read(localCacheProvider);
+  Future<void> fetchProfile({bool ignoreCache = false, int retries = 3}) async {
+    int attempt = 0;
+    while (attempt < retries) {
+      try {
+        final syncEngine = ref.read(syncEngineProvider);
+        final cache = ref.read(localCacheProvider);
 
-      final profile = await syncEngine.swrFetch<UserProfile?>(
-        path: ApiEndpoints.currentProfile,
-        ignoreCache: ignoreCache,
-        parser: (data) {
-          if (data is! Map<String, dynamic>) return null;
-          final envelope = (data['data'] ?? data) as Map<String, dynamic>;
-          final actualData = (envelope['profile'] ?? envelope['user'] ?? envelope) as Map<String, dynamic>;
-          return UserProfile.fromJson(actualData);
-        },
-        onUpdate: (updatedProfile) {
-          if (updatedProfile != null) {
-            state = updatedProfile;
-            TelemetryService().setInternalUser(updatedProfile.isInternal);
-            cache.setProfile(updatedProfile.toJson());
-          }
-        },
-      );
+        final profile = await syncEngine.swrFetch<UserProfile?>(
+          path: ApiEndpoints.currentProfile,
+          ignoreCache: ignoreCache,
+          parser: (data) {
+            if (data is! Map<String, dynamic>) return null;
+            final envelope = (data['data'] ?? data) as Map<String, dynamic>;
+            final actualData = (envelope['profile'] ?? envelope['user'] ?? envelope) as Map<String, dynamic>;
+            return UserProfile.fromJson(actualData);
+          },
+          onUpdate: (updatedProfile) {
+            if (updatedProfile != null) {
+              state = updatedProfile;
+              TelemetryService().setInternalUser(updatedProfile.isInternal);
+              cache.setProfile(updatedProfile.toJson());
+            }
+          },
+        );
 
-      if (profile != null) {
-        state = profile;
-        TelemetryService().setInternalUser(profile.isInternal);
-        cache.setProfile(profile.toJson());
+        if (profile != null) {
+          state = profile;
+          TelemetryService().setInternalUser(profile.isInternal);
+          cache.setProfile(profile.toJson());
+          return; // Success, exit retry loop
+        }
+      } catch (e) {
+        AppLogger.e('Failed to fetch profile (attempt ${attempt + 1}): $e');
       }
-    } catch (e) {
-      AppLogger.e('Failed to fetch profile: $e');
+      
+      attempt++;
+      if (attempt < retries) {
+        await Future.delayed(Duration(seconds: 1 * attempt)); // Linear backoff
+      }
     }
   }
 }

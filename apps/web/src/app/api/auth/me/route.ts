@@ -20,16 +20,13 @@ export async function GET(request: NextRequest) {
 
     const supabase = createRouteHandlerSupabaseClientWithServiceRole();
 
-    if (payload.tokenHash) {
-      const { data: session } = await supabase
-        .from("refresh_tokens")
-        .select("id")
-        .eq("token_hash", payload.tokenHash)
-        .maybeSingle();
-      if (!session) {
-        return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-      }
-    }
+    // NOTE: We intentionally do NOT check payload.tokenHash against the refresh_tokens
+    // table here. The JWT is already cryptographically verified by verifyAccessToken().
+    // The tokenHash DB check causes spurious 401s right after token rotation because
+    // the old refresh token hash is deleted the moment a new pair is issued — creating
+    // a race window where a valid access token gets rejected. Token re-use detection
+    // belongs on the /auth/refresh endpoint, not on read-only endpoints.
+
 
     const { data: user, error } = await supabase
       .from("users")

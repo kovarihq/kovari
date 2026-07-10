@@ -108,7 +108,8 @@ export async function createNotification(
       NotificationType.GROUP_JOIN_APPROVED,
       NotificationType.GROUP_JOIN_REQUEST_RECEIVED,
       NotificationType.REPORT_SUBMITTED,
-      NotificationType.MATCH_ACCEPTED
+      NotificationType.MATCH_ACCEPTED,
+      NotificationType.MATCH_INTEREST_RECEIVED
     ];
     if (isRecipientInternal && !allowedInternalTypes.includes(type)) {
       console.log(`[Notification Suppressed] Suppressed discovery notification type ${type} for internal test account ${supabaseId}`);

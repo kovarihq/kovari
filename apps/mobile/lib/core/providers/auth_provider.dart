@@ -8,6 +8,7 @@ import 'package:mobile/core/auth/token_storage.dart';
 import 'package:mobile/core/network/api_client.dart';
 import 'package:mobile/core/network/api_endpoints.dart';
 import 'package:mobile/core/providers/connectivity_provider.dart';
+import 'package:mobile/core/providers/profile_provider.dart';
 import 'package:mobile/core/utils/app_logger.dart';
 import 'package:mobile/shared/models/kovari_user.dart';
 import 'package:mobile/core/providers/cache_provider.dart';
@@ -30,11 +31,14 @@ class AuthState {
   final bool isDegraded;
   final bool isRefreshing;
   final bool isBootstrapping;
+
   /// True when the account is actively banned — used to show BannedScreen
   /// even when no KovariUser object is available (e.g. during a fresh banned login).
   final bool isBanned;
+
   /// ISO-8601 string of when the suspension expires. Null means permanent ban.
   final String? banExpiresAt;
+
   /// Human-readable ban reason from the backend.
   final String? banReason;
 
@@ -72,10 +76,10 @@ class AuthNotifier extends Notifier<AuthState> {
     final session = ref.read(sessionManagerProvider);
     final storage = TokenStorage();
 
-    // Single source of truth sync
-    session.setOnStateChanged(syncSessionState);
-
     await repo.ensureSessionReady();
+
+    // Set listener AFTER bootstrap completes to prevent premature session synchronization
+    session.setOnStateChanged(syncSessionState);
 
     final userJson = await storage.getUserData();
     KovariUser? user;
@@ -95,15 +99,15 @@ class AuthNotifier extends Notifier<AuthState> {
       isBootstrapping: false,
     );
 
-    // Eagerly heal/sync profile if authenticated but user info is missing or incomplete
+    // Eagerly sync profile on boot. syncBanStatus() is intentionally NOT called here
+    // because auth/me validates the JWT's tokenHash against the refresh_tokens DB table.
+    // After BOOTSTRAP-REFRESH rotates the tokens, a race can cause the old access token
+    // (with deleted tokenHash) to be used → auth/me 401 → refresh 401 (reuse attack) → logout.
+    // Ban enforcement is already handled by the /auth/refresh assertNotBanned check.
     if (session.isAuthenticated) {
-      if (user == null || user.resolvedUuid == null) {
-        AppLogger.w(
-          '🛡️ [AuthNotifier] Eagerly triggering profile sync (user missing or UUID not resolved)',
-        );
-        syncProfile();
-      }
-      await syncBanStatus();
+      Future.microtask(() async {
+        await syncProfile();
+      });
     }
 
     // Auto-retry syncProfile when connectivity is restored
@@ -208,7 +212,9 @@ class AuthNotifier extends Notifier<AuthState> {
       isBootstrapping: false,
       isBanned: true,
       banExpiresAt: resolvedExpiry,
-      banReason: (banReason?.isNotEmpty == true) ? banReason : bannedUser?.banReason,
+      banReason: (banReason?.isNotEmpty == true)
+          ? banReason
+          : bannedUser?.banReason,
     );
   }
 
@@ -256,8 +262,11 @@ class AuthNotifier extends Notifier<AuthState> {
         ignoreCache: true, // 💎 Force network fetch to heal missing UUID
         parser: (data) {
           final map = data as Map<String, dynamic>;
-          final innerData = map['data'] ?? map;
-          return KovariUser.fromJson(innerData as Map<String, dynamic>);
+          final envelope = (map['data'] ?? map) as Map<String, dynamic>;
+          final actualData =
+              (envelope['profile'] ?? envelope['user'] ?? envelope)
+                  as Map<String, dynamic>;
+          return KovariUser.fromJson(actualData);
         },
       );
 
@@ -269,6 +278,13 @@ class AuthNotifier extends Notifier<AuthState> {
         final storage = TokenStorage();
         await storage.saveUserData(jsonEncode(freshUser.toJson()));
         state = state.copyWith(user: freshUser);
+
+        // Eagerly refresh the global profileProvider holding the active UserProfile object
+        Future.microtask(() {
+          try {
+            ref.read(profileProvider.notifier).fetchProfile(ignoreCache: true);
+          } catch (_) {}
+        });
       }
     } catch (e) {
       AppLogger.e('🛡️ [AuthNotifier] Profile sync failed', error: e);
@@ -277,6 +293,10 @@ class AuthNotifier extends Notifier<AuthState> {
 
   void setUser(KovariUser? user) {
     state = state.copyWith(user: user, isAuthenticated: user != null);
+    if (user != null) {
+      // Eagerly sync the user profile metadata
+      syncProfile();
+    }
   }
 
   Future<void> logout() async {

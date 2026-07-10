@@ -36,7 +36,17 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
     final profile = ref.watch(profileProvider);
 
     if (profile == null) {
-      return const Scaffold(body: KovariSkeletonProfile());
+      return Scaffold(
+        body: KovariRefreshIndicator(
+          onRefresh: () => ref
+              .read(profileProvider.notifier)
+              .fetchProfile(ignoreCache: true),
+          child: const SingleChildScrollView(
+            physics: AlwaysScrollableScrollPhysics(),
+            child: KovariSkeletonProfile(),
+          ),
+        ),
+      );
     }
 
     return Scaffold(

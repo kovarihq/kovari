@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:dio/dio.dart';
 import 'package:dio/dio.dart' as dio;
@@ -11,8 +12,32 @@ import 'package:mobile/core/providers/cache_provider.dart';
 import 'package:mobile/core/providers/connectivity_provider.dart';
 import 'package:mobile/core/utils/app_logger.dart';
 
-class AuthRepository {
+/// Decodes the `exp` Unix timestamp (seconds) from a JWT access token.
+/// Falls back to [fallbackMs] if decoding fails (default: now + 15 minutes).
+int _parseJwtExpiry(String accessToken, {int? fallbackMs}) {
+  try {
+    final parts = accessToken.split('.');
+    if (parts.length != 3) throw FormatException('Not a JWT');
+    // JWT base64url → standard base64
+    var payload = parts[1].replaceAll('-', '+').replaceAll('_', '/');
+    // Pad to a multiple of 4
+    while (payload.length % 4 != 0) {
+      payload += '=';
+    }
+    final decoded = utf8.decode(base64Decode(payload));
+    final map = jsonDecode(decoded) as Map<String, dynamic>;
+    final exp = map['exp'] as int?;
+    if (exp == null) throw FormatException('No exp claim');
+    // JWT exp is in seconds — convert to milliseconds
+    return exp * 1000;
+  } catch (e) {
+    AppLogger.w('Failed to parse JWT exp claim: $e. Using fallback expiry.');
+    return fallbackMs ??
+        DateTime.now().millisecondsSinceEpoch + (15 * 60 * 1000);
+  }
+}
 
+class AuthRepository {
   AuthRepository(this._storage, this._sessionManager, this._ref)
     : _refreshDio = Dio(
         BaseOptions(
@@ -96,7 +121,10 @@ class AuthRepository {
       );
 
       final response = await _refreshDio
-          .post<dynamic>(ApiEndpoints.refresh, data: {'refreshToken': refreshToken})
+          .post<dynamic>(
+            ApiEndpoints.refresh,
+            data: {'refreshToken': refreshToken},
+          )
           .timeout(
             const Duration(seconds: 10),
             onTimeout: () {
@@ -108,12 +136,17 @@ class AuthRepository {
         final data = response.data['data'] ?? response.data;
         final newAccess = data['accessToken'] as String;
         final newRefresh = data['refreshToken'] as String;
-        final expiry =
-            data['expiry'] as int? ??
-            (DateTime.now().millisecondsSinceEpoch + 3600000);
+        // Parse expiry directly from the JWT exp claim so we don't rely on
+        // the backend sending an 'expiry' field (it doesn't).
+        final expiry = _parseJwtExpiry(newAccess);
+        AppLogger.d(
+          '[$requestId] Token expiry parsed: ${DateTime.fromMillisecondsSinceEpoch(expiry)}',
+        );
 
         // Atomic Token Write Guard
-        if (_sessionManager.isLoggingOut || !_sessionManager.isAuthenticated) {
+        if (_sessionManager.isLoggingOut ||
+            (!_sessionManager.isAuthenticated &&
+                requestId != 'BOOTSTRAP-REFRESH')) {
           AppLogger.w(
             '[$requestId] Discarding refresh result: session invalid/logout in progress',
           );
@@ -161,8 +194,7 @@ class AuthRepository {
           e is! _OfflineException;
       final isServerAuthRejection =
           e is DioException &&
-          (e.response?.statusCode == 401 ||
-              e.response?.statusCode == 403);
+          (e.response?.statusCode == 401 || e.response?.statusCode == 403);
 
       if ((isHardAuthFailure || isServerAuthRejection) &&
           requestId != 'SOCKET-CONN-REFRESH') {
@@ -202,7 +234,10 @@ class AuthRepository {
       if (refreshToken != null) {
         unawaited(
           _refreshDio
-              .post<dynamic>(ApiEndpoints.logout, data: {'refreshToken': refreshToken})
+              .post<dynamic>(
+                ApiEndpoints.logout,
+                data: {'refreshToken': refreshToken},
+              )
               .timeout(const Duration(seconds: 2))
               .catchError(
                 (_) => Response<dynamic>(requestOptions: RequestOptions()),
@@ -230,15 +265,19 @@ class AuthRepository {
             '🌐 Connectivity restored. Triggering auto-refresh recovery.',
           );
           // Add jitter to avoid thundering herd
-          unawaited(Future<void>.delayed(
-            Duration(milliseconds: 300 + (DateTime.now().millisecond % 300)),
-            () {
-              _recoveryAttempts++;
-              unawaited(refreshToken(requestId: 'RECOVERY-AUTO').catchError((_) {
-                // Keep error handling silent for auto-recovery pings
-              }));
-            },
-          ));
+          unawaited(
+            Future<void>.delayed(
+              Duration(milliseconds: 300 + (DateTime.now().millisecond % 300)),
+              () {
+                _recoveryAttempts++;
+                unawaited(
+                  refreshToken(requestId: 'RECOVERY-AUTO').catchError((_) {
+                    // Keep error handling silent for auto-recovery pings
+                  }),
+                );
+              },
+            ),
+          );
         }
       }
     });
@@ -250,7 +289,7 @@ class AuthRepository {
     try {
       final accessToken = await _storage.getAccessToken();
       final hasTokens = accessToken != null;
-      
+
       AppLogger.d('🔍 [Bootstrap] Checking tokens... Found: $hasTokens');
 
       if (!hasTokens) {
@@ -260,15 +299,27 @@ class AuthRepository {
 
       // If expired or expiring soon, try a silent refresh using the refresh token
       if (await _storage.isExpired() || await _storage.isExpiringSoon()) {
-        AppLogger.i('🔍 [Bootstrap] Tokens expired or expiring soon. Attempting silent refresh...');
+        AppLogger.i(
+          '🔍 [Bootstrap] Tokens expired or expiring soon. Attempting silent refresh...',
+        );
         try {
           await refreshToken(
             requestId: 'BOOTSTRAP-REFRESH',
           ).timeout(const Duration(seconds: 5));
         } catch (e) {
           AppLogger.w(
-            'Bootstrap refresh failed/timed out ($e). Entering degraded mode.',
+            'Bootstrap refresh failed/timed out ($e). Checking if still authenticated...',
           );
+          // If the bootstrap refresh failed due to a hard auth rejection (which triggers logout()),
+          // the tokens are cleared and we are no longer authenticated. Exit immediately.
+          final tokenCheck = await _storage.getAccessToken();
+          if (tokenCheck == null) {
+            AppLogger.w(
+              '🔍 [Bootstrap] Tokens cleared during refresh failure. Bootstrapping as unauthenticated.',
+            );
+            _sessionManager.setAuthenticated(false);
+            return;
+          }
           _sessionManager.setDegraded(true);
         }
       }

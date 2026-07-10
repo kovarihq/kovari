@@ -339,6 +339,8 @@ class ConversationRuntimeStore
           partnerAvatar: msg['partner_avatar'] as String?,
           lastMessageAt: lastMsgRaw.createdAt,
           lastMessage: lastMsgRaw,
+          iBlockedThem: msg['i_blocked_them'] == true,
+          theyBlockedMe: msg['they_blocked_me'] == true,
         );
 
         newConversations.add(conv);

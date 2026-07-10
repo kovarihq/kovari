@@ -179,6 +179,13 @@ export async function PATCH(req: Request) {
       });
     }
 
+    if (field === "avatar" && (!value || String(value).trim() === "")) {
+      return new Response(JSON.stringify({ error: "Profile photo is mandatory and cannot be removed" }), {
+        status: 400,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+
     // 5. Atomic Update via profileMapper (users + profiles)
     // Even if identity (name/email) sync is special, we still use mapper to identify targets
     const { userUpdates, profileUpdates } = profileMapper.toDbUpdate({ [field]: value });

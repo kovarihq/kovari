@@ -1,12 +1,12 @@
 
-import { NextResponse } from "next/server";
-import { auth } from "@clerk/nextjs/server";
+import { NextRequest, NextResponse } from "next/server";
+import { getAuthenticatedUser } from "@/lib/auth/get-user";
 import { createAdminSupabaseClient } from "@kovari/api";
 
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
   try {
-    const { userId: clerkUserId } = await auth();
-    if (!clerkUserId) {
+    const authUser = await getAuthenticatedUser(request);
+    if (!authUser) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
@@ -26,20 +26,7 @@ export async function POST(request: Request) {
       );
     }
 
-    const supabase = createAdminSupabaseClient();
-
-    // Get current user's internal ID
-    const { data: userRow, error: userError } = await supabase
-      .from("users")
-      .select("id")
-      .eq("clerk_user_id", clerkUserId)
-      .single();
-
-    if (userError || !userRow) {
-      return NextResponse.json({ error: "User not found" }, { status: 404 });
-    }
-
-    const currentUserId = userRow.id;
+    const currentUserId = authUser.id;
 
     if (targetId === currentUserId) {
       return NextResponse.json(
@@ -47,6 +34,8 @@ export async function POST(request: Request) {
         { status: 400 }
       );
     }
+
+    const supabase = createAdminSupabaseClient();
 
     if (action === "block") {
       // Check if already blocked to avoid unique constraint error
@@ -100,10 +89,10 @@ export async function POST(request: Request) {
   }
 }
 
-export async function GET(request: Request) {
+export async function GET(request: NextRequest) {
   try {
-    const { userId: clerkUserId } = await auth();
-    if (!clerkUserId) {
+    const authUser = await getAuthenticatedUser(request);
+    if (!authUser) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
@@ -117,20 +106,8 @@ export async function GET(request: Request) {
       );
     }
 
+    const currentUserId = authUser.id;
     const supabase = createAdminSupabaseClient();
-
-    // Get current user's internal ID
-    const { data: userRow, error: userError } = await supabase
-      .from("users")
-      .select("id")
-      .eq("clerk_user_id", clerkUserId)
-      .single();
-
-    if (userError || !userRow) {
-      return NextResponse.json({ error: "User not found" }, { status: 404 });
-    }
-
-    const currentUserId = userRow.id;
 
     const [
       { data: iBlockedThem },
@@ -164,5 +141,6 @@ export async function GET(request: Request) {
     );
   }
 }
+
 
 

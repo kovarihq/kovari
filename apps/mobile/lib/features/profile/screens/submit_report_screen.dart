@@ -5,14 +5,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
-import 'package:mobile/core/navigation/routes.dart';
 import 'package:mobile/core/network/cloudinary_service.dart';
 import 'package:mobile/core/theme/app_colors.dart';
 import 'package:mobile/core/theme/app_text_styles.dart';
 import 'package:mobile/features/profile/providers/safety_provider.dart';
 
 class SubmitReportScreen extends ConsumerStatefulWidget {
-
   const SubmitReportScreen({
     super.key,
     required this.targetType,
@@ -130,16 +128,12 @@ class _SubmitReportScreenState extends ConsumerState<SubmitReportScreen> {
         }
       } else if (state.submissionError != null) {
         if (mounted) {
-          ScaffoldMessenger.of(
-            context,
-          ).showSnackBar(SnackBar(content: Text(state.submissionError!)));
+          _showRateLimitDialog(state.submissionError!);
         }
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Submission failed: $e')));
+        _showRateLimitDialog('Submission failed: $e');
       }
     } finally {
       if (mounted) {
@@ -192,13 +186,13 @@ class _SubmitReportScreenState extends ConsumerState<SubmitReportScreen> {
                   height: 1.5,
                 ),
               ),
-              const SizedBox(height: 24),
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton(
                   onPressed: () {
                     context.pop(); // Close dialog
-                    const SafetyRouteData().go(context); // Go back to Safety
+                    context
+                        .pop(); // Close SubmitReportScreen returning back to profile
                   },
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppColors.text(context),
@@ -208,8 +202,80 @@ class _SubmitReportScreenState extends ConsumerState<SubmitReportScreen> {
                     elevation: 0,
                   ),
                   child: Text(
-                    'Back to Safety',
-                    style: TextStyle(color: AppColors.surface(context, level: 1)),
+                    'Back to Profile',
+                    style: TextStyle(
+                      color: AppColors.surface(context, level: 1),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Shown when the backend returns 429 (duplicate report or daily rate limit).
+  void _showRateLimitDialog(String message) {
+    showDialog<void>(
+      context: context,
+      barrierDismissible: true,
+      builder: (context) => Dialog(
+        backgroundColor: AppColors.surface(context, level: 1),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        child: Padding(
+          padding: const EdgeInsets.all(24.0),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.amber.withValues(alpha: 0.12),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  LucideIcons.alertTriangle,
+                  color: Colors.amber,
+                  size: 40,
+                ),
+              ),
+              const SizedBox(height: 20),
+              Text(
+                'Report Not Submitted',
+                style: AppTextStyles.h3.copyWith(
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.text(context),
+                ),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                message,
+                textAlign: TextAlign.center,
+                style: AppTextStyles.bodySmall.copyWith(
+                  color: AppColors.text(context, isMuted: true),
+                  fontSize: 14,
+                  height: 1.5,
+                ),
+              ),
+              const SizedBox(height: 24),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: () => context.pop(),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.text(context),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    elevation: 0,
+                  ),
+                  child: Text(
+                    'Dismiss',
+                    style: TextStyle(
+                      color: AppColors.surface(context, level: 1),
+                    ),
                   ),
                 ),
               ),
@@ -254,7 +320,9 @@ class _SubmitReportScreenState extends ConsumerState<SubmitReportScreen> {
         ),
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(1),
-          child: Divider(color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.5)),
+          child: Divider(
+            color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.5),
+          ),
         ),
       ),
       body: SingleChildScrollView(
@@ -273,7 +341,9 @@ class _SubmitReportScreenState extends ConsumerState<SubmitReportScreen> {
                 TextField(
                   controller: _customReasonController,
                   maxLines: 3,
-                  style: AppTextStyles.bodyMedium.copyWith(color: AppColors.text(context)),
+                  style: AppTextStyles.bodyMedium.copyWith(
+                    color: AppColors.text(context),
+                  ),
                   decoration: _inputDecoration(
                     context,
                     'Briefly describe what happened...',
@@ -289,7 +359,9 @@ class _SubmitReportScreenState extends ConsumerState<SubmitReportScreen> {
                 controller: _notesController,
                 maxLines: 2,
                 maxLength: 300,
-                style: AppTextStyles.bodyMedium.copyWith(color: AppColors.text(context)),
+                style: AppTextStyles.bodyMedium.copyWith(
+                  color: AppColors.text(context),
+                ),
                 decoration: _inputDecoration(
                   context,
                   'Provide any additional details...',
@@ -306,194 +378,194 @@ class _SubmitReportScreenState extends ConsumerState<SubmitReportScreen> {
   }
 
   Widget _buildHero(BuildContext context) => Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Row(
+        children: [
+          const Icon(LucideIcons.flag, size: 20, color: AppColors.primary),
+          const SizedBox(width: 10),
+          Text(
+            'Report ${widget.targetType == 'user' ? 'Member' : 'Group'}',
+            style: AppTextStyles.h3.copyWith(
+              fontSize: 18,
+              fontWeight: FontWeight.w600,
+              color: AppColors.text(context),
+            ),
+          ),
+        ],
+      ),
+      const SizedBox(height: 12),
+      Text(
+        'Help us understand what went wrong with ${widget.targetName}. Your report is confidential.',
+        style: AppTextStyles.bodyMedium.copyWith(
+          color: AppColors.text(context, isMuted: true),
+          fontSize: 15,
+          height: 1.4,
+        ),
+      ),
+    ],
+  );
+
+  Widget _buildSectionTitle(BuildContext context, String title) => Padding(
+    padding: const EdgeInsets.only(bottom: 12, left: 4),
+    child: Text(
+      title,
+      style: AppTextStyles.bodySmall.copyWith(
+        fontSize: 11,
+        fontWeight: FontWeight.w600,
+        color: AppColors.text(context, isMuted: true),
+        letterSpacing: 1.2,
+      ),
+    ),
+  );
+
+  InputDecoration _inputDecoration(BuildContext context, String hint) =>
+      InputDecoration(
+        hintText: hint,
+        hintStyle: TextStyle(color: AppColors.text(context, isMuted: true)),
+        filled: true,
+        fillColor: AppColors.surface(context, level: 1),
+        contentPadding: const EdgeInsets.all(16),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide(color: AppColors.borderColor(context)),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide(color: AppColors.borderColor(context)),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: AppColors.primary, width: 1.5),
+        ),
+      );
+
+  Widget _buildReasonList(BuildContext context, List<String> reasons) =>
+      DecoratedBox(
+        decoration: BoxDecoration(
+          color: AppColors.surface(context, level: 1),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: AppColors.borderColor(context)),
+        ),
+        child: Column(
+          children: reasons.map((r) {
+            final isSelected = _selectedReason == r;
+            return Column(
+              children: [
+                InkWell(
+                  onTap: () => setState(() => _selectedReason = r),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 12,
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          r,
+                          style: AppTextStyles.bodyMedium.copyWith(
+                            color: isSelected
+                                ? AppColors.text(context)
+                                : AppColors.text(context, isMuted: true),
+                            fontWeight: isSelected
+                                ? FontWeight.w600
+                                : FontWeight.w400,
+                          ),
+                        ),
+                        if (isSelected)
+                          const Icon(
+                            LucideIcons.check,
+                            size: 18,
+                            color: AppColors.primary,
+                          ),
+                      ],
+                    ),
+                  ),
+                ),
+                if (r != reasons.last)
+                  Divider(
+                    height: 1,
+                    color: AppColors.borderColor(context),
+                    indent: 16,
+                    endIndent: 16,
+                  ),
+              ],
+            );
+          }).toList(),
+        ),
+      );
+
+  Widget _buildEvidencePicker(BuildContext context) => Column(
+    children: [
+      if (_evidenceFile != null)
+        Stack(
           children: [
-            const Icon(LucideIcons.flag, size: 20, color: AppColors.primary),
-            const SizedBox(width: 10),
-            Text(
-              'Report ${widget.targetType == 'user' ? 'Member' : 'Group'}',
-              style: AppTextStyles.h3.copyWith(
-                fontSize: 18,
-                fontWeight: FontWeight.w600,
-                color: AppColors.text(context),
+            Container(
+              width: double.infinity,
+              height: 180,
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(12),
+                image: DecorationImage(
+                  image: FileImage(_evidenceFile!),
+                  fit: BoxFit.cover,
+                ),
+              ),
+            ),
+            Positioned(
+              top: 8,
+              right: 8,
+              child: IconButton(
+                icon: const Icon(
+                  LucideIcons.circleX,
+                  color: Colors.white,
+                  size: 24,
+                ),
+                onPressed: _removeEvidence,
               ),
             ),
           ],
-        ),
-        const SizedBox(height: 12),
-        Text(
-          'Help us understand what went wrong with ${widget.targetName}. Your report is confidential.',
-          style: AppTextStyles.bodyMedium.copyWith(
-            color: AppColors.text(context, isMuted: true),
-            fontSize: 15,
-            height: 1.4,
-          ),
-        ),
-      ],
-    );
-
-  Widget _buildSectionTitle(BuildContext context, String title) => Padding(
-      padding: const EdgeInsets.only(bottom: 12, left: 4),
-      child: Text(
-        title,
-        style: AppTextStyles.bodySmall.copyWith(
-          fontSize: 11,
-          fontWeight: FontWeight.w600,
-          color: AppColors.text(context, isMuted: true),
-          letterSpacing: 1.2,
-        ),
-      ),
-    );
-
-  InputDecoration _inputDecoration(BuildContext context, String hint) => InputDecoration(
-      hintText: hint,
-      hintStyle: TextStyle(color: AppColors.text(context, isMuted: true)),
-      filled: true,
-      fillColor: AppColors.surface(context, level: 1),
-      contentPadding: const EdgeInsets.all(16),
-      border: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(12),
-        borderSide: BorderSide(color: AppColors.borderColor(context)),
-      ),
-      enabledBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(12),
-        borderSide: BorderSide(color: AppColors.borderColor(context)),
-      ),
-      focusedBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(12),
-        borderSide: const BorderSide(color: AppColors.primary, width: 1.5),
-      ),
-    );
-
-  Widget _buildReasonList(BuildContext context, List<String> reasons) => DecoratedBox(
-      decoration: BoxDecoration(
-        color: AppColors.surface(context, level: 1),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppColors.borderColor(context)),
-      ),
-      child: Column(
-        children: reasons.map((r) {
-          final isSelected = _selectedReason == r;
-          return Column(
-            children: [
-              InkWell(
-                onTap: () => setState(() => _selectedReason = r),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 12,
-                  ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(
-                        r,
-                        style: AppTextStyles.bodyMedium.copyWith(
-                          color: isSelected
-                              ? AppColors.text(context)
-                              : AppColors.text(context, isMuted: true),
-                          fontWeight: isSelected
-                              ? FontWeight.w600
-                              : FontWeight.w400,
-                        ),
-                      ),
-                      if (isSelected)
-                        const Icon(
-                          LucideIcons.check,
-                          size: 18,
-                          color: AppColors.primary,
-                        ),
-                    ],
-                  ),
+        )
+      else
+        InkWell(
+          onTap: _pickImage,
+          child: Container(
+            width: double.infinity,
+            height: 120,
+            decoration: BoxDecoration(
+              color: AppColors.surface(context, level: 1),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: AppColors.borderColor(context)),
+            ),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  LucideIcons.image,
+                  color: AppColors.text(context, isMuted: true),
+                  size: 32,
                 ),
-              ),
-              if (r != reasons.last)
-                Divider(
-                  height: 1,
-                  color: AppColors.borderColor(context),
-                  indent: 16,
-                  endIndent: 16,
-                ),
-            ],
-          );
-        }).toList(),
-      ),
-    );
-
-  Widget _buildEvidencePicker(BuildContext context) => Column(
-      children: [
-        if (_evidenceFile != null)
-          Stack(
-            children: [
-              Container(
-                width: double.infinity,
-                height: 180,
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(12),
-                  image: DecorationImage(
-                    image: FileImage(_evidenceFile!),
-                    fit: BoxFit.cover,
-                  ),
-                ),
-              ),
-              Positioned(
-                top: 8,
-                right: 8,
-                child: IconButton(
-                  icon: const Icon(
-                    LucideIcons.circleX,
-                    color: Colors.white,
-                    size: 24,
-                  ),
-                  onPressed: _removeEvidence,
-                ),
-              ),
-            ],
-          )
-        else
-          InkWell(
-            onTap: _pickImage,
-            child: Container(
-              width: double.infinity,
-              height: 120,
-              decoration: BoxDecoration(
-                color: AppColors.surface(context, level: 1),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(
-                  color: AppColors.borderColor(context),
-                ),
-              ),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(
-                    LucideIcons.image,
+                const SizedBox(height: 8),
+                Text(
+                  'Tap to select a photo',
+                  style: AppTextStyles.bodySmall.copyWith(
                     color: AppColors.text(context, isMuted: true),
-                    size: 32,
                   ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Tap to select a photo',
-                    style: AppTextStyles.bodySmall.copyWith(
-                      color: AppColors.text(context, isMuted: true),
-                    ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'PNG, JPG, JPEG up to 5MB',
+                  style: AppTextStyles.bodySmall.copyWith(
+                    color: AppColors.text(context, isMuted: true),
+                    fontSize: 10,
                   ),
-                  const SizedBox(height: 4),
-                  Text(
-                    'PNG, JPG, JPEG up to 5MB',
-                    style: AppTextStyles.bodySmall.copyWith(
-                      color: AppColors.text(context, isMuted: true),
-                      fontSize: 10,
-                    ),
-                  ),
-                ],
-              ),
+                ),
+              ],
             ),
           ),
-      ],
-    );
+        ),
+    ],
+  );
 
   Widget _buildSubmitButton(BuildContext context, SafetyState state) {
     final canSubmit =
@@ -509,9 +581,10 @@ class _SubmitReportScreenState extends ConsumerState<SubmitReportScreen> {
       child: ElevatedButton(
         style: ElevatedButton.styleFrom(
           backgroundColor: AppColors.primary,
-          disabledBackgroundColor: AppColors.text(context, isMuted: true).withValues(
-            alpha: 0.3,
-          ),
+          disabledBackgroundColor: AppColors.text(
+            context,
+            isMuted: true,
+          ).withValues(alpha: 0.3),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(24),
           ),

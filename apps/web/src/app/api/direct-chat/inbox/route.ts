@@ -172,6 +172,13 @@ export async function GET(req: NextRequest) {
           const chatId = `${sorted[0]}_${sorted[1]}`;
           const identity = identityMap.get(partnerId);
           
+          const iBlocked = (blockedData || []).some(
+            (b) => b.blocker_id === userId && b.blocked_id === partnerId
+          );
+          const theyBlocked = (blockedData || []).some(
+            (b) => b.blocker_id === partnerId && b.blocked_id === userId
+          );
+          
           conversationsMap.set(partnerId, {
             ...msg,
             chat_id: chatId,
@@ -180,6 +187,8 @@ export async function GET(req: NextRequest) {
             partner_avatar: identity?.avatar || null,
             sender_clerk_id: clerkIdMap.get(msg.sender_id) || "",
             receiver_clerk_id: clerkIdMap.get(msg.receiver_id) || "",
+            i_blocked_them: iBlocked,
+            they_blocked_me: theyBlocked,
           });
         }
       } catch (err) {

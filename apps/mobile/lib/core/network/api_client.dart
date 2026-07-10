@@ -887,6 +887,19 @@ class DioApiClient implements ApiClient {
         }
       }
 
+      // 429 Rate Limit / Duplicate: extract backend user-facing message and throw
+      if (e.response?.statusCode == 429) {
+        var userMessage = 'Too many requests. Please try again later.';
+        if (e.response?.data is Map) {
+          final data = e.response!.data as Map;
+          // Backend sends `details` (long-form) or `error` (short-form)
+          final details = data['details']?.toString();
+          final error = data['error']?.toString();
+          userMessage = details ?? error ?? userMessage;
+        }
+        throw TooManyRequestsException(userMessage);
+      }
+
       if (e.error is DegradedModeException ||
           e.error is RefreshTimeoutException ||
           e.error is TooManyRequestsException ||

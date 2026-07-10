@@ -1,6 +1,6 @@
-import { auth } from "@clerk/nextjs/server";
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminSupabaseClient } from "@kovari/api";
+import { getAuthenticatedUser } from "@/lib/auth/get-user";
 
 /**
  * GET /api/flags/check
@@ -12,10 +12,10 @@ import { createAdminSupabaseClient } from "@kovari/api";
  */
 export async function GET(req: NextRequest) {
   try {
-    // Validate authentication
-    const { userId: clerkUserId } = await auth();
+    // Validate authentication using unified mobile-safe helper
+    const authUser = await getAuthenticatedUser(req);
 
-    if (!clerkUserId) {
+    if (!authUser) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
@@ -37,24 +37,9 @@ export async function GET(req: NextRequest) {
       );
     }
 
-    const supabase = createAdminSupabaseClient();
-
-    // Get current user's UUID from Clerk userId
-    const { data: currentUserRow, error: currentUserError } = await supabase
-      .from("users")
-      .select("id")
-      .eq("clerk_user_id", clerkUserId)
-      .single();
-
-    if (currentUserError || !currentUserRow) {
-      return NextResponse.json(
-        { error: "Current user not found" },
-        { status: 404 }
-      );
-    }
-
-    const reporterId = currentUserRow.id;
+    const reporterId = authUser.id;
     let hasActiveReport = false;
+    const supabase = createAdminSupabaseClient();
 
     // Check if an active report exists
     if (targetType === "user") {

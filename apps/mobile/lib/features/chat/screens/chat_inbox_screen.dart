@@ -4,14 +4,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
-import 'package:mobile/core/navigation/routes.dart';
 import 'package:mobile/core/theme/app_colors.dart';
 import 'package:mobile/core/theme/app_radius.dart';
 import 'package:mobile/core/theme/app_text_styles.dart';
 import 'package:mobile/core/widgets/skeletons/kovari_skeletons.dart';
-import 'package:mobile/features/chat/models/conversation_entity.dart';
 import 'package:mobile/features/chat/providers/conversation_runtime_store.dart';
-import 'package:mobile/features/chat/screens/chat_screen.dart';
 import 'package:mobile/shared/widgets/app_card.dart';
 import 'package:mobile/shared/widgets/kovari_avatar.dart';
 import 'package:mobile/shared/widgets/kovari_refresh_indicator.dart';
@@ -218,9 +215,7 @@ class _ChatInboxScreenState extends ConsumerState<ChatInboxScreen>
                                   child: _ConversationTile(
                                     chatId: filtered[i],
                                     onTap: () {
-                                      context.push(
-                                        '/chat/${filtered[i]}',
-                                      );
+                                      context.push('/chat/${filtered[i]}');
                                     },
                                   ),
                                 ),
@@ -264,8 +259,12 @@ class _ConversationTile extends ConsumerWidget {
     final metadata = state.metadata;
     if (metadata == null) return const SizedBox.shrink();
 
+    final isBlockedByMe = metadata.iBlockedThem;
+    final isBlockedByThem = metadata.theyBlockedMe;
+    final isBlocked = isBlockedByMe || isBlockedByThem;
+
     final displayAvatar = metadata.displayAvatar;
-    if (displayAvatar != null && displayAvatar.isNotEmpty) {
+    if (displayAvatar != null && displayAvatar.isNotEmpty && !isBlockedByThem) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (context.mounted) {
           precacheImage(CachedNetworkImageProvider(displayAvatar), context);
@@ -280,15 +279,15 @@ class _ConversationTile extends ConsumerWidget {
         child: Row(
           children: [
             // ── Avatar + Presence Dot ──────────────────────────────────
-            Hero(
-              tag: 'avatar_${state.chatId}',
-              child: KovariAvatar(
-                imageUrl: metadata.displayAvatar,
-                size: 40,
-                fullName: metadata.displayName,
-                isOnline: state.isPartnerOnline && !metadata.isGroup,
-                borderColor: AppColors.surface(context, level: 1),
-              ),
+            KovariAvatar(
+              imageUrl: isBlockedByThem ? null : metadata.displayAvatar,
+              size: 40,
+              fullName: isBlockedByThem ? 'Kovari User' : metadata.displayName,
+              isOnline:
+                  !isBlockedByThem &&
+                  state.isPartnerOnline &&
+                  !metadata.isGroup,
+              borderColor: AppColors.surface(context, level: 1),
             ),
             const SizedBox(width: 12),
 
@@ -304,7 +303,9 @@ class _ConversationTile extends ConsumerWidget {
                     children: [
                       Expanded(
                         child: Text(
-                          metadata.displayName,
+                          isBlockedByThem
+                              ? 'Kovari User'
+                              : metadata.displayName,
                           style: AppTextStyles.bodySmall.copyWith(
                             fontWeight: FontWeight.w600,
                             color: AppColors.text(context),
@@ -329,8 +330,15 @@ class _ConversationTile extends ConsumerWidget {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Expanded(child: _buildSubtitle(context, state)),
-                      if (state.unreadCount > 0)
+                      Expanded(
+                        child: _buildSubtitle(
+                          context,
+                          state,
+                          isBlockedByMe: isBlockedByMe,
+                          isBlockedByThem: isBlockedByThem,
+                        ),
+                      ),
+                      if (state.unreadCount > 0 && !isBlocked)
                         Container(
                           margin: const EdgeInsets.only(left: 8),
                           padding: const EdgeInsets.symmetric(
@@ -368,7 +376,34 @@ class _ConversationTile extends ConsumerWidget {
     );
   }
 
-  Widget _buildSubtitle(BuildContext context, ConversationRuntimeState state) {
+  Widget _buildSubtitle(
+    BuildContext context,
+    ConversationRuntimeState state, {
+    bool isBlockedByMe = false,
+    bool isBlockedByThem = false,
+  }) {
+    if (isBlockedByMe) {
+      return Text(
+        'Blocked',
+        style: AppTextStyles.bodySmall.copyWith(
+          color: AppColors.text(context, isMuted: true),
+          fontSize: 12,
+        ),
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+      );
+    }
+    if (isBlockedByThem) {
+      return Text(
+        'You cannot reply to this chat anymore.',
+        style: AppTextStyles.bodySmall.copyWith(
+          color: AppColors.text(context, isMuted: true),
+          fontSize: 12,
+        ),
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+      );
+    }
     final metadata = state.metadata;
     // Typing indicator (TTL-backed, auto-expires)
     final typingUsers = state.typingUserIds;

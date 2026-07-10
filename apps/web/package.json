@@ -82,6 +82,7 @@
     "framer-motion": "^12.19.1",
     "google-auth-library": "^10.6.2",
     "isomorphic-dompurify": "^3.14.0",
+    "jose": "^4.15.9",
     "jsonwebtoken": "^9.0.3",
     "leaflet": "^1.9.4",
     "leaflet-defaulticon-compatibility": "^0.1.2",

@@ -110,34 +110,6 @@ class _MediaBioStepState extends ConsumerState<MediaBioStep> {
                   _pickImage(ImageSource.gallery);
                 },
               ),
-              if (ref.read(onboardingProvider).localProfilePicPath != null ||
-                  ref.read(onboardingProvider).profilePicUrl != null)
-                ListTile(
-                  visualDensity: VisualDensity.compact,
-                  dense: true,
-                  leading: Container(
-                    padding: const EdgeInsets.all(6),
-                    child: const Icon(
-                      LucideIcons.trash2,
-                      size: 22,
-                      color: AppColors.destructive,
-                    ),
-                  ),
-                  title: Text(
-                    'Remove Photo',
-                    style: AppTextStyles.bodyMedium.copyWith(
-                      color: AppColors.destructive,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  onTap: () {
-                    context.pop();
-                    ref
-                        .read(onboardingProvider.notifier)
-                        .updateMediaBio(url: null, localPath: null);
-                    setState(() => _photoError = null);
-                  },
-                ),
               const SizedBox(height: 16),
             ],
           ),

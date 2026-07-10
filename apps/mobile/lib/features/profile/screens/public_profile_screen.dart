@@ -17,11 +17,14 @@ import 'package:mobile/features/chat/utils/direct_chat_id.dart';
 import 'package:mobile/features/onboarding/data/profile_service.dart';
 import 'package:mobile/features/profile/data/connections_service.dart';
 import 'package:mobile/features/profile/models/user_profile.dart';
+import 'package:mobile/features/profile/providers/safety_provider.dart';
 import 'package:mobile/shared/utils/url_utils.dart';
 import 'package:mobile/shared/widgets/app_card.dart';
 import 'package:mobile/shared/widgets/kovari_avatar.dart';
 import 'package:mobile/shared/widgets/kovari_confirm_dialog.dart';
 import 'package:mobile/shared/widgets/kovari_image_modal.dart';
+import 'package:mobile/shared/widgets/kovari_popover.dart';
+import 'package:mobile/shared/widgets/kovari_snackbar.dart';
 
 class PublicProfileScreen extends ConsumerStatefulWidget {
   const PublicProfileScreen({super.key, required this.userId});
@@ -46,6 +49,9 @@ class _PublicProfileScreenState extends ConsumerState<PublicProfileScreen> {
     _profileService = ProfileService(apiClient);
     _connectionsService = ConnectionsService(apiClient);
     _fetchProfile();
+    Future.microtask(() {
+      ref.read(safetyProvider.notifier).checkBlockStatus(widget.userId);
+    });
   }
 
   Future<void> _fetchProfile() async {
@@ -133,7 +139,9 @@ class _PublicProfileScreenState extends ConsumerState<PublicProfileScreen> {
 
     unawaited(
       Navigator.of(context, rootNavigator: true).push<void>(
-        MaterialPageRoute<void>(builder: (_) => ChatScreen(key: ValueKey(chatId), chatId: chatId)),
+        MaterialPageRoute<void>(
+          builder: (_) => ChatScreen(key: ValueKey(chatId), chatId: chatId),
+        ),
       ),
     );
   }
@@ -171,10 +179,57 @@ class _PublicProfileScreenState extends ConsumerState<PublicProfileScreen> {
     }
   }
 
+  Future<void> _handleBlockToggle(bool currentlyBlocked) async {
+    if (currentlyBlocked) {
+      await ref.read(safetyProvider.notifier).unblockUser(widget.userId);
+      if (mounted) {
+        final error = ref.read(safetyProvider).blockError;
+        if (error != null) {
+          KovariSnackbar.error(context, error);
+        } else {
+          KovariSnackbar.success(context, 'User unblocked successfully.');
+        }
+      }
+    } else {
+      showKovariConfirmDialog(
+        context: context,
+        title: 'Block this user?',
+        content:
+            "You won't see each other's profiles or recommendations.\nYou can unblock them later from their profile.",
+        confirmLabel: 'Block',
+        isDestructive: true,
+        onConfirm: () async {
+          await ref.read(safetyProvider.notifier).blockUser(widget.userId);
+          if (mounted) {
+            final error = ref.read(safetyProvider).blockError;
+            if (error != null) {
+              KovariSnackbar.error(context, error);
+            } else {
+              KovariSnackbar.success(context, 'User blocked successfully.');
+            }
+          }
+        },
+      );
+    }
+  }
+
+  void _handleReportUser() {
+    SubmitReportRouteData(
+      targetType: 'user',
+      targetId: widget.userId,
+      targetName: _profile?.name ?? 'User',
+    ).push<void>(context).then((_) {
+      if (mounted) {
+        ref.read(safetyProvider.notifier).checkBlockStatus(widget.userId);
+      }
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final currentUserId = ref.watch(profileProvider)?.userId;
     final isMe = widget.userId == currentUserId;
+    final safetyState = ref.watch(safetyProvider);
 
     if (_isLoading) {
       return const Scaffold(body: KovariSkeletonProfile());
@@ -198,7 +253,12 @@ class _PublicProfileScreenState extends ConsumerState<PublicProfileScreen> {
               Text(_error ?? 'User not found'),
               const SizedBox(height: 16),
               ElevatedButton(
-                onPressed: _fetchProfile,
+                onPressed: () {
+                  _fetchProfile();
+                  ref
+                      .read(safetyProvider.notifier)
+                      .checkBlockStatus(widget.userId);
+                },
                 child: const Text('Retry'),
               ),
             ],
@@ -206,6 +266,9 @@ class _PublicProfileScreenState extends ConsumerState<PublicProfileScreen> {
         ),
       );
     }
+
+    final isBlocked = safetyState.iBlockedThem == true;
+    final theyBlocked = safetyState.theyBlockedMe == true;
 
     return Scaffold(
       backgroundColor: AppColors.backgroundColor(context),
@@ -223,34 +286,124 @@ class _PublicProfileScreenState extends ConsumerState<PublicProfileScreen> {
           onPressed: () => context.pop(),
         ),
         title: Text(
-          _profile!.username,
+          theyBlocked ? 'Profile' : _profile!.username,
           style: AppTextStyles.bodyMedium.copyWith(
             color: AppColors.text(context),
             fontWeight: FontWeight.w600,
             fontSize: 14,
           ),
         ),
-      ),
-      body: SafeArea(
-        bottom: false,
-        child: CustomScrollView(
-          slivers: [
-            SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: AppSpacing.md,
-                  vertical: AppSpacing.sm,
-                ),
-                child: Column(
-                  children: [
-                    _buildHeaderCard(context, _profile!, isMe),
-                    const SizedBox(height: 12),
-                    _buildContentCard(_profile!),
-                  ],
+        actions: [
+          if (!isMe)
+            Padding(
+              padding: const EdgeInsets.only(right: 8.0),
+              child: KovariPopover(
+                width: 140,
+                offset: const Offset(-115, 30),
+                items: [
+                  KovariMenuAction(
+                    icon: LucideIcons.ban,
+                    label: isBlocked ? 'Unblock' : 'Block',
+                    onTap: () => _handleBlockToggle(isBlocked),
+                  ),
+                  KovariMenuAction(
+                    icon: LucideIcons.alertTriangle,
+                    label: safetyState.hasActiveReport
+                        ? 'Reported'
+                        : 'Report User',
+                    isDestructive: !safetyState.hasActiveReport,
+                    onTap: safetyState.hasActiveReport
+                        ? () {}
+                        : _handleReportUser,
+                  ),
+                ],
+                child: Icon(
+                  LucideIcons.moreVertical,
+                  color: AppColors.text(context),
+                  size: 20,
                 ),
               ),
             ),
-          ],
+        ],
+      ),
+      body: SafeArea(
+        bottom: false,
+        child: RefreshIndicator(
+          onRefresh: () async {
+            await _fetchProfile();
+            await ref
+                .read(safetyProvider.notifier)
+                .checkBlockStatus(widget.userId);
+          },
+          child: CustomScrollView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            slivers: [
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: AppSpacing.md,
+                    vertical: AppSpacing.sm,
+                  ),
+                  child: _buildHeaderCard(
+                    context,
+                    _profile!,
+                    isMe,
+                    isBlockedByMe: isBlocked,
+                    isBlockedByThem: theyBlocked,
+                  ),
+                ),
+              ),
+              if (theyBlocked)
+                SliverFillRemaining(
+                  hasScrollBody: false,
+                  child: Padding(
+                    padding: EdgeInsets.fromLTRB(
+                      AppSpacing.md,
+                      0,
+                      AppSpacing.md,
+                      MediaQuery.of(context).padding.bottom + AppSpacing.md,
+                    ),
+                    child: AppCard(
+                      width: double.infinity,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 24,
+                        vertical: 40,
+                      ),
+                      borderRadius: BorderRadius.circular(24),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Text(
+                            'Profile Unavailable',
+                            style: AppTextStyles.bodyMedium.copyWith(
+                              fontWeight: FontWeight.w600,
+                              color: AppColors.text(context),
+                            ),
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            'This profile is unavailable.',
+                            style: AppTextStyles.bodySmall.copyWith(
+                              color: AppColors.text(context, isMuted: true),
+                            ),
+                            textAlign: TextAlign.center,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                )
+              else
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: AppSpacing.md,
+                    ),
+                    child: Column(children: [_buildContentCard(_profile!)]),
+                  ),
+                ),
+            ],
+          ),
         ),
       ),
     );
@@ -259,8 +412,10 @@ class _PublicProfileScreenState extends ConsumerState<PublicProfileScreen> {
   Widget _buildHeaderCard(
     BuildContext context,
     UserProfile profile,
-    bool isMe,
-  ) => AppCard(
+    bool isMe, {
+    bool isBlockedByMe = false,
+    bool isBlockedByThem = false,
+  }) => AppCard(
     padding: const EdgeInsets.all(AppSpacing.md),
     borderRadius: BorderRadius.circular(24),
     child: Column(
@@ -270,7 +425,7 @@ class _PublicProfileScreenState extends ConsumerState<PublicProfileScreen> {
           children: [
             GestureDetector(
               onTap: () {
-                if (profile.profileImage.isNotEmpty) {
+                if (profile.profileImage.isNotEmpty && !isBlockedByThem) {
                   KovariImageModal.show(
                     context,
                     UrlUtils.getFullImageUrl(profile.profileImage)!,
@@ -278,9 +433,11 @@ class _PublicProfileScreenState extends ConsumerState<PublicProfileScreen> {
                 }
               },
               child: KovariAvatar(
-                imageUrl: UrlUtils.getFullImageUrl(profile.profileImage),
+                imageUrl: isBlockedByThem
+                    ? null
+                    : UrlUtils.getFullImageUrl(profile.profileImage),
                 size: 65,
-                fullName: profile.name,
+                fullName: isBlockedByThem ? 'Kovari User' : profile.name,
               ),
             ),
             const SizedBox(width: AppSpacing.md),
@@ -289,27 +446,28 @@ class _PublicProfileScreenState extends ConsumerState<PublicProfileScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    profile.name,
+                    isBlockedByThem ? 'Kovari User' : profile.name,
                     style: AppTextStyles.bodyMedium.copyWith(
                       color: AppColors.text(context),
                       fontWeight: FontWeight.w600,
                       fontSize: 14,
                     ),
                   ),
-                  Text(
-                    '@${profile.username}',
-                    style: AppTextStyles.bodySmall.copyWith(
-                      color: AppColors.text(context, isMuted: true),
-                      fontSize: 12,
+                  if (!isBlockedByThem)
+                    Text(
+                      '@${profile.username}',
+                      style: AppTextStyles.bodySmall.copyWith(
+                        color: AppColors.text(context, isMuted: true),
+                        fontSize: 12,
+                      ),
                     ),
-                  ),
                   const SizedBox(height: 8),
                   Row(
                     children: [
                       _buildStatItem(
-                        profile.followers,
+                        isBlockedByThem ? '0' : profile.followers,
                         'Followers',
-                        onTap: profile.isOwnProfile
+                        onTap: (profile.isOwnProfile && !isBlockedByThem)
                             ? () => ConnectionsRouteData(
                                 userId: profile.userId,
                                 username: profile.username,
@@ -319,9 +477,9 @@ class _PublicProfileScreenState extends ConsumerState<PublicProfileScreen> {
                       ),
                       const SizedBox(width: 16),
                       _buildStatItem(
-                        profile.following,
+                        isBlockedByThem ? '0' : profile.following,
                         'Following',
-                        onTap: profile.isOwnProfile
+                        onTap: (profile.isOwnProfile && !isBlockedByThem)
                             ? () => ConnectionsRouteData(
                                 userId: profile.userId,
                                 username: profile.username,
@@ -338,41 +496,59 @@ class _PublicProfileScreenState extends ConsumerState<PublicProfileScreen> {
         ),
         const SizedBox(height: AppSpacing.md),
         Text(
-          profile.bio.isEmpty ? 'No bio added.' : profile.bio,
+          isBlockedByThem
+              ? 'No bio added.'
+              : (profile.bio.isEmpty ? 'No bio added.' : profile.bio),
           style: AppTextStyles.bodySmall.copyWith(
             color: AppColors.text(context, isMuted: true),
             fontSize: 12,
           ),
         ),
         if (!isMe) ...[
-          const SizedBox(height: AppSpacing.md),
-          Row(
-            children: [
-              Expanded(
-                child: _buildActionButton(
-                  profile.isFollowing
-                      ? 'Following'
-                      : (profile.isFollowingMe ? 'Follow Back' : 'Follow'),
-                  onPressed: _toggleFollow,
-                  backgroundColor: profile.isFollowing
-                      ? AppColors.secondaryColor(context)
-                      : AppColors.primary,
-                  textColor: profile.isFollowing
-                      ? AppColors.text(context)
-                      : AppColors.primaryForeground,
+          if (isBlockedByMe) ...[
+            const SizedBox(height: AppSpacing.md),
+            Row(
+              children: [
+                Expanded(
+                  child: _buildActionButton(
+                    'Unblock',
+                    onPressed: () => _handleBlockToggle(true),
+                    backgroundColor: AppColors.secondaryColor(context),
+                    textColor: AppColors.text(context),
+                  ),
                 ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: _buildActionButton(
-                  'Message',
-                  onPressed: () => _openDirectMessage(profile),
-                  backgroundColor: AppColors.secondaryColor(context),
-                  textColor: AppColors.text(context),
+              ],
+            ),
+          ] else if (!isBlockedByThem) ...[
+            const SizedBox(height: AppSpacing.md),
+            Row(
+              children: [
+                Expanded(
+                  child: _buildActionButton(
+                    profile.isFollowing
+                        ? 'Following'
+                        : (profile.isFollowingMe ? 'Follow Back' : 'Follow'),
+                    onPressed: _toggleFollow,
+                    backgroundColor: profile.isFollowing
+                        ? AppColors.secondaryColor(context)
+                        : AppColors.primary,
+                    textColor: profile.isFollowing
+                        ? AppColors.text(context)
+                        : AppColors.primaryForeground,
+                  ),
                 ),
-              ),
-            ],
-          ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: _buildActionButton(
+                    'Message',
+                    onPressed: () => _openDirectMessage(profile),
+                    backgroundColor: AppColors.secondaryColor(context),
+                    textColor: AppColors.text(context),
+                  ),
+                ),
+              ],
+            ),
+          ],
         ],
       ],
     ),

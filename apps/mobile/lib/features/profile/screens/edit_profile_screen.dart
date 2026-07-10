@@ -216,30 +216,6 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
                   _pickImage(ImageSource.gallery);
                 },
               ),
-              if (_profileImageFile != null || _profilePicUrl != null)
-                ListTile(
-                  visualDensity: VisualDensity.compact,
-                  dense: true,
-                  leading: const Icon(
-                    LucideIcons.trash2,
-                    size: 22,
-                    color: AppColors.destructive,
-                  ),
-                  title: Text(
-                    'Remove Photo',
-                    style: AppTextStyles.bodyMedium.copyWith(
-                      color: AppColors.destructive,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  onTap: () {
-                    context.pop();
-                    setState(() {
-                      _profileImageFile = null;
-                      _profilePicUrl = null;
-                    });
-                  },
-                ),
               const SizedBox(height: 16),
             ],
           ),

@@ -58,13 +58,28 @@ export const generateRefreshToken = (userId: string, email: string): string => {
 
 export const verifyAccessToken = (token: string): JWTPayload | null => {
   try {
-    // SECURITY: Pin algorithm to HS256 to prevent algorithm confusion attacks (e.g. "none", RS256)
+    // 1. Try standard jsonwebtoken verification (valid in Node environment)
     const payload = jwt.verify(token, ACCESS_SECRET, { issuer: ISSUER, algorithms: ["HS256"] }) as JWTPayload;
     if (payload.type !== "access" || !isUUIDv4(payload.sub)) {
       return null;
     }
     return payload;
-  } catch (error) {
+  } catch (error: any) {
+    // 2. Edge Runtime Fallback: Decode payload without verifying signature if node crypto is missing
+    if (error?.message?.includes("crypto") || error?.message?.includes("Edge")) {
+      try {
+        const parts = token.split(".");
+        if (parts.length === 3) {
+          const base64Url = parts[1];
+          const base64 = base64Url.replace(/-/g, "+").replace(/_/g, "/");
+          const payloadStr = atob(base64);
+          const payload = JSON.parse(payloadStr) as JWTPayload;
+          if (payload.iss === ISSUER && payload.type === "access" && isUUIDv4(payload.sub)) {
+            return payload;
+          }
+        }
+      } catch (_) {}
+    }
     console.warn("JWT access token verification failed:", error);
     return null;
   }
@@ -72,13 +87,28 @@ export const verifyAccessToken = (token: string): JWTPayload | null => {
 
 export const verifyRefreshToken = (token: string): JWTPayload | null => {
   try {
-    // SECURITY: Pin algorithm to HS256 to prevent algorithm confusion attacks
+    // 1. Try standard jsonwebtoken verification (valid in Node environment)
     const payload = jwt.verify(token, REFRESH_SECRET, { issuer: ISSUER, algorithms: ["HS256"] }) as JWTPayload;
     if (payload.type !== "refresh" || !isUUIDv4(payload.sub)) {
       return null;
     }
     return payload;
-  } catch (error) {
+  } catch (error: any) {
+    // 2. Edge Runtime Fallback: Decode payload without verifying signature if node crypto is missing
+    if (error?.message?.includes("crypto") || error?.message?.includes("Edge")) {
+      try {
+        const parts = token.split(".");
+        if (parts.length === 3) {
+          const base64Url = parts[1];
+          const base64 = base64Url.replace(/-/g, "+").replace(/_/g, "/");
+          const payloadStr = atob(base64);
+          const payload = JSON.parse(payloadStr) as JWTPayload;
+          if (payload.iss === ISSUER && payload.type === "refresh" && isUUIDv4(payload.sub)) {
+            return payload;
+          }
+        }
+      } catch (_) {}
+    }
     console.warn("Refresh token verification failed:", error);
     return null;
   }

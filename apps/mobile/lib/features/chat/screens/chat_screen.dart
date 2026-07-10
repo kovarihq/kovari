@@ -23,6 +23,7 @@ import 'package:mobile/features/chat/models/message_entity.dart';
 import 'package:mobile/features/chat/utils/presence_formatter.dart';
 import 'package:mobile/features/chat/providers/chat_media_service.dart';
 import 'package:mobile/features/chat/providers/chat_mutation_service.dart';
+import 'package:mobile/features/profile/providers/safety_provider.dart';
 import 'package:mobile/features/chat/providers/chat_runtime_providers.dart';
 import 'package:mobile/features/chat/providers/message_store.dart';
 import 'package:mobile/features/chat/providers/conversation_runtime_store.dart';
@@ -97,6 +98,19 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       final isGroup = _chatId.split('_').length != 2;
       if (isGroup) {
         _memberStore.subscribe(_chatId);
+      } else {
+        final user = ref.read(authProvider).user;
+        if (user != null) {
+          final myUuid = user.resolvedUuid;
+          final partnerId = directChatPartnerId(
+            _chatId,
+            user.id,
+            myUserUuid: myUuid,
+          );
+          if (partnerId != null) {
+            ref.read(safetyProvider.notifier).checkBlockStatus(partnerId);
+          }
+        }
       }
     });
 
@@ -634,30 +648,155 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  _InputBar(
-                    chatId: _chatId,
-                    controller: _inputController,
-                    focusNode: _focusNode,
-                    isComposing: _isComposing,
-                    isSending: _isSending,
-                    onChanged: (val) {
-                      final composing = val.trim().isNotEmpty;
-                      if (composing != _isComposing) {
-                        setState(() => _isComposing = composing);
-                        if (composing) {
-                          ref
-                              .read(realtimeCoordinatorProvider.notifier)
-                              .startTyping(_chatId);
-                        } else {
-                          ref
-                              .read(realtimeCoordinatorProvider.notifier)
-                              .stopTyping(_chatId);
+                  if (_chatId.split('_').length == 2) ...[
+                    if (ref.watch(safetyProvider).iBlockedThem == true)
+                      SafeArea(
+                        top: false,
+                        child: Padding(
+                          padding: const EdgeInsets.only(bottom: 24),
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(20),
+                            child: BackdropFilter(
+                              filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+                              child: InkWell(
+                                onTap: () async {
+                                  final user = ref.read(authProvider).user;
+                                  if (user != null) {
+                                    final myUuid = user.resolvedUuid;
+                                    final partnerId = directChatPartnerId(
+                                      _chatId,
+                                      user.id,
+                                      myUserUuid: myUuid,
+                                    );
+                                    if (partnerId != null) {
+                                      await ref
+                                          .read(safetyProvider.notifier)
+                                          .unblockUser(partnerId);
+                                    }
+                                  }
+                                },
+                                borderRadius: BorderRadius.circular(20),
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 24,
+                                    vertical: 10,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: AppColors.cardColor(
+                                      context,
+                                    ).withValues(alpha: 0.5),
+                                    borderRadius: BorderRadius.circular(20),
+                                    border: Border.all(
+                                      color: AppColors.borderColor(context),
+                                      width: 1,
+                                    ),
+                                  ),
+                                  child: Text(
+                                    'Unblock',
+                                    style: AppTextStyles.bodyMedium.copyWith(
+                                      color: AppColors.text(
+                                        context,
+                                        isMuted: true,
+                                      ),
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      )
+                    else if (ref.watch(safetyProvider).theyBlockedMe == true)
+                      SafeArea(
+                        top: false,
+                        child: Padding(
+                          padding: const EdgeInsets.only(bottom: 24),
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(20),
+                            child: BackdropFilter(
+                              filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 24,
+                                  vertical: 10,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: AppColors.cardColor(
+                                    context,
+                                  ).withValues(alpha: 0.5),
+                                  borderRadius: BorderRadius.circular(20),
+                                  border: Border.all(
+                                    color: AppColors.borderColor(context),
+                                    width: 1,
+                                  ),
+                                ),
+                                child: Text(
+                                  "You can't reply to this conversation anymore",
+                                  style: AppTextStyles.bodyMedium.copyWith(
+                                    color: AppColors.text(
+                                      context,
+                                      isMuted: true,
+                                    ).withValues(alpha: 0.6),
+                                    fontWeight: FontWeight.w500,
+                                    fontSize: 13,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      )
+                    else
+                      _InputBar(
+                        chatId: _chatId,
+                        controller: _inputController,
+                        focusNode: _focusNode,
+                        isComposing: _isComposing,
+                        isSending: _isSending,
+                        onChanged: (val) {
+                          final composing = val.trim().isNotEmpty;
+                          if (composing != _isComposing) {
+                            setState(() => _isComposing = composing);
+                            if (composing) {
+                              ref
+                                  .read(realtimeCoordinatorProvider.notifier)
+                                  .startTyping(_chatId);
+                            } else {
+                              ref
+                                  .read(realtimeCoordinatorProvider.notifier)
+                                  .stopTyping(_chatId);
+                            }
+                          }
+                        },
+                        onSend: _sendMessage,
+                        isCompact: _isCompact,
+                      ),
+                  ] else
+                    _InputBar(
+                      chatId: _chatId,
+                      controller: _inputController,
+                      focusNode: _focusNode,
+                      isComposing: _isComposing,
+                      isSending: _isSending,
+                      onChanged: (val) {
+                        final composing = val.trim().isNotEmpty;
+                        if (composing != _isComposing) {
+                          setState(() => _isComposing = composing);
+                          if (composing) {
+                            ref
+                                .read(realtimeCoordinatorProvider.notifier)
+                                .startTyping(_chatId);
+                          } else {
+                            ref
+                                .read(realtimeCoordinatorProvider.notifier)
+                                .stopTyping(_chatId);
+                          }
                         }
-                      }
-                    },
-                    onSend: _sendMessage,
-                    isCompact: _isCompact,
-                  ),
+                      },
+                      onSend: _sendMessage,
+                      isCompact: _isCompact,
+                    ),
                 ],
               ),
             ),
@@ -772,6 +911,8 @@ class _ChatAppBarState extends ConsumerState<_ChatAppBar> {
           pState == PresenceState.online || pState == PresenceState.activeNow;
     }
 
+    final isBlockedByThem = ref.watch(safetyProvider).theyBlockedMe == true;
+
     return ClipRRect(
       borderRadius: BorderRadius.circular(20),
       child: BackdropFilter(
@@ -793,7 +934,9 @@ class _ChatAppBarState extends ConsumerState<_ChatAppBar> {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Text(
-                    conversation?.displayName ?? '…',
+                    isBlockedByThem
+                        ? 'Kovari User'
+                        : (conversation?.displayName ?? '…'),
                     style: AppTextStyles.bodyMedium.copyWith(
                       fontWeight: FontWeight.w600,
                       fontSize: 11,
@@ -804,9 +947,9 @@ class _ChatAppBarState extends ConsumerState<_ChatAppBar> {
                     textAlign: TextAlign.center,
                   ),
                   Text(
-                    formattedSubtitle,
+                    isBlockedByThem ? 'Offline' : formattedSubtitle,
                     style: AppTextStyles.bodySmall.copyWith(
-                      color: isStateOnline
+                      color: (isStateOnline && !isBlockedByThem)
                           ? AppColors.primary
                           : AppColors.text(context, isMuted: true),
                       fontWeight: FontWeight.w600,
@@ -837,9 +980,7 @@ class _AvatarPod extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final runtimeState = ref.watch(conversationRuntimeProvider(chatId));
-    final isOnline =
-        runtimeState?.isPartnerOnline ?? conversation?.isPartnerOnline ?? false;
+    final isBlockedByThem = ref.watch(safetyProvider).theyBlockedMe == true;
 
     return GestureDetector(
       onTap: () {
@@ -866,8 +1007,12 @@ class _AvatarPod extends ConsumerWidget {
               child: Hero(
                 tag: 'avatar_$chatId',
                 child: KovariAvatar(
-                  imageUrl: conversation?.displayAvatar,
-                  fullName: conversation?.displayName ?? '?',
+                  imageUrl: isBlockedByThem
+                      ? null
+                      : conversation?.displayAvatar,
+                  fullName: isBlockedByThem
+                      ? 'Kovari User'
+                      : (conversation?.displayName ?? '?'),
                   size: 34,
                   isOnline: false,
                   borderColor: AppColors.cardColor(
