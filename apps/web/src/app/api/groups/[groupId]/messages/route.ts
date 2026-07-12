@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createAdminSupabaseClient } from "@kovari/api";
 import { getAuthenticatedUser } from "@/lib/auth/get-user";
 import { buildMessageInsertPayload } from "@/services/messaging/persistence";
-import { auth } from "firebase-admin";
+import { pubClient, connectRedis } from "@/services/socket/redis";
 
 export async function GET(
   req: NextRequest,
@@ -102,35 +102,54 @@ export async function GET(
     // Reverse messages to maintain chronological order in the response
     const sortedMessages = [...(messages || [])].reverse();
 
-    // Transform messages to include sender info and format timestamps
-    const formattedMessages =
-      sortedMessages?.map((message: any) => {
-        const profile = message.users?.profiles;
-        const isDeleted = profile?.deleted === true;
+    await connectRedis();
 
-        return {
-          id: message.id,
-          message_content: message.message_content,
-          migration_version: message.migration_version,
-          timestamp: new Date(message.created_at).toLocaleTimeString([], {
-            hour: "2-digit",
-            minute: "2-digit",
-            timeZone: "Asia/Kolkata",
-          }),
-          sender: isDeleted ? "Deleted User" : profile?.name || "Unknown User",
-          senderUsername: isDeleted ? undefined : profile?.username,
-          senderId: message.user_id ?? message.users?.id,
-          avatar: isDeleted ? undefined : profile?.profile_photo,
-          isCurrentUser: message.user_id === authUser.id,
-          createdAt: message.created_at,
-          mediaUrl: message.media_url || undefined,
-          mediaType: message.media_type || undefined,
-          conversationSequence: message.conversation_sequence,
-          serverSequence: message.global_sequence,
-          conversation_sequence: message.conversation_sequence,
-          server_sequence: message.global_sequence,
-        };
-      }) || [];
+    const countKey = `group_member_count:${groupId}`;
+    const cachedCount = await pubClient.get(countKey);
+    let memberCount = cachedCount ? parseInt(cachedCount) : 0;
+    if (!memberCount) {
+      const { count } = await supabase
+        .from("group_memberships")
+        .select("*", { count: "exact", head: true })
+        .eq("group_id", groupId)
+        .eq("status", "accepted");
+      memberCount = count || 0;
+      await pubClient.set(countKey, memberCount.toString(), { EX: 300 });
+    }
+
+    const formattedMessages = [];
+    for (const message of sortedMessages as any[]) {
+      const profile = message.users?.profiles;
+      const isDeleted = profile?.deleted === true;
+
+      const setKey = `group_msg_seen:${groupId}:${message.id}`;
+      const seenCount = await pubClient.sCard(setKey);
+      const isFullySeen = seenCount >= memberCount - 1 && memberCount > 1;
+
+      formattedMessages.push({
+        id: message.id,
+        message_content: message.message_content,
+        migration_version: message.migration_version,
+        timestamp: new Date(message.created_at).toLocaleTimeString([], {
+          hour: "2-digit",
+          minute: "2-digit",
+          timeZone: "Asia/Kolkata",
+        }),
+        sender: isDeleted ? "Deleted User" : profile?.name || "Unknown User",
+        senderUsername: isDeleted ? undefined : profile?.username,
+        senderId: message.user_id ?? message.users?.id,
+        avatar: isDeleted ? undefined : profile?.profile_photo,
+        isCurrentUser: message.user_id === authUser.id,
+        createdAt: message.created_at,
+        mediaUrl: message.media_url || undefined,
+        mediaType: message.media_type || undefined,
+        conversationSequence: message.conversation_sequence,
+        serverSequence: message.global_sequence,
+        conversation_sequence: message.conversation_sequence,
+        server_sequence: message.global_sequence,
+        deliveryStatus: isFullySeen ? "seen" : "delivered",
+      });
+    }
 
     return NextResponse.json(formattedMessages);
   } catch (error) {

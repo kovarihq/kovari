@@ -908,8 +908,13 @@ class MessageStore extends Notifier<ConversationMessageState> {
       case 'message_persisted':
         _onMessagePersisted(data);
       case 'messages_seen':
-        // Only the partner's read receipt should upgrade our outgoing ticks.
-        if (!_isPartnerReadReceipt(data['userId'] as String?)) break;
+        if (_conversationType == ConversationType.group) {
+          final isFullySeen = data['isFullySeen'] == true;
+          if (!isFullySeen) break;
+        } else {
+          // Only the partner's read receipt should upgrade our outgoing ticks.
+          if (!_isPartnerReadReceipt(data['userId'] as String?)) break;
+        }
 
         final messageIds = (data['messageIds'] as List<dynamic>?)
             ?.map((id) => id.toString())
