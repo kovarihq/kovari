@@ -39,7 +39,7 @@ jobs:
         run: flutter pub get
 
       - name: Generate iOS configuration
-        run: flutter build ios --config-only
+        run: flutter build ios --config-only --no-codesign
 
       - name: Update CocoaPods Repo Specs
         run: |
