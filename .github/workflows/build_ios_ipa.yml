@@ -41,10 +41,10 @@ jobs:
       - name: Generate iOS configuration
         run: flutter build ios --config-only --no-codesign
 
-      - name: Update CocoaPods Repo Specs
+      - name: Update CocoaPods Dependencies
         run: |
           cd ios
-          pod repo update
+          pod update
 
       - name: Build iOS (Unsigned)
         run: flutter build ios --release --no-codesign
