@@ -1,11 +1,12 @@
 name: Build iOS IPA
 
 on:
-  workflow_dispatch:
   push:
     branches:
       - dev
+      - main
       - master
+  workflow_dispatch:
 
 jobs:
   build-ios:
@@ -13,27 +14,34 @@ jobs:
     runs-on: macos-14
     timeout-minutes: 60
 
+    defaults:
+      run:
+        working-directory: apps/mobile
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Set up Flutter
+      - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
           channel: stable
           cache: true
 
+      - name: Verify Flutter
+        run: |
+          flutter doctor -v
+          pwd
+          ls -la
+          test -f pubspec.yaml
+
       - name: Install Flutter dependencies
         run: flutter pub get
-
-      - name: Verify Flutter
-        run: flutter doctor -v
 
       - name: Install CocoaPods
         run: |
           cd ios
           pod install --repo-update
-          cd ..
 
       - name: Build iOS (Unsigned)
         run: flutter build ios --release --no-codesign
@@ -42,12 +50,10 @@ jobs:
         run: |
           mkdir Payload
           cp -R build/ios/iphoneos/Runner.app Payload/
-          cd Payload
-          zip -r ../app.ipa .
-          cd ..
+          zip -r app.ipa Payload
 
       - name: Upload IPA
         uses: actions/upload-artifact@v4
         with:
-          name: kovari-ios
-          path: app.ipa
+          name: kovari-ios-ipa
+          path: apps/mobile/app.ipa
