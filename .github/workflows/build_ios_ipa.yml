@@ -38,6 +38,16 @@ jobs:
       - name: Install Flutter dependencies
         run: flutter pub get
 
+      - name: Patch Sentry Flutter Plugin (imageByAddress fix)
+        run: |
+          FILE_PATH="$HOME/.pub-cache/hosted/pub.dev/sentry_flutter-8.14.2/ios/sentry_flutter/Sources/sentry_flutter/SentryFlutterPlugin.swift"
+          if [ -f "$FILE_PATH" ]; then
+            echo "Patching SentryFlutterPlugin.swift..."
+            sed -i '' 's/\.binaryImageCache\.image(byAddress:/\.binaryImageCache.imageByAddress(/g' "$FILE_PATH"
+          else
+            echo "Warning: SentryFlutterPlugin.swift not found at $FILE_PATH"
+          fi
+
       - name: Generate iOS configuration
         run: flutter build ios --config-only --no-codesign
 
