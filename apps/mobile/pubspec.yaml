@@ -60,7 +60,7 @@ dependencies:
   firebase_messaging: ^15.2.5
   flutter_local_notifications: ^18.0.1
   sentry_flutter: ^8.14.2
-  connectivity_plus: ^7.1.1
+  connectivity_plus: ^6.0.5
   hive: ^2.2.3
   hive_flutter: ^1.1.0
   path_provider: ^2.1.5
