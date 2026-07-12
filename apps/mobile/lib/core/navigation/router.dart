@@ -96,23 +96,12 @@ final routerProvider = Provider<GoRouter>((ref) {
     switch (entityType) {
       case 'chat':
         if (entityId != null) {
-          String targetChatId = entityId;
-          final chatType = data['chat_type'] as String?;
-          final isGroup = chatType == 'group';
-
-          if (!isGroup && !entityId.contains('_')) {
-            final hasGroup = ref.read(groupStoreProvider).containsKey(entityId);
-            final hasConversation = ref
-                .read(conversationRuntimeStoreProvider)
-                .containsKey(entityId);
-            if (!hasGroup && !hasConversation) {
-              final myUuid = ref.read(authProvider).user?.resolvedUuid;
-              if (myUuid != null) {
-                targetChatId = directChatId(myUuid, entityId);
-              }
-            }
+          final isGroup = !entityId.contains('_');
+          if (isGroup) {
+            router.push('/groups/$entityId?tab=1');
+          } else {
+            router.push('/chat/$entityId');
           }
-          router.push('/chat/$targetChatId');
         }
       case 'group':
         if (entityId != null) router.push('/groups/$entityId');

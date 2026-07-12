@@ -10,6 +10,7 @@ class ConversationCacheRepository {
   Box<String>? _metadataBox;
   Box<String>? _messageBox;
   Box<String>? _indexBox;
+  bool _initialized = false;
 
   ConversationCacheRepository({
     required this.userId,
@@ -17,12 +18,14 @@ class ConversationCacheRepository {
   });
 
   Future<void> init() async {
+    if (_initialized) return;
     try {
       _metadataBox = await Hive.openBox<String>('chat_meta_${userId}_v3');
       _messageBox = await Hive.openBox<String>('chat_msg_${userId}_v3');
       _indexBox = await Hive.openBox<String>('chat_idx_${userId}_v3');
 
       await validateAndRepairCache();
+      _initialized = true;
       AppLogger.i('ConversationCacheRepository initialized for user: $userId');
     } catch (e, stack) {
       AppLogger.e(
@@ -145,12 +148,17 @@ class ConversationCacheRepository {
     if (_messageBox == null) return [];
 
     final List<CachedMessage> msgs = [];
-    for (final raw in _messageBox!.values) {
+    final prefix = '${conversationId}_';
+    final keys = _messageBox!.keys.where(
+      (k) => k.toString().startsWith(prefix),
+    );
+
+    for (final key in keys) {
+      final raw = _messageBox!.get(key);
+      if (raw == null) continue;
       try {
         final map = jsonDecode(raw) as Map<String, dynamic>;
-        if (map['conversationId'] == conversationId) {
-          msgs.add(_mapToMessage(map));
-        }
+        msgs.add(_mapToMessage(map));
       } catch (e) {
         AppLogger.e('Failed to parse message cache: $e');
       }
@@ -196,9 +204,13 @@ class ConversationCacheRepository {
             lastMessageId: map['lastMessageId'] as String? ?? '',
             lastSequence: map['lastSequence'] as int,
             updatedAt: DateTime.parse(map['updatedAt'] as String),
-            lastSyncAt: DateTime.parse(map['lastSyncAt'] as String? ?? DateTime.now().toIso8601String()),
+            lastSyncAt: DateTime.parse(
+              map['lastSyncAt'] as String? ?? DateTime.now().toIso8601String(),
+            ),
             unreadCount: map['unreadCount'] as int,
-            participantIds: List<String>.from(map['participantIds'] as List? ?? []),
+            participantIds: List<String>.from(
+              map['participantIds'] as List? ?? [],
+            ),
             participantNames: map['participantNames'] as String?,
             avatarUrl: map['avatarUrl'] as String?,
             isPinned: map['isPinned'] as bool? ?? false,
@@ -255,7 +267,7 @@ class ConversationCacheRepository {
       final chatId = list[i].conversationId;
       await _indexBox!.delete(chatId);
       await _metadataBox!.delete(chatId);
-      
+
       // Clean up related messages
       final keys = List<String>.from(_messageBox?.keys ?? []);
       for (final key in keys) {

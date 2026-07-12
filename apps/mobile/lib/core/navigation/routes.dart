@@ -148,8 +148,15 @@ class GroupDetailsRouteData extends GoRouteData with $GroupDetailsRouteData {
   final String groupId;
 
   @override
-  Page<void> buildPage(BuildContext context, GoRouterState state) =>
-      platformPageRoute<void>(context: context, state: state, child: GroupDetailsScreen(groupId: groupId));
+  Page<void> buildPage(BuildContext context, GoRouterState state) {
+    final tabStr = state.uri.queryParameters['tab'];
+    final initialTab = tabStr != null ? int.tryParse(tabStr) ?? 0 : 0;
+    return platformPageRoute<void>(
+      context: context,
+      state: state,
+      child: GroupDetailsScreen(groupId: groupId, initialTabIndex: initialTab),
+    );
+  }
 }
 
 @TypedGoRoute<GroupInviteRouteData>(path: '/groups/invite/:token')

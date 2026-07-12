@@ -165,6 +165,7 @@ class RealtimeCoordinator extends Notifier<void> {
 
   /// Emit compressed read receipt for a conversation.
   void markSeenUpTo(String chatId, int lastSeenSequence) {
+    AppLogger.i('⚡ [RealtimeCoordinator] markSeenUpTo: $chatId, sequence: $lastSeenSequence');
     ref
         .read(conversationRuntimeStoreProvider.notifier)
         .markSeenUpTo(chatId, lastSeenSequence);

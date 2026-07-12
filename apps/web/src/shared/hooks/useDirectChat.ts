@@ -26,6 +26,8 @@ export interface DirectChatMessage {
   };
   mediaUrl?: string;
   mediaType?: "image" | "video";
+  conversationSequence?: number;
+  serverSequence?: number;
 }
 
 export interface UseDirectChatResult {
@@ -127,13 +129,15 @@ export const useDirectChat = (
         } else {
           const payload = await response.json();
           const data = Array.isArray(payload?.messages) ? payload.messages : [];
-          // Transform messages to include sender profile information and normalize media fields
           const transformedMessages = data.map((msg: any) => {
             return {
               ...msg,
               sender_profile: msg.sender?.profiles?.[0] || undefined,
               mediaUrl: (msg as any)["media_url"] || msg.mediaUrl,
               mediaType: (msg as any)["media_type"] || msg.mediaType,
+              status: msg.status || (msg.read_at ? "seen" : "delivered"),
+              conversationSequence: msg.conversation_sequence ?? msg.conversationSequence,
+              serverSequence: msg.server_sequence ?? msg.serverSequence,
             };
           });
 
@@ -404,6 +408,8 @@ export const useDirectChat = (
           name: incomingMsg.senderName,
           username: incomingMsg.senderUsername,
         } : undefined,
+        conversationSequence: incomingMsg.conversationSequence ?? incomingMsg.conversation_sequence,
+        serverSequence: incomingMsg.serverSequence ?? incomingMsg.server_sequence,
       };
 
       if (incomingMsg.id) seenIdsRef.current.add(incomingMsg.id);
@@ -479,12 +485,27 @@ export const useDirectChat = (
 
     const handleMessagesSeen = ({ chatId: targetChat, messageIds, lastSeenSequence }: any) => {
        if (targetChat === chatId) {
-          setMessages(prev => reconciler.reconcileList(prev, messageIds.map((id: string) => ({
-            id,
-            status: "seen",
-            conversationSequence: lastSeenSequence,
-            read_at: new Date().toISOString(),
-          }))));
+          setMessages(prev => {
+             const updates = (messageIds || []).map((id: string) => ({
+                id,
+                status: "seen" as const,
+                conversationSequence: lastSeenSequence,
+                read_at: new Date().toISOString(),
+             }));
+             if (lastSeenSequence != null) {
+                for (const msg of prev) {
+                   if (msg.conversationSequence != null && msg.conversationSequence <= lastSeenSequence && msg.status !== "seen") {
+                      updates.push({
+                         id: msg.id,
+                         status: "seen" as const,
+                         conversationSequence: msg.conversationSequence,
+                         read_at: new Date().toISOString(),
+                      });
+                   }
+                }
+             }
+             return reconciler.reconcileList(prev, updates);
+          });
        }
     };
 

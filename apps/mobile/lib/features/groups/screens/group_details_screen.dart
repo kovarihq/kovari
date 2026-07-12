@@ -21,11 +21,17 @@ import 'package:mobile/shared/widgets/primary_button.dart';
 import 'package:mobile/shared/widgets/secondary_button.dart';
 
 class GroupDetailsScreen extends ConsumerStatefulWidget {
-
-  GroupDetailsScreen({super.key, required this.groupId}) {
-    debugPrint('🚀 [GroupDetailsScreen] Constructor called for ID: $groupId');
+  GroupDetailsScreen({
+    super.key,
+    required this.groupId,
+    this.initialTabIndex = 0,
+  }) {
+    debugPrint(
+      '🚀 [GroupDetailsScreen] Constructor called for ID: $groupId with initialTabIndex: $initialTabIndex',
+    );
   }
   final String groupId;
+  final int initialTabIndex;
 
   @override
   ConsumerState<GroupDetailsScreen> createState() => _GroupDetailsScreenState();
@@ -34,7 +40,7 @@ class GroupDetailsScreen extends ConsumerStatefulWidget {
 class _GroupDetailsScreenState extends ConsumerState<GroupDetailsScreen> {
   final TextEditingController _notesController = TextEditingController();
   bool _isEditingNotes = false;
-  int _activeTabIndex = 0;
+  late int _activeTabIndex;
 
   late final GroupStore _groupStore;
   late final MembershipStore _membershipStore;
@@ -44,6 +50,7 @@ class _GroupDetailsScreenState extends ConsumerState<GroupDetailsScreen> {
   @override
   void initState() {
     super.initState();
+    _activeTabIndex = widget.initialTabIndex;
     _groupStore = ref.read(groupStoreProvider.notifier);
     _membershipStore = ref.read(membershipStoreProvider.notifier);
     _memberStore = ref.read(memberStoreProvider.notifier);
@@ -197,155 +204,153 @@ class _GroupDetailsScreenState extends ConsumerState<GroupDetailsScreen> {
   }
 
   Widget _buildSkeletonState() => Scaffold(
-      backgroundColor: AppColors.backgroundColor(context),
-      body: Column(
-        children: [
-          SafeArea(bottom: false, child: _buildSkeletonHeader(context)),
-          const Expanded(child: KovariSkeletonGroupOverview()),
-        ],
-      ),
-    );
+    backgroundColor: AppColors.backgroundColor(context),
+    body: Column(
+      children: [
+        SafeArea(bottom: false, child: _buildSkeletonHeader(context)),
+        const Expanded(child: KovariSkeletonGroupOverview()),
+      ],
+    ),
+  );
 
   Widget _buildSkeletonHeader(BuildContext context) => Container(
+    padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+    child: Row(
+      children: [
+        _buildBackButton(context),
+        const SizedBox(width: 4),
+        const Skeleton(width: 150, height: 16),
+      ],
+    ),
+  );
+
+  Widget _buildPartialState(GroupModel group) => Scaffold(
+    backgroundColor: AppColors.backgroundColor(context),
+    body: Column(
+      children: [
+        Container(
+          color: AppColors.backgroundColor(context),
+          child: SafeArea(bottom: false, child: _buildHeader(group)),
+        ),
+        const Expanded(child: KovariSkeletonGroupOverview()),
+      ],
+    ),
+  );
+
+  Widget _buildHeader(GroupModel group) => RepaintBoundary(
+    child: Container(
       padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
       child: Row(
         children: [
           _buildBackButton(context),
           const SizedBox(width: 4),
-          const Skeleton(width: 150, height: 16),
-        ],
-      ),
-    );
-
-  Widget _buildPartialState(GroupModel group) => Scaffold(
-      backgroundColor: AppColors.backgroundColor(context),
-      body: Column(
-        children: [
-          Container(
-            color: AppColors.backgroundColor(context),
-            child: SafeArea(bottom: false, child: _buildHeader(group)),
-          ),
-          const Expanded(child: KovariSkeletonGroupOverview()),
-        ],
-      ),
-    );
-
-  Widget _buildHeader(GroupModel group) => RepaintBoundary(
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
-        child: Row(
-          children: [
-            _buildBackButton(context),
-            const SizedBox(width: 4),
-            Expanded(
-              child: Text(
-                group.name,
-                style: TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600,
-                  color: AppColors.text(context),
-                ),
+          Expanded(
+            child: Text(
+              group.name,
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+                color: AppColors.text(context),
               ),
+            ),
+          ),
+        ],
+      ),
+    ),
+  );
+
+  Widget _buildBackButton(BuildContext context) => IconButton(
+    icon: const Icon(LucideIcons.arrowLeft, size: 20),
+    onPressed: () => context.pop(),
+    color: AppColors.text(context),
+    splashRadius: 24,
+    tooltip: 'Back',
+  );
+
+  Widget _buildPendingState(BuildContext context) => Scaffold(
+    appBar: AppBar(backgroundColor: Colors.transparent, elevation: 0),
+    body: Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32.0),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              LucideIcons.circleAlert,
+              size: 34,
+              color: AppColors.text(context),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              'Group Under Review',
+              style: AppTextStyles.h2.copyWith(color: AppColors.text(context)),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 16),
+            Text(
+              'This group is currently pending admin approval and is not available for viewing or interaction.',
+              style: AppTextStyles.bodyMedium.copyWith(
+                color: AppColors.mutedForeground,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 32),
+            PrimaryButton(
+              text: 'Back to Groups',
+              onPressed: () => context.pop(),
             ),
           ],
         ),
       ),
-    );
-
-  Widget _buildBackButton(BuildContext context) => IconButton(
-      icon: const Icon(LucideIcons.arrowLeft, size: 20),
-      onPressed: () => context.pop(),
-      color: AppColors.text(context),
-      splashRadius: 24,
-      tooltip: 'Back',
-    );
-
-  Widget _buildPendingState(BuildContext context) => Scaffold(
-      appBar: AppBar(backgroundColor: Colors.transparent, elevation: 0),
-      body: Center(
-        child: Padding(
-          padding: const EdgeInsets.all(32.0),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(
-                LucideIcons.circleAlert,
-                size: 34,
-                color: AppColors.text(context),
-              ),
-              const SizedBox(height: 12),
-              Text(
-                'Group Under Review',
-                style: AppTextStyles.h2.copyWith(
-                  color: AppColors.text(context),
-                ),
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 16),
-              Text(
-                'This group is currently pending admin approval and is not available for viewing or interaction.',
-                style: AppTextStyles.bodyMedium.copyWith(
-                  color: AppColors.mutedForeground,
-                ),
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 32),
-              PrimaryButton(
-                text: 'Back to Groups',
-                onPressed: () => context.pop(),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
+    ),
+  );
 
   Widget _buildJoinState(MembershipInfo membership) => Scaffold(
-      appBar: AppBar(backgroundColor: Colors.transparent, elevation: 0),
-      body: Center(
-        child: Padding(
-          padding: const EdgeInsets.all(32.0),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const Icon(LucideIcons.users, size: 64, color: AppColors.muted),
-              const SizedBox(height: 24),
-              Text(
-                'Join the group',
-                style: AppTextStyles.h2,
-                textAlign: TextAlign.center,
+    appBar: AppBar(backgroundColor: Colors.transparent, elevation: 0),
+    body: Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32.0),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(LucideIcons.users, size: 64, color: AppColors.muted),
+            const SizedBox(height: 24),
+            Text(
+              'Join the group',
+              style: AppTextStyles.h2,
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 16),
+            Text(
+              'You need to be a member of this group to access its itinerary and notes.',
+              style: AppTextStyles.bodyMedium.copyWith(
+                color: AppColors.mutedForeground,
               ),
-              const SizedBox(height: 16),
-              Text(
-                'You need to be a member of this group to access its itinerary and notes.',
-                style: AppTextStyles.bodyMedium.copyWith(
-                  color: AppColors.mutedForeground,
-                ),
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 32),
-              PrimaryButton(
-                text: membership.hasPendingRequest
-                    ? 'Request Pending'
-                    : 'Request to Join Group',
-                onPressed: membership.hasPendingRequest
-                    ? null
-                    : () {
-                        ref
-                            .read(groupActionsProvider(widget.groupId))
-                            .joinRequest();
-                      },
-              ),
-              const SizedBox(height: 12),
-              SecondaryButton(
-                text: 'Back to Groups',
-                onPressed: () => context.pop(),
-              ),
-            ],
-          ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 32),
+            PrimaryButton(
+              text: membership.hasPendingRequest
+                  ? 'Request Pending'
+                  : 'Request to Join Group',
+              onPressed: membership.hasPendingRequest
+                  ? null
+                  : () {
+                      ref
+                          .read(groupActionsProvider(widget.groupId))
+                          .joinRequest();
+                    },
+            ),
+            const SizedBox(height: 12),
+            SecondaryButton(
+              text: 'Back to Groups',
+              onPressed: () => context.pop(),
+            ),
+          ],
         ),
       ),
-    );
+    ),
+  );
 
   void _showMembersModal(List<GroupMember> members) {
     showModalBottomSheet<void>(
@@ -388,13 +393,16 @@ class _GroupDetailsScreenState extends ConsumerState<GroupDetailsScreen> {
                   itemCount: sortedMembers.length,
                   itemBuilder: (context, index) {
                     final member = sortedMembers[index];
-                    final conversations = ref.watch(conversationRuntimeStoreProvider);
+                    final conversations = ref.watch(
+                      conversationRuntimeStoreProvider,
+                    );
                     bool isMemberOnline = false;
                     for (final state in conversations.values) {
                       if (state.conversationType == ConversationType.direct) {
                         final pUserId = state.metadata?.partnerUserId;
                         final pClerkId = state.metadata?.partnerClerkId;
-                        if ((pUserId != null && pUserId == member.userIdFromUserTable) ||
+                        if ((pUserId != null &&
+                                pUserId == member.userIdFromUserTable) ||
                             (pClerkId != null && pClerkId == member.clerkId) ||
                             (pUserId != null && pUserId == member.id) ||
                             (pClerkId != null && pClerkId == member.id)) {

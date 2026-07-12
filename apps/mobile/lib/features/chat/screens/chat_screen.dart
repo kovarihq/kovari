@@ -95,6 +95,20 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       });
       _realtimeCoordinator.joinChat(_chatId);
 
+      // Eagerly mark messages as seen on entry based on current highest known sequence
+      final initialSeq = ref
+          .read(messageStoreProvider(_chatId))
+          .highestKnownSequence;
+      if (initialSeq > 0) {
+        final runtimeState = ref.read(
+          conversationRuntimeStoreProvider,
+        )[_chatId];
+        final currentSeen = runtimeState?.lastReadSequence ?? 0;
+        if (initialSeq > currentSeen) {
+          _realtimeCoordinator.markSeenUpTo(_chatId, initialSeq);
+        }
+      }
+
       final isGroup = _chatId.split('_').length != 2;
       if (isGroup) {
         _memberStore.subscribe(_chatId);
@@ -315,31 +329,38 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       },
     );
 
-    // Reactively mark messages as seen when highest known sequence increases
-    ref.listen(
-      messageStoreProvider(_chatId).select((s) => s.highestKnownSequence),
-      (prev, next) {
-        if (next != null && next > 0) {
-          final conv = ref
-              .read(conversationRuntimeStoreProvider)[_chatId]
-              ?.metadata;
-          final currentSeen = conv?.lastSeenSequence ?? 0;
-          if (next > currentSeen) {
-            ref
-                .read(realtimeCoordinatorProvider.notifier)
-                .markSeenUpTo(_chatId, next);
-          }
-        }
-      },
-    );
-
-    // Keep the runtime manager alive for this chat session
-    ref.watch(conversationRuntimeManagerProvider(_chatId));
-
+    // Reactively mark messages as seen when visible messages populate or update
     final visibleMessages = ref
         .watch(decryptedMessagesProvider(_chatId))
         .where((m) => m.mediaType != 'init')
         .toList();
+
+    final highestSeq = visibleMessages.isNotEmpty
+        ? visibleMessages
+              .map((m) {
+                AppLogger.d(
+                  '🔍 [ChatScreen] visibleMessage: id=${m.id}, seq=${m.conversationSequence}',
+                );
+                return m.conversationSequence ?? 0;
+              })
+              .reduce((a, b) => a > b ? a : b)
+        : 0;
+    if (highestSeq > 0) {
+      final runtimeState = ref.read(conversationRuntimeStoreProvider)[_chatId];
+      final currentSeen = runtimeState?.lastReadSequence ?? 0;
+      if (highestSeq > currentSeen) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) {
+            ref
+                .read(realtimeCoordinatorProvider.notifier)
+                .markSeenUpTo(_chatId, highestSeq);
+          }
+        });
+      }
+    }
+
+    // Keep the runtime manager alive for this chat session
+    ref.watch(conversationRuntimeManagerProvider(_chatId));
 
     // Warm cache once when messages first populate (not on every rebuild).
     // The RuntimeManager's own _initialWarmDone flag prevents duplicate work.

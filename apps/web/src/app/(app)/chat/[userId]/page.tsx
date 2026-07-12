@@ -298,7 +298,7 @@ const MessageRow = React.memo(
                 {isSent && msg.status === "sending" && <BiTime className="w-3 h-3 text-white/70 flex-shrink-0" />}
                 {isSent && msg.status === "sent" && <BiCheck className="w-4 h-4 text-white/70 flex-shrink-0" />}
                 {isSent && msg.status === "delivered" && <BiCheckDouble className="w-4 h-4 text-white/70 flex-shrink-0" />}
-                {isSent && (msg.status === "seen" || msg.read_at) && <BiCheckDouble className="w-4 h-4 text-primary-foreground flex-shrink-0" />}
+                {isSent && (msg.status === "seen" || msg.read_at) && <BiCheckDouble className="w-4 h-4 text-white flex-shrink-0" />}
                 
                 {showError && (
                   <>

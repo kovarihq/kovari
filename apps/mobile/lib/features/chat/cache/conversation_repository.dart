@@ -15,13 +15,19 @@ class ConversationRepository {
     required String path,
     required Map<String, dynamic> queryParameters,
   }) async {
-    final response = await _apiClient.get<Map<String, dynamic>>(
+    final response = await _apiClient.get<dynamic>(
       path,
       queryParameters: queryParameters,
-      parser: (data) => data as Map<String, dynamic>,
+      parser: (data) => data,
       ignoreCache: true,
     );
-    return response.data;
+    final rawData = response.data;
+    if (rawData is List) {
+      return <String, dynamic>{'messages': rawData};
+    } else if (rawData is Map) {
+      return Map<String, dynamic>.from(rawData);
+    }
+    return null;
   }
 
   void emitSocket(String event, Map<String, dynamic> data, [Function? callback]) {

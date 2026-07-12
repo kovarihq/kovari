@@ -1,15 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@clerk/nextjs/server";
 import { createAdminSupabaseClient } from "@kovari/api";
+import { getAuthenticatedUser } from "@/lib/auth/get-user";
 import { buildMessageInsertPayload } from "@/services/messaging/persistence";
+import { auth } from "firebase-admin";
 
 export async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ groupId: string }> },
 ) {
   try {
-    const { userId } = await auth();
-    if (!userId) {
+    const authUser = await getAuthenticatedUser(req);
+    if (!authUser) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
@@ -19,18 +20,6 @@ export async function GET(
     const limit = Math.min(parseInt(searchParams.get("limit") || "50"), 100);
 
     const supabase = createAdminSupabaseClient();
-
-    // Get user's internal ID
-    const { data: userRow, error: userError } = await supabase
-      .from("users")
-      .select("id")
-      .eq("clerk_user_id", userId)
-      .eq("isDeleted", false)
-      .single();
-
-    if (userError || !userRow) {
-      return NextResponse.json({ error: "User not found" }, { status: 404 });
-    }
 
     // Check group + access (creator or accepted member)
     const { data: group, error: groupError } = await supabase
@@ -46,7 +35,7 @@ export async function GET(
       return NextResponse.json({ error: "Group not found" }, { status: 404 });
     }
 
-    const isCreator = group.creator_id === userRow.id;
+    const isCreator = group.creator_id === authUser.id;
     if (group.status === "pending" && !isCreator) {
       return NextResponse.json({ error: "Group not found" }, { status: 404 });
     }
@@ -56,7 +45,7 @@ export async function GET(
         .from("group_memberships")
         .select("status")
         .eq("group_id", groupId)
-        .eq("user_id", userRow.id)
+        .eq("user_id", authUser.id)
         .maybeSingle();
 
       if (membership?.status !== "accepted") {
@@ -79,6 +68,8 @@ export async function GET(
         user_id,
         media_url,
         media_type,
+        conversation_sequence,
+        global_sequence,
         users(
           id,
           profiles(
@@ -130,10 +121,14 @@ export async function GET(
           senderUsername: isDeleted ? undefined : profile?.username,
           senderId: message.user_id ?? message.users?.id,
           avatar: isDeleted ? undefined : profile?.profile_photo,
-          isCurrentUser: message.user_id === userRow.id,
+          isCurrentUser: message.user_id === authUser.id,
           createdAt: message.created_at,
           mediaUrl: message.media_url || undefined,
           mediaType: message.media_type || undefined,
+          conversationSequence: message.conversation_sequence,
+          serverSequence: message.global_sequence,
+          conversation_sequence: message.conversation_sequence,
+          server_sequence: message.global_sequence,
         };
       }) || [];
 
@@ -152,8 +147,8 @@ export async function POST(
   { params }: { params: Promise<{ groupId: string }> },
 ) {
   try {
-    const { userId } = await auth();
-    if (!userId) {
+    const authUser = await getAuthenticatedUser(req);
+    if (!authUser) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
@@ -168,18 +163,6 @@ export async function POST(
     } = body;
 
     const supabase = createAdminSupabaseClient();
-
-    // Get user's internal ID
-    const { data: userRow, error: userError } = await supabase
-      .from("users")
-      .select("id")
-      .eq("clerk_user_id", userId)
-      .eq("isDeleted", false)
-      .single();
-
-    if (userError || !userRow) {
-      return NextResponse.json({ error: "User not found" }, { status: 404 });
-    }
 
     // Check if group exists and is not removed
     const { data: group, error: groupError } = await supabase
@@ -206,13 +189,13 @@ export async function POST(
     }
 
     // Check creator or accepted membership
-    const isCreator = group.creator_id === userRow.id;
+    const isCreator = group.creator_id === authUser.id;
     if (!isCreator) {
       const { data: membership } = await supabase
         .from("group_memberships")
         .select("status")
         .eq("group_id", groupId)
-        .eq("user_id", userRow.id)
+        .eq("user_id", authUser.id)
         .maybeSingle();
 
       if (membership?.status !== "accepted") {
@@ -244,7 +227,7 @@ export async function POST(
       const messageData = {
         ...basePayload,
         group_id: groupId,
-        user_id: userRow.id,
+        user_id: authUser.id,
       };
 
       const { data: inserted, error: insertError } = await supabase

@@ -7,6 +7,7 @@ import 'package:mobile/core/realtime/realtime_event_pipeline.dart';
 import 'package:mobile/core/utils/app_logger.dart';
 import 'package:mobile/core/services/fcm_service.dart';
 import 'package:mobile/core/providers/auth_provider.dart';
+import 'package:mobile/features/chat/providers/cache_providers.dart';
 import 'package:mobile/features/chat/providers/chat_runtime_providers.dart';
 import 'package:mobile/features/chat/models/conversation_entity.dart';
 import 'package:mobile/features/chat/models/message_entity.dart';
@@ -19,10 +20,7 @@ import 'package:mobile/shared/models/kovari_user.dart';
 
 /// Describes the type of a conversation. Critical for routing hydration
 /// paths in MessageStore and mutation payloads in ChatMutationService.
-enum ConversationType {
-  direct,
-  group,
-}
+enum ConversationType { direct, group }
 
 // ---------------------------------------------------------------------------
 // ConversationRuntimeState
@@ -144,37 +142,34 @@ class ConversationRuntimeState {
     bool? isArchived,
     String? draft,
     int? conversationMembershipVersion,
-  }) =>
-      ConversationRuntimeState(
-        chatId: chatId,
-        conversationType: conversationType,
-        metadata: metadata ?? this.metadata,
-        unreadCount: unreadCount ?? this.unreadCount,
-        lastReadSequence: lastReadSequence ?? this.lastReadSequence,
-        lastDeliveredSequence:
-            lastDeliveredSequence ?? this.lastDeliveredSequence,
-        lastKnownServerSequence:
-            lastKnownServerSequence ?? this.lastKnownServerSequence,
-        lastMessageId: lastMessageId ?? this.lastMessageId,
-        lastMessageSnippet: lastMessageSnippet ?? this.lastMessageSnippet,
-        lastMessageAt: lastMessageAt ?? this.lastMessageAt,
-        lastMessageSenderId: lastMessageSenderId ?? this.lastMessageSenderId,
-        lastMessageMediaType: replaceLastMessageMediaType
-            ? lastMessageMediaType
-            : (lastMessageMediaType ?? this.lastMessageMediaType),
-        deliveryState: deliveryState ?? this.deliveryState,
-        isPartnerOnline: isPartnerOnline ?? this.isPartnerOnline,
-        partnerLastSeen: partnerLastSeen ?? this.partnerLastSeen,
-        partnerLastActivityAt:
-            partnerLastActivityAt ?? this.partnerLastActivityAt,
-        typingUserIds: typingUserIds ?? this.typingUserIds,
-        isMuted: isMuted ?? this.isMuted,
-        isPinned: isPinned ?? this.isPinned,
-        isArchived: isArchived ?? this.isArchived,
-        draft: draft ?? this.draft,
-        conversationMembershipVersion:
-            conversationMembershipVersion ?? this.conversationMembershipVersion,
-      );
+  }) => ConversationRuntimeState(
+    chatId: chatId,
+    conversationType: conversationType,
+    metadata: metadata ?? this.metadata,
+    unreadCount: unreadCount ?? this.unreadCount,
+    lastReadSequence: lastReadSequence ?? this.lastReadSequence,
+    lastDeliveredSequence: lastDeliveredSequence ?? this.lastDeliveredSequence,
+    lastKnownServerSequence:
+        lastKnownServerSequence ?? this.lastKnownServerSequence,
+    lastMessageId: lastMessageId ?? this.lastMessageId,
+    lastMessageSnippet: lastMessageSnippet ?? this.lastMessageSnippet,
+    lastMessageAt: lastMessageAt ?? this.lastMessageAt,
+    lastMessageSenderId: lastMessageSenderId ?? this.lastMessageSenderId,
+    lastMessageMediaType: replaceLastMessageMediaType
+        ? lastMessageMediaType
+        : (lastMessageMediaType ?? this.lastMessageMediaType),
+    deliveryState: deliveryState ?? this.deliveryState,
+    isPartnerOnline: isPartnerOnline ?? this.isPartnerOnline,
+    partnerLastSeen: partnerLastSeen ?? this.partnerLastSeen,
+    partnerLastActivityAt: partnerLastActivityAt ?? this.partnerLastActivityAt,
+    typingUserIds: typingUserIds ?? this.typingUserIds,
+    isMuted: isMuted ?? this.isMuted,
+    isPinned: isPinned ?? this.isPinned,
+    isArchived: isArchived ?? this.isArchived,
+    draft: draft ?? this.draft,
+    conversationMembershipVersion:
+        conversationMembershipVersion ?? this.conversationMembershipVersion,
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -245,6 +240,19 @@ class ConversationRuntimeStore
       ref.read(inboxLoadingProvider.notifier).state = true;
     }
     try {
+      final myUser = ref.read(authProvider).user;
+      if (myUser != null) {
+        final userId = myUser.id;
+        final cacheRepo = ref.read(conversationCacheRepositoryProvider(userId));
+        unawaited(
+          cacheRepo.init().catchError((e) {
+            AppLogger.e(
+              '[ConversationRuntimeStore] Eager cache init failed',
+              error: e,
+            );
+          }),
+        );
+      }
       final syncEngine = ref.read(syncEngineProvider);
       final rawData = await syncEngine.swrFetch<Map<String, dynamic>>(
         path: 'direct-chat/inbox',
@@ -278,7 +286,9 @@ class ConversationRuntimeStore
       final List<ConversationEntity> newConversations = [];
       final myUser = ref.read(authProvider).user;
       if (myUser == null) {
-        AppLogger.w('[ConversationRuntimeStore] Cannot process inbox: myUser is null');
+        AppLogger.w(
+          '[ConversationRuntimeStore] Cannot process inbox: myUser is null',
+        );
         return;
       }
 
@@ -354,14 +364,25 @@ class ConversationRuntimeStore
   /// conversations are inserted. Use [updateMetadata] for individual updates.
   void seedFromInbox(List<ConversationEntity> conversations) {
     final updated = Map<String, ConversationRuntimeState>.from(state);
+    final myUser = ref.read(authProvider).user;
+    final userId = myUser?.id;
+    final cacheRepo = userId != null
+        ? ref.read(conversationCacheRepositoryProvider(userId))
+        : null;
+
     for (final conv in conversations) {
       if (!updated.containsKey(conv.chatId)) {
+        final cachedMeta = cacheRepo?.getMetadata(conv.chatId);
+        final lastReadSeq = cachedMeta?.lastReadSequence;
+
         updated[conv.chatId] = ConversationRuntimeState(
           chatId: conv.chatId,
-          conversationType:
-              conv.isGroup ? ConversationType.group : ConversationType.direct,
+          conversationType: conv.isGroup
+              ? ConversationType.group
+              : ConversationType.direct,
           metadata: conv,
           unreadCount: conv.unreadCount,
+          lastReadSequence: lastReadSeq,
           lastMessageAt: conv.lastMessageAt,
           lastMessageSnippet: conv.lastMessage?.text,
           lastMessageSenderId: conv.lastMessage?.senderId,
@@ -393,8 +414,9 @@ class ConversationRuntimeStore
     upsert(
       ConversationRuntimeState(
         chatId: conv.chatId,
-        conversationType:
-            conv.isGroup ? ConversationType.group : ConversationType.direct,
+        conversationType: conv.isGroup
+            ? ConversationType.group
+            : ConversationType.direct,
         metadata: conv,
         unreadCount: conv.unreadCount,
         lastMessageAt: conv.lastMessageAt,
@@ -415,8 +437,9 @@ class ConversationRuntimeStore
       upsert(
         ConversationRuntimeState(
           chatId: chatId,
-          conversationType:
-              metadata.isGroup ? ConversationType.group : ConversationType.direct,
+          conversationType: metadata.isGroup
+              ? ConversationType.group
+              : ConversationType.direct,
           metadata: metadata,
         ),
       );
@@ -477,10 +500,7 @@ class ConversationRuntimeStore
     if (sequence <= currentSeq) return;
     state = {
       ...state,
-      chatId: existing.copyWith(
-        unreadCount: 0,
-        lastReadSequence: sequence,
-      ),
+      chatId: existing.copyWith(unreadCount: 0, lastReadSequence: sequence),
     };
   }
 
@@ -530,8 +550,7 @@ class ConversationRuntimeStore
       chatId: existing.copyWith(
         isPartnerOnline: isOnline,
         partnerLastSeen: lastSeen ?? existing.partnerLastSeen,
-        partnerLastActivityAt:
-            lastActivityAt ?? existing.partnerLastActivityAt,
+        partnerLastActivityAt: lastActivityAt ?? existing.partnerLastActivityAt,
       ),
     };
   }
@@ -572,8 +591,7 @@ class ConversationRuntimeStore
 
     // Determine chatId from payload — supports both direct (chatId) and
     // group (groupId) events by normalising to a single chatId key.
-    final chatId =
-        data['chatId'] as String? ?? data['groupId'] as String?;
+    final chatId = data['chatId'] as String? ?? data['groupId'] as String?;
     if (chatId == null) return;
 
     switch (event.type) {
@@ -588,19 +606,14 @@ class ConversationRuntimeStore
 
       // --- Presence ---
       case 'user_online':
-        setPresence(
-          chatId,
-          isOnline: true,
-          lastActivityAt: DateTime.now(),
-        );
+        setPresence(chatId, isOnline: true, lastActivityAt: DateTime.now());
 
       case 'user_offline':
         final lastSeenStr = data['lastSeen'] as String?;
         setPresence(
           chatId,
           isOnline: false,
-          lastSeen:
-              lastSeenStr != null ? DateTime.tryParse(lastSeenStr) : null,
+          lastSeen: lastSeenStr != null ? DateTime.tryParse(lastSeenStr) : null,
         );
 
       // --- Read Receipts (outgoing delivery ticks handled in MessageStore) ---
@@ -613,11 +626,43 @@ class ConversationRuntimeStore
         if (currentChatId != chatId) {
           incrementUnread(chatId);
           final existing = state[chatId];
+          final messageId = data['messageId'] as String?;
+
+          if (messageId != null) {
+            // Dynamic Delivery Acknowledgment (Workstream 5 / Parity)
+            ref.read(socketServiceProvider.notifier).emit(
+              'message_delivered',
+              <String, dynamic>{'chatId': chatId, 'messageId': messageId},
+            );
+          }
+
           if (existing == null) {
             fetchInbox(forceRefresh: true);
+          } else {
+            if (messageId != null) {
+              final snippet = data['message'] as String?;
+              final createdAtStr =
+                  data['created_at'] as String? ?? data['createdAt'] as String?;
+              final at = createdAtStr != null
+                  ? (DateTime.tryParse(createdAtStr) ?? DateTime.now())
+                  : DateTime.now();
+              final senderId = data['senderId'] as String? ?? '';
+              final mediaType = data['mediaType'] as String?;
+              updateLastMessage(
+                chatId: chatId,
+                messageId: messageId,
+                snippet: snippet,
+                at: at,
+                senderId: senderId,
+                mediaType: mediaType,
+                deliveryState: MessageDeliveryStatus.delivered,
+              );
+            }
           }
           final senderName =
-              existing?.metadata?.displayName ?? (data['title'] as String?) ?? 'New Message';
+              existing?.metadata?.displayName ??
+              (data['title'] as String?) ??
+              'New Message';
           final bodyMessage =
               data['message'] as String? ?? 'Open Kovari to view message';
           AppLogger.i(
@@ -638,8 +683,7 @@ class ConversationRuntimeStore
       // --- Incoming Message (update sequence, watermarks & last message) ---
       case 'receive_message':
       case 'message_persisted':
-        final msgData =
-            (data['message'] as Map<String, dynamic>?) ?? data;
+        final msgData = (data['message'] as Map<String, dynamic>?) ?? data;
         final csn =
             msgData['conversationSequence'] as int? ??
             msgData['conversation_sequence'] as int?;
@@ -673,16 +717,17 @@ class ConversationRuntimeStore
   }
 }
 
-final conversationRuntimeStoreProvider = NotifierProvider<
-    ConversationRuntimeStore, Map<String, ConversationRuntimeState>>(
-  ConversationRuntimeStore.new,
-);
+final conversationRuntimeStoreProvider =
+    NotifierProvider<
+      ConversationRuntimeStore,
+      Map<String, ConversationRuntimeState>
+    >(ConversationRuntimeStore.new);
 
 /// Convenience provider: watch a single conversation's runtime state.
 final conversationRuntimeProvider =
     Provider.family<ConversationRuntimeState?, String>(
-  (ref, chatId) => ref.watch(conversationRuntimeStoreProvider)[chatId],
-);
+      (ref, chatId) => ref.watch(conversationRuntimeStoreProvider)[chatId],
+    );
 
 /// Tracks whether the inbox is currently fetching data.
 final inboxLoadingProvider = StateProvider<bool>((ref) => false);

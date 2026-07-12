@@ -223,20 +223,22 @@ class MessageStore extends Notifier<ConversationMessageState> {
       final List<MessageEntity> cachedEntities = cachedMsgs
           .where((m) => m.conversationId == _chatId)
           .map((m) {
-        return MessageEntity(
-          id: m.id,
-          chatId: _chatId,
-          senderId: m.senderId,
-          createdAt: m.createdAt,
-          text: m.text,
-          mediaUrl: m.mediaUrl,
-          mediaType: m.mediaType,
-          deliveryStatus: MessageDeliveryStatus.values.firstWhere(
-            (e) => e.name == m.status,
-            orElse: () => MessageDeliveryStatus.sent,
-          ),
-        );
-      }).toList();
+            return MessageEntity(
+              id: m.id,
+              chatId: _chatId,
+              senderId: m.senderId,
+              createdAt: m.createdAt,
+              text: m.text,
+              mediaUrl: m.mediaUrl,
+              mediaType: m.mediaType,
+              deliveryStatus: MessageDeliveryStatus.values.firstWhere(
+                (e) => e.name == m.status,
+                orElse: () => MessageDeliveryStatus.sent,
+              ),
+              conversationSequence: m.sequence,
+            );
+          })
+          .toList();
 
       if (cachedEntities.isNotEmpty) {
         if (!_isDisposed && _isActive) {
@@ -342,20 +344,22 @@ class MessageStore extends Notifier<ConversationMessageState> {
       final List<MessageEntity> freshEntities = freshMsgs
           .where((m) => m.conversationId == _chatId)
           .map((m) {
-        return MessageEntity(
-          id: m.id,
-          chatId: _chatId,
-          senderId: m.senderId,
-          createdAt: m.createdAt,
-          text: m.text,
-          mediaUrl: m.mediaUrl,
-          mediaType: m.mediaType,
-          deliveryStatus: MessageDeliveryStatus.values.firstWhere(
-            (e) => e.name == m.status,
-            orElse: () => MessageDeliveryStatus.sent,
-          ),
-        );
-      }).toList();
+            return MessageEntity(
+              id: m.id,
+              chatId: _chatId,
+              senderId: m.senderId,
+              createdAt: m.createdAt,
+              text: m.text,
+              mediaUrl: m.mediaUrl,
+              mediaType: m.mediaType,
+              deliveryStatus: MessageDeliveryStatus.values.firstWhere(
+                (e) => e.name == m.status,
+                orElse: () => MessageDeliveryStatus.sent,
+              ),
+              conversationSequence: m.sequence,
+            );
+          })
+          .toList();
 
       if (!_isDisposed && _isActive) {
         final updated = Map<String, MessageEntity>.from(state.messages);
@@ -548,7 +552,9 @@ class MessageStore extends Notifier<ConversationMessageState> {
       }
 
       // 3. Content Fingerprint (Robust fallback for modern social feel)
-      if ((existingKey == null || existingKey.isEmpty) && msg.text != null && msg.text!.isNotEmpty) {
+      if ((existingKey == null || existingKey.isEmpty) &&
+          msg.text != null &&
+          msg.text!.isNotEmpty) {
         existingKey = updated.keys.firstWhere((k) {
           final e = updated[k]!;
           return e.senderId == msg.senderId &&
@@ -627,12 +633,29 @@ class MessageStore extends Notifier<ConversationMessageState> {
     required int conversationSequence,
     required int serverSequence,
   }) {
+    AppLogger.d(
+      '[MessageStore] reconcileOptimistic: clientMessageId=$clientMessageId, serverMessageId=$serverMessageId, csn=$conversationSequence, ssn=$serverSequence',
+    );
     if (state.messages.containsKey(serverMessageId)) {
-      AppLogger.i(
-        '[MessageStore] reconcileOptimistic: message $serverMessageId already reconciled. Skipping.',
+      AppLogger.w(
+        '[MessageStore] reconcileOptimistic: message $serverMessageId already in state. messages: ${state.messages.keys.toList()}',
       );
-      // Ensure journal is marked successful
-      ref.read(mutationJournalProvider).resolve(_chatId, clientMessageId, MutationStatus.success);
+      // Let's remove the pending message anyway to clean it up!
+      final pendingId = 'pending_$clientMessageId';
+      if (state.messages.containsKey(pendingId)) {
+        AppLogger.i(
+          '[MessageStore] Cleaning up orphan pending message: $pendingId',
+        );
+        final updated = Map<String, MessageEntity>.from(state.messages)
+          ..remove(pendingId);
+        state = state.copyWith(
+          messages: updated,
+          orderedIds: _buildOrderedIds(updated),
+        );
+      }
+      ref
+          .read(mutationJournalProvider)
+          .resolve(_chatId, clientMessageId, MutationStatus.success);
       return;
     }
 
@@ -640,10 +663,11 @@ class MessageStore extends Notifier<ConversationMessageState> {
     final optimistic = state.messages[pendingId];
     if (optimistic == null) {
       AppLogger.w(
-        '[MessageStore] reconcileOptimistic: no pending msg for $clientMessageId',
+        '[MessageStore] reconcileOptimistic: no pending msg for $clientMessageId. Available keys: ${state.messages.keys.toList()}',
       );
-      // Double check if it was already reconciled under another format
-      ref.read(mutationJournalProvider).resolve(_chatId, clientMessageId, MutationStatus.success);
+      ref
+          .read(mutationJournalProvider)
+          .resolve(_chatId, clientMessageId, MutationStatus.success);
       return;
     }
 
@@ -727,7 +751,9 @@ class MessageStore extends Notifier<ConversationMessageState> {
 
   /// Heuristic to get the partner's Clerk ID for E2EE routing.
   String? getPartnerClerkId() {
-    final conversation = ref.read(conversationRuntimeProvider(_chatId))?.metadata;
+    final conversation = ref
+        .read(conversationRuntimeProvider(_chatId))
+        ?.metadata;
     return conversation?.partnerClerkId;
   }
 
@@ -741,7 +767,9 @@ class MessageStore extends Notifier<ConversationMessageState> {
     for (final entry in updated.entries) {
       final msg = entry.value;
       if (!_isOwnSentMessage(msg)) continue;
-      if (msg.deliveryStatus.statePriority >= MessageDeliveryStatus.seen.statePriority) continue;
+      if (msg.deliveryStatus.statePriority >=
+          MessageDeliveryStatus.seen.statePriority)
+        continue;
 
       final clientId = msg.clientMessageId;
       final matches =
@@ -772,7 +800,8 @@ class MessageStore extends Notifier<ConversationMessageState> {
       final csn = msg.conversationSequence;
       if (csn != null &&
           csn <= lastSeenSequence &&
-          msg.deliveryStatus.statePriority < MessageDeliveryStatus.seen.statePriority) {
+          msg.deliveryStatus.statePriority <
+              MessageDeliveryStatus.seen.statePriority) {
         final updatedEntity = msg.copyWith(
           deliveryStatus: MessageDeliveryStatus.seen,
         );
@@ -819,8 +848,7 @@ class MessageStore extends Notifier<ConversationMessageState> {
         );
     if (partnerId == null) return true;
 
-    return readerUserId == partnerId ||
-        readerUserId == conv?.partnerClerkId;
+    return readerUserId == partnerId || readerUserId == conv?.partnerClerkId;
   }
 
   int? _parseSocketInt(dynamic value) {
@@ -924,19 +952,10 @@ class MessageStore extends Notifier<ConversationMessageState> {
         myUserId: userId,
       );
 
-      final entity = MessageEntity(
-        id: cachedMsg.id,
-        chatId: _chatId,
-        senderId: cachedMsg.senderId,
-        createdAt: cachedMsg.createdAt,
-        text: cachedMsg.text,
-        mediaUrl: cachedMsg.mediaUrl,
-        mediaType: cachedMsg.mediaType,
-        deliveryStatus: MessageDeliveryStatus.values.firstWhere(
-          (e) => e.name == cachedMsg.status,
-          orElse: () => MessageDeliveryStatus.sent,
-        ),
-        conversationSequence: cachedMsg.sequence,
+      final entity = MessageEntity.fromSocket(
+        data,
+        _chatId,
+        currentUserId: userId,
       );
 
       // 1. Content-based deduplication for real-time race conditions
@@ -1017,7 +1036,6 @@ class MessageStore extends Notifier<ConversationMessageState> {
         'message_delivered',
         <String, dynamic>{'chatId': _chatId, 'messageId': entity.id},
       );
-
     } catch (e, stack) {
       AppLogger.e(
         '[MessageStore] Error in _onReceiveMessage',

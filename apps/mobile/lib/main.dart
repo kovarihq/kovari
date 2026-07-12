@@ -198,7 +198,23 @@ void main() {
               }
             }
           }
-        }, fireImmediately: true);
+        });
+
+        // Run immediate registration if already authenticated on cold start
+        if (container.read(authProvider).isAuthenticated) {
+          unawaited(() async {
+            try {
+              final tokenStorage = TokenStorage();
+              final deviceId =
+                  await tokenStorage.getDeviceId() ??
+                  await _ensureDeviceId(tokenStorage);
+              await FCMService.instance.init(deviceId: deviceId, force: true);
+              AppLogger.i('✅ FCM push notifications registered on cold start.');
+            } catch (e) {
+              AppLogger.w('⚠️ FCM registration failed on cold start: $e');
+            }
+          }());
+        }
 
         // Start background cache maintenance
         Timer.periodic(const Duration(minutes: 15), (_) {

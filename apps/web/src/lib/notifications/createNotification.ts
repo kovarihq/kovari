@@ -153,7 +153,7 @@ export async function createNotification(
         console.error("[Notification] Dispatcher Error:", err);
       }
 
-      if (clerkId && supabaseId) {
+      if (supabaseId) {
         try {
           await evaluatePushNotifications(
             clerkId,
@@ -185,7 +185,7 @@ export async function createNotification(
  * Handles the logic for deciding and sending push notifications.
  */
 async function evaluatePushNotifications(
-  clerkId: string,
+  clerkId: string | null,
   supabaseId: string,
   type: NotificationType,
   entityId: string | null,
@@ -203,7 +203,7 @@ async function evaluatePushNotifications(
   // Note: shouldSendPush() is called internally by PushService.sendPush().
   // We run it here first only to gate the web-push subscription path below.
   const eligible = await shouldSendPush({
-    userId: clerkId,
+    userId: clerkId || supabaseId,
     type,
     entityId,
     entityType,
@@ -229,7 +229,7 @@ async function evaluatePushNotifications(
         : message;
     const pushResult = await PushService.sendPush({
       supabaseId,
-      clerkId,
+      clerkId: clerkId || supabaseId,
       type,
       title,
       body: fcmBody,

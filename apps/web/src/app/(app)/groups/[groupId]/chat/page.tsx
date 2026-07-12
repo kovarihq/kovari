@@ -1267,7 +1267,7 @@ export default function GroupChatInterface() {
                                 {msg.isCurrentUser && msg.status === "sending" && <BiTime className="w-3 h-3 text-white/70 flex-shrink-0" />}
                                 {msg.isCurrentUser && msg.status === "sent" && <BiCheck className="w-4 h-4 text-white/70 flex-shrink-0" />}
                                 {msg.isCurrentUser && msg.status === "delivered" && <BiCheckDouble className="w-4 h-4 text-white/70 flex-shrink-0" />}
-                                {msg.isCurrentUser && msg.status === "seen" && <BiCheckDouble className="w-4 h-4 text-[#34B7F1] flex-shrink-0" />}
+                                {msg.isCurrentUser && msg.status === "seen" && <BiCheckDouble className="w-4 h-4 text-white flex-shrink-0" />}
                               </span>
                             </div>
                           )}

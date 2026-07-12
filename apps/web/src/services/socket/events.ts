@@ -251,8 +251,12 @@ export const registerSocketEvents = (
             notifyTargetId,
             chatId,
             senderName,
-            senderAvatar,
+            senderAvatar ?? undefined,
             message.text || "Sent a message",
+            persistedMessage.id,
+            socket.data.supabaseId ?? undefined,
+            persistedMessage.created_at ?? undefined,
+            message.mediaType ?? undefined,
           );
         }
       } else {
@@ -267,23 +271,19 @@ export const registerSocketEvents = (
 
         if (members) {
           for (const member of members) {
-            // Need to map Supabase UUID back to Clerk ID for socket/presence checks
-            const { data: userRow } = await supabase
-              .from("users")
-              .select("clerk_user_id")
-              .eq("id", member.user_id)
-              .single();
-
-            if (userRow?.clerk_user_id) {
-              await handleNotificationForUser(
-                io,
-                userRow.clerk_user_id,
-                chatId,
-                senderName,
-                senderAvatar,
-                message.text || "Sent a message to the group",
-              );
-            }
+            const notifyTargetId = await presenceKeyForSupabaseUserId(member.user_id);
+            await handleNotificationForUser(
+              io,
+              notifyTargetId,
+              chatId,
+              senderName,
+              senderAvatar ?? undefined,
+              message.text || "Sent a message to the group",
+              persistedMessage.id,
+              socket.data.supabaseId ?? undefined,
+              persistedMessage.created_at ?? undefined,
+              message.mediaType ?? undefined,
+            );
           }
         }
       }
@@ -296,15 +296,19 @@ export const registerSocketEvents = (
   });
 
   /**
-   * Helper to handle notification logic for a single user
+   * Helper function to handle notification flow for active/inactive chat room
    */
   async function handleNotificationForUser(
     io: Server,
     targetClerkUserId: string,
     chatId: string,
     senderName: string,
-    senderAvatar: string | null,
+    senderAvatar: string | null | undefined,
     text: string,
+    messageId?: string,
+    senderId?: string,
+    createdAt?: string | null,
+    mediaType?: string | null,
   ) {
     // 1. Check if user is in the active chat room
     const targetSockets = io.sockets.adapter.rooms.get(chatId);
@@ -337,7 +341,10 @@ export const registerSocketEvents = (
         message: text || `New message from ${senderName}`,
         chatId,
         image_url: senderAvatar, // Include avatar for UI
-        created_at: new Date().toISOString(),
+        created_at: createdAt || new Date().toISOString(),
+        messageId,
+        senderId,
+        mediaType,
       });
 
       // Also emit unread count update if we want to be fancy
@@ -393,6 +400,7 @@ export const registerSocketEvents = (
   });
 
   socket.on("mark_seen", async ({ chatId, messageIds, lastSeenSequence }) => {
+    console.log(`📥 [Socket mark_seen] received: chatId=${chatId}, messageIds=${JSON.stringify(messageIds)}, lastSeenSequence=${lastSeenSequence}`);
     try {
       const supabase = createAdminSupabaseClient();
       const isDirectChat = chatId.includes("_");
@@ -420,54 +428,95 @@ export const registerSocketEvents = (
         }
       }
 
-      if (messageIds.length > 0) {
-        if (isDirectChat) {
-          await supabase
+      let updatedIds: string[] = messageIds;
+
+      if (isDirectChat) {
+        const [id1, id2] = chatId.split("_");
+        const partnerId = supabaseId === id1 ? id2 : id1;
+        if (resolvedLastSeenSequence != null && supabaseId) {
+          const { data: updatedRows, error: dbError } = await supabase
+            .from(table)
+            .update({ read_at: new Date().toISOString() })
+            .eq("receiver_id", supabaseId)
+            .eq("sender_id", partnerId)
+            .lte("conversation_sequence", resolvedLastSeenSequence)
+            .is("read_at", null)
+            .select("id");
+          if (dbError) {
+            console.error("❌ [Socket mark_seen] DB update failed:", dbError);
+          } else {
+            console.log(`✅ [Socket mark_seen] Updated rows count: ${updatedRows?.length ?? 0}, IDs:`, updatedRows?.map((r: any) => r.id));
+          }
+          if (updatedRows) {
+            updatedIds = updatedRows.map((r: any) => r.id);
+          }
+        } else if (messageIds.length > 0) {
+          const { data: updatedRows } = await supabase
             .from(table)
             .update({ read_at: new Date().toISOString() })
             .in("id", messageIds)
-            .is("read_at", null);
-        } else if (supabaseId) {
-          // Group chat: track per-user, per-message progress in Redis for accurate "all members seen" status
-          const countKey = `group_member_count:${chatId}`;
-          const cachedCount = await pubClient.get(countKey);
-          let memberCount = cachedCount ? parseInt(cachedCount) : 0;
-
-          if (!memberCount) {
-            const { count } = await supabase
-              .from("group_memberships")
-              .select("*", { count: "exact", head: true })
+            .is("read_at", null)
+            .select("id");
+          if (updatedRows) {
+            updatedIds = updatedRows.map((r: any) => r.id);
+          }
+        }
+      } else {
+        if (supabaseId) {
+          let targetMessageIds = messageIds;
+          if (targetMessageIds.length === 0 && resolvedLastSeenSequence != null) {
+            const { data: messages } = await supabase
+              .from("group_messages")
+              .select("id")
               .eq("group_id", chatId)
-              .eq("status", "accepted");
-            memberCount = count || 0;
-            await pubClient.set(countKey, memberCount.toString(), { EX: 300 });
+              .lte("conversation_sequence", resolvedLastSeenSequence);
+            if (messages) {
+              targetMessageIds = messages.map((m: any) => m.id);
+            }
           }
 
-          // Mark each message as seen by THIS user in Redis Sets
-          for (const msgId of messageIds) {
-            const setKey = `group_msg_seen:${chatId}:${msgId}`;
-            await pubClient.sAdd(setKey, supabaseId);
+          if (targetMessageIds.length > 0) {
+            // Group chat: track per-user, per-message progress in Redis for accurate "all members seen" status
+            const countKey = `group_member_count:${chatId}`;
+            const cachedCount = await pubClient.get(countKey);
+            let memberCount = cachedCount ? parseInt(cachedCount) : 0;
 
-            // Check if all members (excluding sender) have now seen it
-            const seenCount = await pubClient.sCard(setKey);
-            if (seenCount >= memberCount - 1 && memberCount > 1) {
-              // BLUE TICK TRIGGER: Emit to the room that this message is now fully seen
-              io.to(chatId).emit("messages_seen", {
-                chatId,
-                messageIds: [msgId],
-                userId,
-                isFullySeen: true, // This flag triggers the blue check in the UI
-                lastSeenSequence: resolvedLastSeenSequence,
-              });
-              // Once fully seen, we can optionally cleanup the set (after a short delay or now)
-              await pubClient.expire(setKey, 3600); // Keep for an hour just in case of race conditions
+            if (!memberCount) {
+              const { count } = await supabase
+                .from("group_memberships")
+                .select("*", { count: "exact", head: true })
+                .eq("group_id", chatId)
+                .eq("status", "accepted");
+              memberCount = count || 0;
+              await pubClient.set(countKey, memberCount.toString(), { EX: 300 });
+            }
+
+            // Mark each message as seen by THIS user in Redis Sets
+            for (const msgId of targetMessageIds) {
+              const setKey = `group_msg_seen:${chatId}:${msgId}`;
+              await pubClient.sAdd(setKey, supabaseId);
+
+              // Check if all members (excluding sender) have now seen it
+              const seenCount = await pubClient.sCard(setKey);
+              if (seenCount >= memberCount - 1 && memberCount > 1) {
+                // BLUE TICK TRIGGER: Emit to the room that this message is now fully seen
+                io.to(chatId).emit("messages_seen", {
+                  chatId,
+                  messageIds: [msgId],
+                  userId,
+                  isFullySeen: true, // This flag triggers the blue check in the UI
+                  lastSeenSequence: resolvedLastSeenSequence,
+                });
+                // Once fully seen, we can optionally cleanup the set (after a short delay or now)
+                await pubClient.expire(setKey, 3600); // Keep for an hour just in case of race conditions
+              }
             }
           }
         }
       }
 
       // Individual feedback (grey ticks still, but tells sender SOMEONE saw it)
-      socket.to(chatId).emit("messages_seen", { chatId, messageIds, userId, lastSeenSequence: resolvedLastSeenSequence });
+      socket.to(chatId).emit("messages_seen", { chatId, messageIds: updatedIds, userId, lastSeenSequence: resolvedLastSeenSequence });
     } catch (error) {
       console.error("[Socket] Failed to mark messages seen:", error);
     }

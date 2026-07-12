@@ -22,6 +22,7 @@ class SocketService extends Notifier<SocketState> {
   io.Socket? _socket;
   bool _isInitializing = false;
   String? _deviceId;
+  final Map<String, int> _pendingSeenReceipts = {};
 
   // Event stream for other services to listen to
   Stream<SocketEvent> get events => _eventController.stream;
@@ -176,6 +177,7 @@ class SocketService extends Notifier<SocketState> {
     _socket!.onConnect((_) {
       AppLogger.i('✅ [Socket] Connected: ${_socket!.id}');
       Future.microtask(() => state = SocketState.connected);
+      _flushPendingSeenReceipts();
     });
 
     _socket!.onDisconnect((reason) {
@@ -278,15 +280,54 @@ class SocketService extends Notifier<SocketState> {
   }
 
   void emit(String event, dynamic data, [Function? callback]) {
+    if (event == 'mark_seen') {
+      try {
+        final map = data as Map<String, dynamic>;
+        final chatId = map['chatId'] as String;
+        final seq = map['lastSeenSequence'] as int;
+        _pendingSeenReceipts[chatId] = seq;
+      } catch (e) {
+        AppLogger.w('⚠️ SocketService failed to parse mark_seen payload: $e');
+      }
+    }
+
     if (_socket == null || !_socket!.connected) {
-      AppLogger.w('⚠️ Attempted to emit $event while socket is disconnected');
+      AppLogger.w(
+        '⚠️ Attempted to emit $event while socket is disconnected. Queued if applicable.',
+      );
       return;
+    }
+
+    if (event == 'mark_seen') {
+      try {
+        final map = data as Map<String, dynamic>;
+        final chatId = map['chatId'] as String;
+        _pendingSeenReceipts.remove(chatId);
+      } catch (_) {}
     }
 
     if (callback != null) {
       _socket!.emitWithAck(event, data, ack: callback);
     } else {
       _socket!.emit(event, data);
+    }
+  }
+
+  void _flushPendingSeenReceipts() {
+    if (_socket == null || !_socket!.connected || _pendingSeenReceipts.isEmpty)
+      return;
+
+    AppLogger.i(
+      '🔄 [SocketService] Flushing ${_pendingSeenReceipts.length} pending seen receipts...',
+    );
+    final entries = Map<String, int>.from(_pendingSeenReceipts);
+    for (final entry in entries.entries) {
+      _socket!.emit('mark_seen', <String, dynamic>{
+        'chatId': entry.key,
+        'messageIds': <String>[],
+        'lastSeenSequence': entry.value,
+      });
+      _pendingSeenReceipts.remove(entry.key);
     }
   }
 

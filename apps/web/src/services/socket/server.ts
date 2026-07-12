@@ -46,7 +46,7 @@ const io = new Server<
 >(httpServer, {
   cors: {
     origin: [
-      "http://localhost:3000",
+      /^http:\/\/(?:[a-zA-Z0-9-]+\.)?localhost:\d+$/,
       // Allow the mobile dev LAN IP range
       /^http:\/\/172\.\d+\.\d+\.\d+:3000$/,
       /^http:\/\/10\.\d+\.\d+\.\d+:3000$/,
@@ -167,7 +167,7 @@ async function startServer() {
         for (const key of keys) {
           const sockets = await io.in(`user_socket:${key}`).fetchSockets();
           for (const s of sockets) {
-            s.emit("account_banned", { reason: "Account has been banned" });
+            (s as any).emit("account_banned", { reason: "Account has been banned" });
             s.disconnect(true);
           }
         }
