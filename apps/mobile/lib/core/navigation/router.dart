@@ -96,11 +96,25 @@ final routerProvider = Provider<GoRouter>((ref) {
     switch (entityType) {
       case 'chat':
         if (entityId != null) {
-          final isGroup = !entityId.contains('_');
-          if (isGroup) {
-            router.push('/groups/$entityId?tab=1');
+          final chatType = data['chat_type'] as String?;
+          final rawChatId = data['chat_id'] as String?;
+          final isDirect = chatType == 'direct' || entityId.contains('_');
+          if (isDirect) {
+            final resolvedChatId =
+                rawChatId ?? (entityId.contains('_') ? entityId : null);
+            if (resolvedChatId != null) {
+              router.push('/chat/$resolvedChatId');
+            } else {
+              final myUuid = ref.read(authProvider).user?.resolvedUuid;
+              if (myUuid != null) {
+                final targetChatId = directChatId(myUuid, entityId);
+                router.push('/chat/$targetChatId');
+              } else {
+                router.push('/chat/$entityId');
+              }
+            }
           } else {
-            router.push('/chat/$entityId');
+            router.push('/groups/$entityId?tab=1');
           }
         }
       case 'group':

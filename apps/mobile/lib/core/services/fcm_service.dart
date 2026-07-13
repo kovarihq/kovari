@@ -296,8 +296,8 @@ class FCMService {
     required String body,
     required Map<String, dynamic> data,
   }) {
-    final entityId = data['entity_id'] as String?;
-    if (!_shouldShowNotification(entityId)) return;
+    final chatId = data['chat_id'] as String? ?? data['entity_id'] as String?;
+    if (!_shouldShowNotification(chatId)) return;
 
     final entityType = data['entity_type'] as String?;
     final channelId = _channelIdForEntityType(entityType);
@@ -323,12 +323,13 @@ class FCMService {
   void _handleForegroundMessage(RemoteMessage message) {
     final entityType = message.data['entity_type'] as String?;
     final entityId = message.data['entity_id'] as String?;
+    final chatId = message.data['chat_id'] as String? ?? entityId;
 
     AppLogger.i(
-      '🔔 [FCM] Foreground message: ${message.notification?.title} (entityId: $entityId)',
+      '🔔 [FCM] Foreground message: ${message.notification?.title} (chatId: $chatId)',
     );
 
-    if (_shouldShowNotification(entityId)) {
+    if (_shouldShowNotification(chatId)) {
       final channelId = _channelIdForEntityType(entityType);
       _localNotifications.show(
         message.hashCode,
