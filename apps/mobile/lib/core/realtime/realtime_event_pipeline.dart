@@ -8,9 +8,9 @@ import 'package:mobile/core/utils/app_logger.dart';
 /// Priorities for realtime events.
 enum EventPriority {
   critical, // Immediate execution
-  high,     // Next VSync frame
-  medium,   // Batched frame boundary (16-33ms)
-  low       // Idle frames
+  high, // Next VSync frame
+  medium, // Batched frame boundary (16-33ms)
+  low, // Idle frames
 }
 
 /// Pipeline performance and monitoring metrics.
@@ -53,7 +53,8 @@ class RealtimeEventPipeline {
   final Map<String, List<_PendingEvent>> _queues = {};
   final List<_PendingBatch> _retryQueue = [];
 
-  final _batchedEventController = StreamController<List<SocketEvent>>.broadcast();
+  final _batchedEventController =
+      StreamController<List<SocketEvent>>.broadcast();
   StreamSubscription<SocketEvent>? _rawSubscription;
   bool _frameCallbackScheduled = false;
 
@@ -65,9 +66,10 @@ class RealtimeEventPipeline {
 
   void _startListening() {
     _rawSubscription?.cancel();
-    _rawSubscription = _ref.read(socketServiceProvider.notifier).events.listen(
-      _onRawSocketEvent,
-    );
+    _rawSubscription = _ref
+        .read(socketServiceProvider.notifier)
+        .events
+        .listen(_onRawSocketEvent);
   }
 
   void dispose() {
@@ -81,12 +83,12 @@ class RealtimeEventPipeline {
       case 'receive_message':
       case 'message_persisted':
       case 'gap_found':
+      case 'user_typing':
+      case 'user_stopped_typing':
         return EventPriority.critical;
       case 'message_delivered_ack':
       case 'messages_seen':
         return EventPriority.high;
-      case 'user_typing':
-      case 'user_stopped_typing':
       case 'user_online':
       case 'user_offline':
         return EventPriority.medium;
@@ -208,7 +210,8 @@ class RealtimeEventPipeline {
       final now = DateTime.now();
       queue.removeWhere((e) {
         if (e.priority == EventPriority.medium &&
-            (e.event.type == 'user_typing' || e.event.type == 'user_stopped_typing')) {
+            (e.event.type == 'user_typing' ||
+                e.event.type == 'user_stopped_typing')) {
           final isExpired = now.difference(e.timestamp).inSeconds >= 3;
           if (isExpired) {
             metrics.expiredEvents++;
@@ -229,7 +232,10 @@ class RealtimeEventPipeline {
       queue.removeRange(0, batch.length);
 
       // Reconcile and coalesce events locally
-      final reconciled = _reconcileBatch(chatId, batch.map((e) => e.event).toList());
+      final reconciled = _reconcileBatch(
+        chatId,
+        batch.map((e) => e.event).toList(),
+      );
       eventsToDispatch.addAll(reconciled);
 
       processedCount += batch.length;
@@ -292,7 +298,9 @@ class RealtimeEventPipeline {
     reconciled.addAll(lastDeliveryAckPerMsg.values);
 
     // Apply logical ordering sort (receive_message -> ticks -> typing)
-    reconciled.sort((a, b) => _eventOrderWeight(a.type).compareTo(_eventOrderWeight(b.type)));
+    reconciled.sort(
+      (a, b) => _eventOrderWeight(a.type).compareTo(_eventOrderWeight(b.type)),
+    );
 
     metrics.mergedEvents += (events.length - reconciled.length);
     return reconciled;
@@ -310,11 +318,13 @@ class RealtimeEventPipeline {
         error: e,
         stackTrace: stack,
       );
-      _retryQueue.add(_PendingBatch(
-        chatId: chatId,
-        events: events,
-        retryAt: DateTime.now().add(const Duration(milliseconds: 500)),
-      ));
+      _retryQueue.add(
+        _PendingBatch(
+          chatId: chatId,
+          events: events,
+          retryAt: DateTime.now().add(const Duration(milliseconds: 500)),
+        ),
+      );
     }
   }
 }

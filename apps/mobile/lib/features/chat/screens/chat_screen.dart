@@ -63,6 +63,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   bool _isSending = false;
   bool _showScrollToBottom = false;
   bool _showNewMessageBanner = false;
+  Timer? _typingDebounceTimer;
 
   @visibleForTesting
   ScrollController get debugScrollController => _scrollController;
@@ -158,6 +159,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     if (isGroup) {
       _memberStore.unsubscribe(_chatId);
     }
+    _typingDebounceTimer?.cancel();
     _inputController.dispose();
     _scrollController.dispose();
     _focusNode.dispose();
@@ -184,6 +186,10 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     if (_scrollController.hasClients) {
       _scrollController.jumpTo(0);
     }
+    _typingDebounceTimer?.cancel();
+    if (_isComposing) {
+      _realtimeCoordinator.stopTyping(oldWidget.chatId);
+    }
     setState(() {
       _isComposing = false;
       _isSending = false;
@@ -206,9 +212,37 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     });
   }
 
+  void _onTextChanged(String val) {
+    final composing = val.trim().isNotEmpty;
+    if (composing) {
+      if (!_isComposing) {
+        setState(() => _isComposing = true);
+        _realtimeCoordinator.startTyping(_chatId);
+      }
+      _typingDebounceTimer?.cancel();
+      _typingDebounceTimer = Timer(const Duration(seconds: 3), () {
+        if (mounted && _isComposing) {
+          setState(() => _isComposing = false);
+          _realtimeCoordinator.stopTyping(_chatId);
+        }
+      });
+    } else {
+      if (_isComposing) {
+        _typingDebounceTimer?.cancel();
+        setState(() => _isComposing = false);
+        _realtimeCoordinator.stopTyping(_chatId);
+      }
+    }
+  }
+
   void _sendMessage() {
     final text = _inputController.text.trim();
     if (text.isEmpty || _isSending) return;
+
+    _typingDebounceTimer?.cancel();
+    if (_isComposing) {
+      _realtimeCoordinator.stopTyping(_chatId);
+    }
 
     final user = ref.read(authProvider).user;
     if (user == null) return;
@@ -775,21 +809,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                         focusNode: _focusNode,
                         isComposing: _isComposing,
                         isSending: _isSending,
-                        onChanged: (val) {
-                          final composing = val.trim().isNotEmpty;
-                          if (composing != _isComposing) {
-                            setState(() => _isComposing = composing);
-                            if (composing) {
-                              ref
-                                  .read(realtimeCoordinatorProvider.notifier)
-                                  .startTyping(_chatId);
-                            } else {
-                              ref
-                                  .read(realtimeCoordinatorProvider.notifier)
-                                  .stopTyping(_chatId);
-                            }
-                          }
-                        },
+                        onChanged: _onTextChanged,
                         onSend: _sendMessage,
                         isCompact: _isCompact,
                       ),
@@ -800,21 +820,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                       focusNode: _focusNode,
                       isComposing: _isComposing,
                       isSending: _isSending,
-                      onChanged: (val) {
-                        final composing = val.trim().isNotEmpty;
-                        if (composing != _isComposing) {
-                          setState(() => _isComposing = composing);
-                          if (composing) {
-                            ref
-                                .read(realtimeCoordinatorProvider.notifier)
-                                .startTyping(_chatId);
-                          } else {
-                            ref
-                                .read(realtimeCoordinatorProvider.notifier)
-                                .stopTyping(_chatId);
-                          }
-                        }
-                      },
+                      onChanged: _onTextChanged,
                       onSend: _sendMessage,
                       isCompact: _isCompact,
                     ),

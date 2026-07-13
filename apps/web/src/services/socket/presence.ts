@@ -87,33 +87,88 @@ export class PresenceManager {
              if (newCount === 0) {
                   // They are truly offline across all browser tabs and mobile apps.
                   const chatsKey = `user_chats:${userId}`;
-                  let activeChats: string[];
+                  let activeChats: string[] = [];
                   
-                  if (pubClient.isOpen) {
-                    activeChats = await pubClient.sMembers(chatsKey);
-                  } else {
-                    activeChats = await memorySets.sMembers(chatsKey);
-                  }
+                  try {
+                    if (pubClient.isOpen) {
+                      activeChats = await pubClient.sMembers(chatsKey);
+                    } else {
+                      activeChats = await memorySets.sMembers(chatsKey);
+                    }
+                  } catch (_) {}
 
                   // Write lastSeen BEFORE emitting so clients can fetch it immediately
                   const nowISO = new Date().toISOString();
-                  if (pubClient.isOpen) {
-                    await pubClient.set(`chat:lastSeen:${userId}`, nowISO);
-                  } else {
-                    await memoryKV.set(`chat:lastSeen:${userId}`, nowISO);
+                  try {
+                    if (pubClient.isOpen) {
+                      await pubClient.set(`chat:lastSeen:${userId}`, nowISO);
+                    } else {
+                      await memoryKV.set(`chat:lastSeen:${userId}`, nowISO);
+                    }
+                  } catch (_) {}
+
+                  const { createAdminSupabaseClient } = await import("@kovari/api");
+                  const supabase = createAdminSupabaseClient();
+                  const chatIds = new Set<string>();
+
+                  try {
+                    let supabaseId = userId;
+                    if (userId.startsWith("user_")) {
+                      const { data: userRow } = await supabase
+                        .from("users")
+                        .select("id")
+                        .eq("clerk_user_id", userId)
+                        .single();
+                      if (userRow?.id) {
+                        supabaseId = userRow.id;
+                      }
+                    }
+                    
+                    if (supabaseId) {
+                      // Fetch direct conversations
+                      const { data: conversations } = await supabase
+                        .from("conversations")
+                        .select("id, user_a_id, user_b_id")
+                        .or(`user_a_id.eq.${supabaseId},user_b_id.eq.${supabaseId}`);
+                      
+                      // Fetch group memberships
+                      const { data: groups } = await supabase
+                        .from("group_memberships")
+                        .select("group_id")
+                        .eq("user_id", supabaseId)
+                        .eq("status", "accepted");
+
+                      if (conversations) {
+                        conversations.forEach((c: any) => {
+                          chatIds.add(`${c.user_a_id}_${c.user_b_id}`);
+                        });
+                      }
+                      if (groups) {
+                        groups.forEach((g: any) => chatIds.add(g.group_id));
+                      }
+                    }
+                  } catch (err) {
+                    console.error("[Presence] Error querying offline user conversations:", err);
+                  }
+
+                  // Also include any active chats currently in memory/redis
+                  for (const cId of activeChats) {
+                    chatIds.add(cId);
                   }
 
                   // Clean up presence
-                  for (const chatId of activeChats) {
+                  for (const chatId of chatIds) {
                       emitOfflineToChat(chatId, userId, nowISO);
                   }
                   
                   // Clear their active chats index
-                  if (pubClient.isOpen) {
-                    await pubClient.del(chatsKey);
-                  } else {
-                    await memorySets.del(chatsKey);
-                  }
+                  try {
+                    if (pubClient.isOpen) {
+                      await pubClient.del(chatsKey);
+                    } else {
+                      await memorySets.del(chatsKey);
+                    }
+                  } catch (_) {}
              }
         }, 1500); // 1.5 second debounced grace period
       }

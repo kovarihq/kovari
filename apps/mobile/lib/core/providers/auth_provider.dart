@@ -154,6 +154,15 @@ class AuthNotifier extends Notifier<AuthState> {
         }
 
         state = state.copyWith(user: user);
+      } else {
+        final errorMsg = response.error?.message ?? '';
+        final errorCode = response.error?.code ?? '';
+        final raw = response.raw;
+        if (errorMsg.contains('BANNED_USER') ||
+            errorCode == 'BANNED_USER' ||
+            raw?.toString().contains('BANNED_USER') == true) {
+          await _handleBannedSession(state.user);
+        }
       }
     } catch (e) {
       if (e.toString().contains('BANNED_USER') ||

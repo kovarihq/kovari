@@ -277,6 +277,15 @@ class SocketService extends Notifier<SocketState> {
     _socket!.on('gap_found', (data) {
       _safeAddEvent(SocketEvent(type: 'gap_found', data: data));
     });
+
+    _socket!.on('account_banned', (data) {
+      AppLogger.w('🚨 [Socket] Account has been banned!');
+      try {
+        ref.read(authProvider.notifier).syncBanStatus();
+      } catch (e) {
+        AppLogger.e('⚠️ Failed to sync ban status on account_banned event', error: e);
+      }
+    });
   }
 
   void emit(String event, dynamic data, [Function? callback]) {
