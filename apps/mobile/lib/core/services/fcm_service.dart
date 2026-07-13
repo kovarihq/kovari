@@ -58,6 +58,8 @@ class FCMService {
 
   static const _storage = FlutterSecureStorage();
   static const _lastFcmTokenKey = 'kovari_last_fcm_token';
+  String get _environmentTokenKey =>
+      '${_lastFcmTokenKey}_${Env.apiBaseUrl.hashCode}';
 
   bool _initialized = false;
 
@@ -170,7 +172,7 @@ class FCMService {
       );
 
       // Clear cached token so next login re-registers fresh
-      await _storage.delete(key: _lastFcmTokenKey);
+      await _storage.delete(key: _environmentTokenKey);
       AppLogger.i('🔔 [FCM] Device unregistered and token cache cleared.');
     } catch (e) {
       AppLogger.w('🔔 [FCM] Unregister failed (non-fatal): $e');
@@ -226,7 +228,7 @@ class FCMService {
 
       // Debounce: skip API call if token is unchanged since last registration
       if (!force) {
-        final lastToken = await _storage.read(key: _lastFcmTokenKey);
+        final lastToken = await _storage.read(key: _environmentTokenKey);
         if (lastToken == fcmToken) {
           AppLogger.d('🔔 [FCM] Token unchanged — skipping registration.');
           return;
@@ -260,7 +262,7 @@ class FCMService {
 
       if (response.statusCode == 200 || response.statusCode == 201) {
         // Cache token to enable debouncing on next cold start
-        await _storage.write(key: _lastFcmTokenKey, value: fcmToken);
+        await _storage.write(key: _environmentTokenKey, value: fcmToken);
         AppLogger.i(
           '🔔 [FCM] Token registered. Token: ${fcmToken.substring(0, 20)}...',
         );
