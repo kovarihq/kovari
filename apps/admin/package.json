@@ -11,7 +11,7 @@
     "test:run": "vitest run"
   },
   "dependencies": {
-    "@clerk/nextjs": "^6.36.2",
+    "@clerk/nextjs": "^6.39.6",
     "@getbrevo/brevo": "^3.0.1",
     "@heroui/react": "^3.0.1",
     "@heroui/theme": "^2.4.26",
@@ -29,7 +29,7 @@
     "@radix-ui/react-slot": "^1.2.4",
     "@radix-ui/react-switch": "^1.2.6",
     "@radix-ui/react-tooltip": "^1.2.8",
-    "@sentry/nextjs": "^10.30.0",
+    "@sentry/nextjs": "^10.65.0",
     "@supabase/ssr": "^0.6.1",
     "@supabase/supabase-js": "^2.49.9",
     "@vercel/speed-insights": "^2.0.0",
@@ -40,7 +40,7 @@
     "date-fns": "^4.1.0",
     "date-fns-tz": "^3.2.0",
     "lucide-react": "^0.559.0",
-    "next": "^15.5.14",
+    "next": "^15.5.18",
     "next-themes": "^0.4.4",
     "react": "19.2.4",
     "react-day-picker": "^9.12.0",
