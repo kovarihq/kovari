@@ -52,7 +52,8 @@ const io = new Server<
       /^http:\/\/10\.\d+\.\d+\.\d+:3000$/,
       /^http:\/\/192\.168\.\d+\.\d+:3000$/,
       "https://kovari.in",
-      "https://www.kovari.in"
+      "https://www.kovari.in",
+      "https://app.kovari.in"
     ],
     methods: ["GET", "POST"],
     credentials: true,
