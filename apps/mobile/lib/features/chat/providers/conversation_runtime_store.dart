@@ -392,9 +392,19 @@ class ConversationRuntimeStore
           partnerLastSeen: conv.partnerLastSeen,
         );
       } else {
-        // Update metadata reference but preserve live runtime state
+        // Update metadata reference and merge latest message details from API
         final existing = updated[conv.chatId]!;
-        updated[conv.chatId] = existing.copyWith(metadata: conv);
+        updated[conv.chatId] = existing.copyWith(
+          metadata: conv,
+          lastMessageAt: conv.lastMessageAt ?? existing.lastMessageAt,
+          lastMessageSnippet:
+              conv.lastMessage?.text ?? existing.lastMessageSnippet,
+          lastMessageSenderId:
+              conv.lastMessage?.senderId ?? existing.lastMessageSenderId,
+          lastMessageId: conv.lastMessage?.id ?? existing.lastMessageId,
+          lastMessageMediaType:
+              conv.lastMessage?.mediaType ?? existing.lastMessageMediaType,
+        );
       }
     }
     state = updated;

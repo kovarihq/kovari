@@ -16,6 +16,7 @@ import 'package:mobile/features/home/widgets/header/home_header.dart';
 import 'package:mobile/features/home/widgets/sections/groups_section.dart';
 import 'package:mobile/features/home/widgets/sections/itinerary_section.dart';
 import 'package:mobile/features/home/widgets/sections/requests_section.dart';
+import 'package:mobile/features/requests/providers/request_provider.dart';
 import 'package:mobile/shared/utils/scroll_preloader.dart';
 import 'package:mobile/shared/widgets/kovari_empty_state.dart';
 import 'package:mobile/shared/widgets/kovari_refresh_indicator.dart';
@@ -32,6 +33,15 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
     with AutomaticKeepAliveClientMixin {
   @override
   bool get wantKeepAlive => true;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      ref.read(homeDataProvider.notifier).refresh(isSilent: true);
+      ref.read(interestsProvider.notifier).silentRefresh();
+    });
+  }
 
   Future<void> _handleRefresh() async {
     await ref.read(homeDataProvider.notifier).refresh();

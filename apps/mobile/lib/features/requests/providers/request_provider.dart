@@ -22,6 +22,13 @@ class InterestsNotifier extends AsyncNotifier<List<InterestModel>> {
     state = await AsyncValue.guard(_fetchInterests);
   }
 
+  Future<void> silentRefresh() async {
+    final nextState = await AsyncValue.guard(_fetchInterests);
+    if (nextState.hasValue) {
+      state = nextState;
+    }
+  }
+
   Future<bool> respond(String interestId, String action) async {
     final service = ref.read(requestServiceProvider);
     final previousState = state.value ?? [];
@@ -39,7 +46,9 @@ class InterestsNotifier extends AsyncNotifier<List<InterestModel>> {
         });
       } else {
         // Decline/Delete is immediate
-        state = AsyncData(previousState.where((i) => i.id != interestId).toList());
+        state = AsyncData(
+          previousState.where((i) => i.id != interestId).toList(),
+        );
       }
     }
     return success;
@@ -63,6 +72,13 @@ class InvitationsNotifier extends AsyncNotifier<List<InvitationModel>> {
   Future<void> refresh() async {
     state = const AsyncLoading();
     state = await AsyncValue.guard(_fetchInvitations);
+  }
+
+  Future<void> silentRefresh() async {
+    final nextState = await AsyncValue.guard(_fetchInvitations);
+    if (nextState.hasValue) {
+      state = nextState;
+    }
   }
 
   Future<bool> respond(String groupId, String action) async {

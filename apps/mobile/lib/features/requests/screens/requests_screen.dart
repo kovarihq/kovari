@@ -30,6 +30,10 @@ class _RequestsScreenState extends ConsumerState<RequestsScreen>
   void initState() {
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      ref.read(interestsProvider.notifier).silentRefresh();
+      ref.read(invitationsProvider.notifier).silentRefresh();
+    });
   }
 
   @override
@@ -40,96 +44,96 @@ class _RequestsScreenState extends ConsumerState<RequestsScreen>
 
   @override
   Widget build(BuildContext context) => Scaffold(
-      backgroundColor: AppColors.backgroundColor(context),
-      body: SafeArea(
-        child: Column(
-          children: [
-            _buildHeader(context),
-            _buildTabs(),
-            Expanded(
-              child: TabBarView(
-                controller: _tabController,
-                children: [_InterestsList(), _InvitationsList()],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-
-  Widget _buildHeader(BuildContext context) => Container(
-      padding: const EdgeInsets.only(left: 4, right: 16, top: 16, bottom: 16),
-      decoration: const BoxDecoration(),
-      child: Row(
+    backgroundColor: AppColors.backgroundColor(context),
+    body: SafeArea(
+      child: Column(
         children: [
-          _buildBackButton(context),
-          const SizedBox(width: 4),
+          _buildHeader(context),
+          _buildTabs(),
           Expanded(
-            child: Text(
-              'Requests',
-              style: TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w600,
-                color: AppColors.text(context),
-              ),
+            child: TabBarView(
+              controller: _tabController,
+              children: [_InterestsList(), _InvitationsList()],
             ),
           ),
         ],
       ),
-    );
+    ),
+  );
+
+  Widget _buildHeader(BuildContext context) => Container(
+    padding: const EdgeInsets.only(left: 4, right: 16, top: 16, bottom: 16),
+    decoration: const BoxDecoration(),
+    child: Row(
+      children: [
+        _buildBackButton(context),
+        const SizedBox(width: 4),
+        Expanded(
+          child: Text(
+            'Requests',
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
+              color: AppColors.text(context),
+            ),
+          ),
+        ),
+      ],
+    ),
+  );
 
   Widget _buildBackButton(BuildContext context) => GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTap: () => context.pop(),
-      child: Container(
-        padding: const EdgeInsets.all(8),
-        child: Icon(
-          LucideIcons.arrowLeft,
-          size: 20,
-          color: AppColors.text(context),
-        ),
+    behavior: HitTestBehavior.opaque,
+    onTap: () => context.pop(),
+    child: Container(
+      padding: const EdgeInsets.all(8),
+      child: Icon(
+        LucideIcons.arrowLeft,
+        size: 20,
+        color: AppColors.text(context),
       ),
-    );
+    ),
+  );
 
   Widget _buildTabs() => Padding(
-      padding: const EdgeInsets.only(
-        left: AppSpacing.md,
-        right: AppSpacing.md,
-        bottom: AppSpacing.sm,
+    padding: const EdgeInsets.only(
+      left: AppSpacing.md,
+      right: AppSpacing.md,
+      bottom: AppSpacing.sm,
+    ),
+    child: Container(
+      height: 44,
+      decoration: BoxDecoration(
+        color: AppColors.surface(context, level: 1),
+        borderRadius: BorderRadius.circular(22),
+        border: Border.all(color: AppColors.borderColor(context)),
       ),
-      child: Container(
-        height: 44,
-        decoration: BoxDecoration(
-          color: AppColors.surface(context, level: 1),
-          borderRadius: BorderRadius.circular(22),
-          border: Border.all(color: AppColors.borderColor(context)),
+      child: TabBar(
+        controller: _tabController,
+        onTap: (index) => HapticService.selection(),
+        overlayColor: WidgetStateProperty.all(Colors.transparent),
+        splashFactory: NoSplash.splashFactory,
+        indicator: BoxDecoration(
+          color: AppColors.primary.withValues(alpha: 0.1),
+          borderRadius: BorderRadius.circular(20),
         ),
-        child: TabBar(
-          controller: _tabController,
-          onTap: (index) => HapticService.selection(),
-          overlayColor: WidgetStateProperty.all(Colors.transparent),
-          splashFactory: NoSplash.splashFactory,
-          indicator: BoxDecoration(
-            color: AppColors.primary.withValues(alpha: 0.1),
-            borderRadius: BorderRadius.circular(20),
-          ),
-          labelColor: AppColors.primary,
-          unselectedLabelColor: AppColors.text(context, isMuted: true),
-          labelStyle: AppTextStyles.bodyMedium.copyWith(
-            fontWeight: FontWeight.w600,
-          ),
-          unselectedLabelStyle: AppTextStyles.bodyMedium.copyWith(
-            fontWeight: FontWeight.w600,
-          ),
-          indicatorSize: TabBarIndicatorSize.tab,
-          dividerColor: Colors.transparent,
-          tabs: const [
-            Tab(text: 'Interests'),
-            Tab(text: 'Invitations'),
-          ],
+        labelColor: AppColors.primary,
+        unselectedLabelColor: AppColors.text(context, isMuted: true),
+        labelStyle: AppTextStyles.bodyMedium.copyWith(
+          fontWeight: FontWeight.w600,
         ),
+        unselectedLabelStyle: AppTextStyles.bodyMedium.copyWith(
+          fontWeight: FontWeight.w600,
+        ),
+        indicatorSize: TabBarIndicatorSize.tab,
+        dividerColor: Colors.transparent,
+        tabs: const [
+          Tab(text: 'Interests'),
+          Tab(text: 'Invitations'),
+        ],
       ),
-    );
+    ),
+  );
 }
 
 class _InterestsList extends ConsumerWidget {
@@ -167,14 +171,13 @@ class _InterestsList extends ConsumerWidget {
   }
 
   Widget _buildSkeleton() => ListView.builder(
-      padding: const EdgeInsets.all(AppSpacing.md),
-      itemCount: 5,
-      itemBuilder: (context, index) => const KovariSkeletonRequestCard(),
-    );
+    padding: const EdgeInsets.all(AppSpacing.md),
+    itemCount: 5,
+    itemBuilder: (context, index) => const KovariSkeletonRequestCard(),
+  );
 }
 
 class _InterestCard extends ConsumerStatefulWidget {
-
   const _InterestCard({required this.interest});
   final InterestModel interest;
 
@@ -386,14 +389,13 @@ class _InvitationsList extends ConsumerWidget {
   }
 
   Widget _buildSkeleton() => ListView.builder(
-      padding: const EdgeInsets.all(AppSpacing.md),
-      itemCount: 5,
-      itemBuilder: (context, index) => const KovariSkeletonRequestCard(),
-    );
+    padding: const EdgeInsets.all(AppSpacing.md),
+    itemCount: 5,
+    itemBuilder: (context, index) => const KovariSkeletonRequestCard(),
+  );
 }
 
 class _InvitationCard extends ConsumerStatefulWidget {
-
   const _InvitationCard({required this.invitation});
   final InvitationModel invitation;
 
