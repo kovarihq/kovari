@@ -84,13 +84,6 @@ class ConversationSyncEngine {
         highestSeq = seq;
       }
 
-      // Check sequence drift assertions
-      if (meta != null && seq <= meta.lastSequence) {
-        AppLogger.w(
-          '[SyncEngine] Out-of-order sequence detected: $seq <= ${meta.lastSequence}. Reconciling.',
-        );
-      }
-
       final String finalContent = entity.text ?? '';
 
       newCachedMsgs.add(

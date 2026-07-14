@@ -951,10 +951,18 @@ class MessageStore extends Notifier<ConversationMessageState> {
       final syncEngine = ref.read(conversationSyncEngineProvider(userId));
       final partnerClerkId = getPartnerClerkId();
 
-      final cachedMsg = await syncEngine.processRealtimeMessage(
-        chatId: _chatId,
-        data: data,
-        myUserId: userId,
+      // Run local database caching in the background to prevent UI lag on new message receipt
+      unawaited(
+        syncEngine
+            .processRealtimeMessage(
+              chatId: _chatId,
+              data: data,
+              myUserId: userId,
+            )
+            .catchError((Object e) {
+              AppLogger.e('[MessageStore] Offline persistence error', error: e);
+              return null;
+            }),
       );
 
       final entity = MessageEntity.fromSocket(

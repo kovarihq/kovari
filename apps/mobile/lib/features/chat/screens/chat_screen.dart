@@ -64,6 +64,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   bool _showScrollToBottom = false;
   bool _showNewMessageBanner = false;
   Timer? _typingDebounceTimer;
+  int? _initialLastRead;
 
   @visibleForTesting
   ScrollController get debugScrollController => _scrollController;
@@ -96,15 +97,18 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       });
       _realtimeCoordinator.joinChat(_chatId);
 
+      // Capture initial lastRead sequence before we start marking incoming ones seen in this session
+      final runtimeState = ref.read(conversationRuntimeStoreProvider)[_chatId];
+      final currentSeen = runtimeState?.lastReadSequence ?? 0;
+      setState(() {
+        _initialLastRead = currentSeen;
+      });
+
       // Eagerly mark messages as seen on entry based on current highest known sequence
       final initialSeq = ref
           .read(messageStoreProvider(_chatId))
           .highestKnownSequence;
       if (initialSeq > 0) {
-        final runtimeState = ref.read(
-          conversationRuntimeStoreProvider,
-        )[_chatId];
-        final currentSeen = runtimeState?.lastReadSequence ?? 0;
         if (initialSeq > currentSeen) {
           _realtimeCoordinator.markSeenUpTo(_chatId, initialSeq);
         }
@@ -371,12 +375,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
 
     final highestSeq = visibleMessages.isNotEmpty
         ? visibleMessages
-              .map((m) {
-                AppLogger.d(
-                  '🔍 [ChatScreen] visibleMessage: id=${m.id}, seq=${m.conversationSequence}',
-                );
-                return m.conversationSequence ?? 0;
-              })
+              .map((m) => m.conversationSequence ?? 0)
               .reduce((a, b) => a > b ? a : b)
         : 0;
     if (highestSeq > 0) {
@@ -448,6 +447,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                     isDark: isDark,
                     isGroup: _chatId.split('_').length != 2,
                     lastRead:
+                        _initialLastRead ??
                         runtimeState?.lastReadSequence ??
                         conversation?.lastSeenSequence ??
                         0,
